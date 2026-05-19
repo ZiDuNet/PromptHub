@@ -183,6 +183,7 @@ const GAP_PX = 16; // gap-4
 const PADDING_X = 16; // p-4 horizontal padding
 const PADDING_TOP = 20;
 const PADDING_BOTTOM = 96;
+const ROW_GAP_PX = 16;
 
 // Target column widths chosen so the visible column count matches what the
 // previous Tailwind responsive grid produced for typical viewport sizes:
@@ -295,7 +296,7 @@ export function PromptGalleryView({
     const rowVirtualizer = useVirtualizer({
         count: rowCount,
         getScrollElement: () => scrollParentRef.current,
-        estimateSize: () => estimateRowHeight(columnWidth) + GAP_PX,
+        estimateSize: () => estimateRowHeight(columnWidth) + ROW_GAP_PX,
         overscan: 4,
         getItemKey: (rowIndex) => {
             const firstPromptId = prompts[rowIndex * columns]?.id;
@@ -342,13 +343,15 @@ export function PromptGalleryView({
                                 left: PADDING_X,
                                 right: PADDING_X,
                                 transform: `translateY(${virtualRow.start + PADDING_TOP}px)`,
+                                paddingBottom: `${ROW_GAP_PX}px`,
+                                boxSizing: 'border-box',
                             }}
                         >
                             <div
                                 className="grid"
                                 style={{
                                     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                                    gap: `${GAP_PX}px`,
+                                    columnGap: `${GAP_PX}px`,
                                 }}
                             >
                                 {rowItems.map((prompt) => (

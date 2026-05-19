@@ -170,4 +170,39 @@ describe("PromptGalleryView", () => {
     expect(spacer?.style.paddingBottom).toBe("96px");
     expect(spacer?.style.boxSizing).toBe("border-box");
   });
+
+  it("applies vertical spacing between virtualized gallery rows", async () => {
+    usePromptStore.setState({ galleryImageSize: "medium" });
+
+    const prompts = Array.from({ length: 8 }, (_, index) => ({
+      ...basePrompt,
+      id: `prompt-gap-${index + 1}`,
+      title: `Gap Prompt ${index + 1}`,
+    }));
+
+    await act(async () => {
+      await renderWithI18n(
+        <PromptGalleryView
+          prompts={prompts}
+          onSelect={vi.fn()}
+          onToggleFavorite={vi.fn()}
+          onCopy={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          onAiTest={vi.fn()}
+          onVersionHistory={vi.fn()}
+          onViewDetail={vi.fn()}
+          onContextMenu={vi.fn()}
+        />,
+        { language: "en" },
+      );
+    });
+
+    const firstRow = screen.getByRole("heading", { name: "Gap Prompt 1", level: 3 })
+      .closest("[data-index]") as HTMLElement | null;
+
+    expect(firstRow).not.toBeNull();
+    expect(firstRow?.style.paddingBottom).toBe("16px");
+    expect(firstRow?.style.boxSizing).toBe("border-box");
+  });
 });
