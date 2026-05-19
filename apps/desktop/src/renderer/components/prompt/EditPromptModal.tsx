@@ -42,6 +42,7 @@ import {
   buildPromptPayload,
   createPromptFormData,
   getExistingPromptTags,
+  mergePromptTagCatalog,
   getLanguageName,
   hasPromptFormChanges,
   isPureEnglish,
@@ -71,6 +72,7 @@ export function EditPromptModal({
   const updatePrompt = usePromptStore((state) => state.updatePrompt);
   const createPrompt = usePromptStore((state) => state.createPrompt);
   const prompts = usePromptStore((state) => state.prompts);
+  const promptTagCatalog = useSettingsStore((state) => state.promptTagCatalog);
   const folders = useFolderStore((state) => state.folders);
 
   const [title, setTitle] = useState("");
@@ -329,7 +331,10 @@ export function EditPromptModal({
   );
 
   // 获取所有已存在的标签
-  const existingTags = useMemo(() => getExistingPromptTags(prompts), [prompts]);
+  const existingTags = useMemo(
+    () => mergePromptTagCatalog(prompts, promptTagCatalog),
+    [promptTagCatalog, prompts],
+  );
 
   const translateToEnglishDisabledReason = !canTranslate
     ? t("toast.configAI", "请先在设置中配置 AI 模型")

@@ -24,7 +24,7 @@ import { useToast } from "../ui/Toast";
 import { renderFolderIcon } from "../layout/folderIconHelper";
 import {
   buildPromptPayload,
-  getExistingPromptTags,
+  mergePromptTagCatalog,
   hasPromptFormChanges,
 } from "./prompt-modal-utils";
 import { usePromptMediaManager } from "./usePromptMediaManager";
@@ -86,11 +86,15 @@ export function CreatePromptModal({
 
   const folders = useFolderStore((state) => state.folders);
   const prompts = usePromptStore((state) => state.prompts);
+  const promptTagCatalog = useSettingsStore((state) => state.promptTagCatalog);
   const sourceHistory = useSettingsStore((state) => state.sourceHistory);
   const addSourceHistory = useSettingsStore((state) => state.addSourceHistory);
 
   // 获取所有已存在的标签
-  const existingTags = useMemo(() => getExistingPromptTags(prompts), [prompts]);
+  const existingTags = useMemo(
+    () => mergePromptTagCatalog(prompts, promptTagCatalog),
+    [promptTagCatalog, prompts],
+  );
 
   const {
     imageUrl,

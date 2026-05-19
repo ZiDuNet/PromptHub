@@ -362,6 +362,7 @@ export interface AIModelConfig {
 
 export type CreationMode = "manual" | "quick";
 export type TranslationMode = "immersive" | "full";
+export type TagFilterMode = "single" | "multi";
 export type AIUsageScenario =
   | "quickAdd"
   | "promptTest"
@@ -417,6 +418,8 @@ interface SettingsState {
   enableNotifications: boolean;
   showCopyNotification: boolean;
   showSaveNotification: boolean;
+  tagFilterMode: TagFilterMode;
+  promptTagCatalog: string[];
 
   language: SupportedLanguage; // zh, zh-TW, en, ja, es, de, fr
 
@@ -535,6 +538,10 @@ interface SettingsState {
   setShortcutMode: (key: string, mode: "global" | "local") => void;
   setShowCopyNotification: (enabled: boolean) => void;
   setShowSaveNotification: (enabled: boolean) => void;
+  setTagFilterMode: (mode: TagFilterMode) => void;
+  addPromptTagCatalogEntry: (tag: string) => void;
+  renamePromptTagCatalogEntry: (oldTag: string, newTag: string) => void;
+  deletePromptTagCatalogEntry: (tag: string) => void;
   setLanguage: (lang: string) => void;
   setDataPath: (path: string) => void;
   setWebdavEnabled: (enabled: boolean) => void;
@@ -759,6 +766,8 @@ export const useSettingsStore = create<SettingsState>()(
         enableNotifications: true,
         showCopyNotification: true,
         showSaveNotification: true,
+        tagFilterMode: "multi" as TagFilterMode,
+        promptTagCatalog: [],
         language: normalizeLanguage(i18n.language),
         dataPath: "",
         webdavEnabled: false,
@@ -1042,6 +1051,42 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ showCopyNotification: enabled }),
         setShowSaveNotification: (enabled) =>
           setTouched({ showSaveNotification: enabled }),
+        setTagFilterMode: (mode) => setTouched({ tagFilterMode: mode }),
+        addPromptTagCatalogEntry: (tag) => {
+          const normalized = tag.trim();
+          if (!normalized) {
+            return;
+          }
+          const current = get().promptTagCatalog;
+          if (current.includes(normalized)) {
+            return;
+          }
+          const next = [...current, normalized].sort((a, b) => a.localeCompare(b));
+          setTouched({ promptTagCatalog: next });
+          syncSettingsToMain({ promptTagCatalog: next });
+        },
+        renamePromptTagCatalogEntry: (oldTag, newTag) => {
+          const normalizedOldTag = oldTag.trim();
+          const normalizedNewTag = newTag.trim();
+          if (!normalizedOldTag || !normalizedNewTag || normalizedOldTag === normalizedNewTag) {
+            return;
+          }
+          const next = Array.from(
+            new Set(
+              get().promptTagCatalog.map((tag) =>
+                tag === normalizedOldTag ? normalizedNewTag : tag,
+              ),
+            ),
+          ).sort((a, b) => a.localeCompare(b));
+          setTouched({ promptTagCatalog: next });
+          syncSettingsToMain({ promptTagCatalog: next });
+        },
+        deletePromptTagCatalogEntry: (tag) => {
+          const normalized = tag.trim();
+          const next = get().promptTagCatalog.filter((item) => item !== normalized);
+          setTouched({ promptTagCatalog: next });
+          syncSettingsToMain({ promptTagCatalog: next });
+        },
         setLanguage: (lang) => {
           const normalized = normalizeLanguage(lang);
           setTouched({ language: normalized });
@@ -1616,6 +1661,12 @@ export const useSettingsStore = create<SettingsState>()(
           Array.isArray(next.scenarioModelDefaults)
         ) {
           next.scenarioModelDefaults = {};
+        }
+        if (!Array.isArray(next.promptTagCatalog)) {
+          next.promptTagCatalog = [];
+        }
+        if (next.tagFilterMode !== "single" && next.tagFilterMode !== "multi") {
+          next.tagFilterMode = "multi";
         }
         if (
           !next.customPlatformRootPaths ||

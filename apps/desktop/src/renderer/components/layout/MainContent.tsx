@@ -353,6 +353,7 @@ function PromptSkillMainContent() {
   const updatePrompt = usePromptStore((state) => state.updatePrompt);
   const searchQuery = usePromptStore((state) => state.searchQuery);
   const filterTags = usePromptStore((state) => state.filterTags);
+  const toggleFilterTag = usePromptStore((state) => state.toggleFilterTag);
   const sortBy = usePromptStore((state) => state.sortBy);
   const sortOrder = usePromptStore((state) => state.sortOrder);
   const viewMode = usePromptStore((state) => state.viewMode);
@@ -385,6 +386,7 @@ function PromptSkillMainContent() {
   const [showEnglish, setShowEnglish] = useState(false);
   const promptTypeFilter = usePromptStore((state) => state.promptTypeFilter);
   const setPromptTypeFilter = usePromptStore((state) => state.setPromptTypeFilter);
+  const tagFilterMode = useSettingsStore((state) => state.tagFilterMode);
   const uiViewMode = useUIStore((state) => state.viewMode);
   const { showToast } = useToast();
   const compareBuffersRef = useRef<Record<string, { response: string; thinkingContent: string }>>({});
@@ -1572,6 +1574,16 @@ function PromptSkillMainContent() {
     setContextMenu({ x: e.clientX, y: e.clientY, prompt });
   }, []);
 
+  const handleTagFilterClick = useCallback((tag: string) => {
+    if (tagFilterMode === 'single') {
+      const shouldClear = filterTags.length === 1 && filterTags[0] === tag;
+      usePromptStore.setState({ filterTags: shouldClear ? [] : [tag] });
+      return;
+    }
+
+    toggleFilterTag(tag);
+  }, [filterTags, tagFilterMode, toggleFilterTag]);
+
   // Memoize context menu items to avoid re-creating the array on every render
   // 使用 useMemo 缓存右键菜单项，避免每次渲染都重新创建数组
   const menuItems: ContextMenuItem[] = useMemo(() => {
@@ -2005,13 +2017,19 @@ function PromptSkillMainContent() {
                     {/* Tags */}
                     {/* 标签 */}
                     {selectedPrompt.tags.map((tag) => (
-                      <span
+                      <button
+                        type="button"
                         key={tag}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-accent text-accent-foreground"
+                        onClick={() => handleTagFilterClick(tag)}
+                        title={t('prompt.filterByTag', 'Filter by tag')}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filterTags.includes(tag)
+                          ? 'bg-primary text-white'
+                          : 'bg-accent text-accent-foreground hover:bg-primary hover:text-white'
+                        }`}
                       >
                         <HashIcon className="w-3 h-3" />
                         {tag}
-                      </span>
+                      </button>
                     ))}
                   </div>
 

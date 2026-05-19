@@ -8,6 +8,8 @@ export interface Settings {
   theme: Theme;
   language: Language;
   autoSave: boolean;
+  tagFilterMode?: 'single' | 'multi';
+  promptTagCatalog?: string[];
   defaultFolderId?: string;
   backgroundImageFileName?: string;
   backgroundImageOpacity?: number;
@@ -68,6 +70,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   language: 'zh',
   autoSave: true,
+  tagFilterMode: 'multi',
+  promptTagCatalog: [],
   backgroundImageOpacity: 0.22,
   backgroundImageBlur: 14,
   customPlatformRootPaths: {},

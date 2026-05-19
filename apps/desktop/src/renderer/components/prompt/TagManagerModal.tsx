@@ -4,11 +4,14 @@ import { EditIcon, Trash2Icon, SearchIcon, CheckIcon, XIcon, Loader2Icon } from 
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
 import { usePromptStore } from '../../stores/prompt.store';
 import { useSkillStore } from '../../stores/skill.store';
+import { useSettingsStore } from '../../stores/settings.store';
 import { useToast } from '../ui/Toast';
 import { scheduleAllSaveSync } from '../../services/webdav-save-sync';
 import { getExistingSkillTags, getUserSkillTags } from '../skill/skill-modal-utils';
+import { mergePromptTagCatalog } from './prompt-modal-utils';
 
 interface TagManagerModalProps {
   isOpen: boolean;
@@ -23,13 +26,21 @@ export function TagManagerModal({
 }: TagManagerModalProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const prompts = usePromptStore((state) => state.prompts);
   const fetchPrompts = usePromptStore((state) => state.fetchPrompts);
   const skills = useSkillStore((state) => state.skills);
   const updateSkill = useSkillStore((state) => state.updateSkill);
+  const promptTagCatalog = useSettingsStore((state) => state.promptTagCatalog);
+  const addPromptTagCatalogEntry = useSettingsStore((state) => state.addPromptTagCatalogEntry);
+  const renamePromptTagCatalogEntry = useSettingsStore((state) => state.renamePromptTagCatalogEntry);
+  const deletePromptTagCatalogEntry = useSettingsStore((state) => state.deletePromptTagCatalogEntry);
+  const tagFilterMode = useSettingsStore((state) => state.tagFilterMode);
+  const setTagFilterMode = useSettingsStore((state) => state.setTagFilterMode);
 
   const [promptTags, setPromptTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [newTagValue, setNewTagValue] = useState('');
 
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -43,14 +54,14 @@ export function TagManagerModal({
     try {
       setLoading(true);
       const allTags = await window.api.prompt.getAllTags();
-      setPromptTags(allTags);
+      setPromptTags(mergePromptTagCatalog(prompts, [...promptTagCatalog, ...allTags]));
     } catch (error) {
       console.error('Failed to load tags:', error);
       showToast(t('common.error', 'Error'), 'error');
     } finally {
       setLoading(false);
     }
-  }, [showToast, t]);
+  }, [promptTagCatalog, prompts, showToast, t]);
 
   useEffect(() => {
     if (isOpen) {
@@ -96,6 +107,7 @@ export function TagManagerModal({
         }
       } else {
         await window.api.prompt.renameTag(oldTag, newTag);
+        renamePromptTagCatalogEntry(oldTag, newTag);
         await fetchPrompts();
         await loadPromptTags();
         scheduleAllSaveSync('tag renamed');
@@ -136,6 +148,7 @@ export function TagManagerModal({
         }
       } else {
         await window.api.prompt.deleteTag(tag);
+        deletePromptTagCatalogEntry(tag);
         await fetchPrompts();
         await loadPromptTags();
         scheduleAllSaveSync('tag deleted');
@@ -156,14 +169,38 @@ export function TagManagerModal({
     return tags.filter((tag) => tag.toLowerCase().includes(lowerSearch));
   }, [tags, search]);
 
+  const handleCreateTag = async () => {
+    const nextTag = newTagValue.trim();
+    if (!nextTag || tags.includes(nextTag)) {
+      return;
+    }
+
+    try {
+      setProcessingTag(nextTag);
+      if (isSkillManager) {
+        throw new Error('Skill tag creation is not supported here');
+      }
+
+      addPromptTagCatalogEntry(nextTag);
+      await loadPromptTags();
+      setNewTagValue('');
+      showToast(t('common.success', 'Success'), 'success');
+    } catch (error) {
+      console.error('Failed to create tag:', error);
+      showToast(t('common.error', 'Error'), 'error');
+    } finally {
+      setProcessingTag(null);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={t('nav.tags', 'Tags')}
-      size="md"
+      size="lg"
     >
-      <div className="flex flex-col h-[50vh] max-h-[500px]">
+      <div className="flex h-[56vh] max-h-[620px] flex-col">
         <div className="relative mb-4 shrink-0">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -173,6 +210,58 @@ export function TagManagerModal({
             className="pl-9 w-full"
           />
         </div>
+
+        {!isSkillManager ? (
+          <div className="mb-4 shrink-0 space-y-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-foreground">
+                  {t('settings.tagFilterMode', 'Tag click mode')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {t(
+                    'settings.tagFilterModeDesc',
+                    'Choose whether clicking a tag replaces the current filter or adds to a multi-select filter',
+                  )}
+                </div>
+              </div>
+              <Select
+                value={tagFilterMode}
+                onChange={(value) => setTagFilterMode(value as 'single' | 'multi')}
+                options={[
+                  { value: 'single', label: t('settings.tagFilterModeSingle', 'Single select') },
+                  { value: 'multi', label: t('settings.tagFilterModeMulti', 'Multi select') },
+                ]}
+                className="w-36 shrink-0"
+              />
+            </div>
+
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <Input
+                  value={newTagValue}
+                  onChange={(e) => setNewTagValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void handleCreateTag();
+                    }
+                  }}
+                  placeholder={t('prompt.enterTagHint')}
+                  className="w-full"
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={() => void handleCreateTag()}
+                disabled={!newTagValue.trim() || tags.includes(newTagValue.trim()) || processingTag !== null}
+                className="shrink-0"
+              >
+                {t('prompt.addTag')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-1">
           {loading ? (

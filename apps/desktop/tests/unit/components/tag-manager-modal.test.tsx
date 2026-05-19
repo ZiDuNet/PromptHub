@@ -1,18 +1,30 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TagManagerModal } from '../../../src/renderer/components/prompt/TagManagerModal';
+import { useSettingsStore } from '../../../src/renderer/stores/settings.store';
 import { useSkillStore } from '../../../src/renderer/stores/skill.store';
+import { usePromptStore } from '../../../src/renderer/stores/prompt.store';
 import { renderWithI18n } from '../../helpers/i18n';
 import { installWindowMocks } from '../../helpers/window';
 
+const showToastMock = vi.fn();
+
 vi.mock('../../../src/renderer/components/ui/Toast', () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock }),
 }));
 
 describe('TagManagerModal', () => {
   beforeEach(() => {
     installWindowMocks();
+    showToastMock.mockReset();
+    useSettingsStore.setState({
+      promptTagCatalog: [],
+      tagFilterMode: 'multi',
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+    usePromptStore.setState({
+      filterTags: [],
+    } as Partial<ReturnType<typeof usePromptStore.getState>>);
   });
 
   it('loads prompt tags when opened in prompt mode', async () => {
@@ -26,10 +38,12 @@ describe('TagManagerModal', () => {
       },
     });
 
-    await renderWithI18n(
-      <TagManagerModal isOpen onClose={vi.fn()} resourceType="prompt" />,
-      { language: 'en' },
-    );
+    await act(async () => {
+      await renderWithI18n(
+        <TagManagerModal isOpen onClose={vi.fn()} resourceType="prompt" />,
+        { language: 'en' },
+      );
+    });
 
     await waitFor(() => {
       expect(getAllTags).toHaveBeenCalled();
@@ -91,10 +105,12 @@ describe('TagManagerModal', () => {
       updateSkill: updateSkillMock,
     } as Partial<ReturnType<typeof useSkillStore.getState>>);
 
-    await renderWithI18n(
-      <TagManagerModal isOpen onClose={vi.fn()} resourceType="skill" />,
-      { language: 'en' },
-    );
+    await act(async () => {
+      await renderWithI18n(
+        <TagManagerModal isOpen onClose={vi.fn()} resourceType="skill" />,
+        { language: 'en' },
+      );
+    });
 
     expect(screen.getByText('git')).toBeInTheDocument();
     expect(screen.getByText('writing')).toBeInTheDocument();
@@ -120,5 +136,69 @@ describe('TagManagerModal', () => {
     await waitFor(() => {
       expect(screen.getByText('engineering')).toBeInTheDocument();
     });
+  });
+
+  it('creates a new prompt tag through the manager', async () => {
+    const getAllTags = vi.fn().mockResolvedValue(['alpha']);
+
+    installWindowMocks({
+      api: {
+        prompt: {
+          getAllTags,
+        },
+        settings: {
+          set: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <TagManagerModal isOpen onClose={vi.fn()} resourceType="prompt" />,
+        { language: 'en' },
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('alpha')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('Enter new tag and press Enter'), {
+      target: { value: 'beta' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().promptTagCatalog).toContain('beta');
+      expect(screen.getByText('beta')).toBeInTheDocument();
+    });
+  });
+
+  it('updates tag click mode from the prompt manager', async () => {
+    installWindowMocks({
+      api: {
+        prompt: {
+          getAllTags: vi.fn().mockResolvedValue(['alpha']),
+        },
+        settings: {
+          set: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <TagManagerModal isOpen onClose={vi.fn()} resourceType="prompt" />,
+        { language: 'en' },
+      );
+    });
+
+    expect(screen.getByText('Tag click mode')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Multi select' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Single select' }));
+
+    expect(useSettingsStore.getState().tagFilterMode).toBe('single');
   });
 });

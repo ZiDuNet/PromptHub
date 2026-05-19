@@ -24,6 +24,7 @@ describe("GeneralSettings", () => {
     settings.setEnableNotifications(false);
     settings.setShowCopyNotification(false);
     settings.setShowSaveNotification(false);
+    settings.setTagFilterMode("multi");
   });
 
   it("renders the four sections (startup / editor / language / notifications)", async () => {
@@ -80,5 +81,15 @@ describe("GeneralSettings", () => {
     expect(useSettingsStore.getState().autoSave).toBe(true);
     // Startup toggle did not change as a side-effect.
     expect(useSettingsStore.getState().launchAtStartup).toBe(beforeStartup);
+  });
+
+  it("changes tag filter mode from multi to single", async () => {
+    const user = userEvent.setup();
+    await renderWithI18n(<GeneralSettings />, { language: "en" });
+
+    await user.click(screen.getByRole("button", { name: "Multi select" }));
+    await user.click(screen.getByRole("button", { name: "Single select" }));
+
+    expect(useSettingsStore.getState().tagFilterMode).toBe("single");
   });
 });

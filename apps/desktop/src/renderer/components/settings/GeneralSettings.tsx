@@ -108,6 +108,28 @@ export function GeneralSettings() {
         </SettingItem>
       </SettingSection>
 
+      <SettingSection title={t("settings.behaviorPreferences", "行为与偏好")}>
+        <SettingItem
+          label={t("settings.tagFilterMode", "标签点击模式")}
+          description={t(
+            "settings.tagFilterModeDesc",
+            "设置点击标签时是替换当前筛选，还是追加到多选筛选中",
+          )}
+        >
+          <Select
+            value={settings.tagFilterMode}
+            onChange={(value) =>
+              settings.setTagFilterMode(value as "single" | "multi")
+            }
+            options={[
+              { value: "single", label: t("settings.tagFilterModeSingle", "单选") },
+              { value: "multi", label: t("settings.tagFilterModeMulti", "多选") },
+            ]}
+            className="w-40"
+          />
+        </SettingItem>
+      </SettingSection>
+
       <SettingSection title={t("settings.notifications")}>
         <SettingItem
           label={t("settings.enableNotifications")}

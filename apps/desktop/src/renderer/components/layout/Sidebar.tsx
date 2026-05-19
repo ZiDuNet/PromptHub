@@ -25,6 +25,7 @@ import { PlatformIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
 import { RULE_PLATFORM_ORDER } from '@prompthub/shared/constants/rules';
 import { TagManagerModal } from '../prompt/TagManagerModal';
+import { mergePromptTagCatalog } from '../prompt/prompt-modal-utils';
 import {
   DESKTOP_HOME_MODULES,
   type DesktopHomeModule,
@@ -112,6 +113,8 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
   const filterTags = usePromptStore((state) => state.filterTags);
   const toggleFilterTag = usePromptStore((state) => state.toggleFilterTag);
   const clearFilterTags = usePromptStore((state) => state.clearFilterTags);
+  const promptTagCatalog = useSettingsStore((state) => state.promptTagCatalog);
+  const tagFilterMode = useSettingsStore((state) => state.tagFilterMode);
   const [isTagPopoverOpen, setIsTagPopoverOpen] = useState(false);
   const [isTagPopoverVisible, setIsTagPopoverVisible] = useState(false);
   const [tagPopoverPos, setTagPopoverPos] = useState<{ top?: number; bottom?: number; left: number }>({ top: 0, left: 0 });
@@ -152,6 +155,17 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
       showToast(t('rules.rescanFailed', 'Rescan failed'), 'error');
     }
   }, [loadRuleFiles, showToast, t]);
+
+  const handlePromptTagClick = useCallback((tag: string) => {
+    if (tagFilterMode === 'single') {
+      const shouldClear = filterTags.length === 1 && filterTags[0] === tag;
+      usePromptStore.setState({ filterTags: shouldClear ? [] : [tag] });
+    } else {
+      toggleFilterTag(tag);
+    }
+
+    if (currentPage !== 'home') onNavigate('home');
+  }, [currentPage, filterTags, onNavigate, tagFilterMode, toggleFilterTag]);
   
   // Skill store
   const skills = useSkillStore((state) => state.skills);
@@ -184,7 +198,10 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
     [skills, deployedSkillNames],
   );
   const favoriteCount = promptStats.favoriteCount;
-  const uniqueTags = promptStats.uniqueTags;
+  const uniqueTags = useMemo(
+    () => mergePromptTagCatalog(prompts, promptTagCatalog),
+    [promptTagCatalog, prompts],
+  );
   const uniqueSkillTags = skillStats.uniqueUserTags;
   const runtimeCapabilities = getRuntimeCapabilities();
   const webRuntime = isWebRuntime();
@@ -900,8 +917,7 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
                       <button
                         key={tag}
                         onClick={() => {
-                          toggleFilterTag(tag);
-                          if (currentPage !== 'home') onNavigate('home');
+                          handlePromptTagClick(tag);
                         }}
                         style={{ animationDelay: `${index * 30}ms`, animationFillMode: 'both' }}
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-base animate-in fade-in slide-in-from-left-1 ${filterTags.includes(tag) && currentPage === 'home'
@@ -992,8 +1008,7 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
                     <button
                       key={tag}
                       onClick={() => {
-                        toggleFilterTag(tag);
-                        if (currentPage !== 'home') onNavigate('home');
+                        handlePromptTagClick(tag);
                       }}
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${active
                         ? 'bg-primary text-white'

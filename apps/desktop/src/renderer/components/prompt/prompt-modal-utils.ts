@@ -99,6 +99,18 @@ export function getExistingPromptTags(prompts: Prompt[]): string[] {
   );
 }
 
+export function mergePromptTagCatalog(
+  prompts: Prompt[],
+  promptTagCatalog: string[],
+): string[] {
+  return Array.from(
+    new Set([
+      ...getExistingPromptTags(prompts),
+      ...promptTagCatalog.map((tag) => tag.trim()).filter(Boolean),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
+}
+
 export function promoteMainEnglishToEnglishVersion(
   fields: PromptBilingualFields,
 ): PromptBilingualFields {

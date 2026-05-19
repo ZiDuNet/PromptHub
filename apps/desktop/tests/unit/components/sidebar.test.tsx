@@ -11,6 +11,8 @@ import { useUIStore } from "../../../src/renderer/stores/ui.store";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 
+const showToastMock = vi.fn();
+
 vi.mock("../../../src/renderer/components/resources/ResourcesModal", () => ({
   ResourcesModal: () => null,
 }));
@@ -25,13 +27,14 @@ vi.mock("../../../src/renderer/components/layout/tree/SortableTree", () => ({
 }));
 
 vi.mock("../../../src/renderer/components/ui/Toast", () => ({
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast: showToastMock }),
 }));
 
 describe("Sidebar", () => {
   beforeEach(() => {
     installWindowMocks();
     delete (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__;
+    showToastMock.mockReset();
 
     useUIStore.setState({
       appModule: "skill",
@@ -40,7 +43,23 @@ describe("Sidebar", () => {
     });
 
     usePromptStore.setState({
-      prompts: [],
+      prompts: [
+        {
+          id: "prompt-1",
+          title: "Prompt One",
+          userPrompt: "Body",
+          tags: ["alpha", "beta"],
+          promptType: "text",
+          currentVersion: 1,
+          version: 1,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          isFavorite: false,
+          isPinned: false,
+          usageCount: 0,
+          variables: [],
+        },
+      ],
       filterTags: [],
       promptTypeFilter: "all",
     } as Partial<ReturnType<typeof usePromptStore.getState>>);
@@ -58,7 +77,7 @@ describe("Sidebar", () => {
       skillTagsSectionHeight: 140,
       isSkillTagsSectionCollapsed: false,
       desktopHomeModules: ["prompt", "skill", "rules"],
-      skillProjects: [
+        skillProjects: [
         {
           id: "project-1",
           name: "Workspace",
@@ -67,8 +86,10 @@ describe("Sidebar", () => {
           createdAt: 1,
           updatedAt: 1,
         },
-      ],
-    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+        ],
+        promptTagCatalog: ["gamma"],
+        tagFilterMode: "multi",
+      } as Partial<ReturnType<typeof useSettingsStore.getState>>);
 
     useRulesStore.setState({
       files: [
@@ -214,6 +235,12 @@ describe("Sidebar", () => {
   });
 
   it("switches to the Rules module from the new left rail", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+
     await act(async () => {
       await renderWithI18n(
         <Sidebar currentPage="home" onNavigate={vi.fn()} />,
@@ -252,6 +279,11 @@ describe("Sidebar", () => {
 
   it("keeps Rules visible but hides project-directory actions in web runtime", async () => {
     (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ = true;
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
 
     await act(async () => {
       await renderWithI18n(
@@ -518,5 +550,53 @@ describe("Sidebar", () => {
 
     expect(container.querySelector("aside")).toHaveClass("w-[23rem]");
     expect(screen.getByText("Prompts")).toBeInTheDocument();
+  });
+
+  it("replaces active tags when tag filter mode is single", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    useSettingsStore.setState({
+      tagFilterMode: "single",
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    expect(usePromptStore.getState().filterTags).toEqual(["alpha"]);
+
+    fireEvent.click(screen.getByRole("button", { name: /beta/i }));
+    expect(usePromptStore.getState().filterTags).toEqual(["beta"]);
+  });
+
+  it("toggles tags cumulatively when tag filter mode is multi", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+    useSettingsStore.setState({
+      tagFilterMode: "multi",
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha/i }));
+    fireEvent.click(screen.getByRole("button", { name: /beta/i }));
+
+    expect(usePromptStore.getState().filterTags).toEqual(["alpha", "beta"]);
+    expect(screen.getByRole("button", { name: /gamma/i })).toBeInTheDocument();
   });
 });
