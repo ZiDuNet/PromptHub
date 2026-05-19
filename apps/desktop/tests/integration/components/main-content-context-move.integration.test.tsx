@@ -117,6 +117,7 @@ describe("MainContent context move integration", () => {
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
         setSelectedIds: vi.fn(),
+        createPrompt: vi.fn().mockResolvedValue(prompt),
         toggleFavorite: vi.fn().mockResolvedValue(undefined),
         togglePinned: vi.fn().mockResolvedValue(undefined),
         deletePrompt: vi.fn().mockResolvedValue(undefined),
@@ -171,6 +172,7 @@ describe("MainContent context move integration", () => {
         selectedIds: [prompt.id],
         selectPrompt: vi.fn(),
         setSelectedIds: vi.fn(),
+        createPrompt: vi.fn().mockResolvedValue(prompt),
         toggleFavorite: vi.fn().mockResolvedValue(undefined),
         togglePinned: vi.fn().mockResolvedValue(undefined),
         deletePrompt: vi.fn().mockResolvedValue(undefined),
@@ -217,5 +219,86 @@ describe("MainContent context move integration", () => {
     expect(childFolder?.textContent).toContain("📚");
     expect(childFolder?.getAttribute("style")).toContain("padding-left");
     expect(childFolder?.querySelector("svg")).not.toBeNull();
+  });
+
+  it("duplicates a prompt from the context menu", async () => {
+    const showToast = vi.fn();
+    const selectPrompt = vi.fn();
+    const prompt = createPrompt({
+      title: "Original Prompt",
+      description: "desc",
+      systemPrompt: "System",
+      userPrompt: "User",
+      tags: ["tag-a"],
+      folderId: "folder-1",
+    });
+    const createPromptMock = vi.fn().mockResolvedValue({
+      ...prompt,
+      id: "prompt-copy-1",
+      title: "Original Prompt (Duplicate)",
+    });
+
+    useToastMock.mockReturnValue({ showToast });
+    usePromptStoreMock.mockImplementation((selector) =>
+      selector({
+        prompts: [prompt],
+        selectedId: prompt.id,
+        selectedIds: [prompt.id],
+        selectPrompt,
+        setSelectedIds: vi.fn(),
+        createPrompt: createPromptMock,
+        toggleFavorite: vi.fn().mockResolvedValue(undefined),
+        togglePinned: vi.fn().mockResolvedValue(undefined),
+        deletePrompt: vi.fn().mockResolvedValue(undefined),
+        updatePrompt: vi.fn().mockResolvedValue(undefined),
+        searchQuery: "",
+        filterTags: [],
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+        viewMode: "card",
+        incrementUsageCount: vi.fn().mockResolvedValue(undefined),
+        promptTypeFilter: "all",
+        setPromptTypeFilter: vi.fn(),
+        setViewMode: vi.fn(),
+      }),
+    );
+    useFolderStoreMock.mockImplementation((selector) =>
+      selector({
+        selectedFolderId: null,
+        unlockedFolderIds: new Set<string>(),
+        folders: [
+          { id: "folder-1", name: "Folder A", order: 0, icon: "", createdAt: "", updatedAt: "" },
+        ],
+      }),
+    );
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    fireEvent.contextMenu(screen.getAllByText("Original Prompt")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Create Duplicate" }));
+
+    await waitFor(() => {
+      expect(createPromptMock).toHaveBeenCalledWith({
+        title: "Original Prompt (Duplicate)",
+        description: "desc",
+        promptType: "text",
+        systemPrompt: "System",
+        systemPromptEn: undefined,
+        userPrompt: "User",
+        userPromptEn: undefined,
+        variables: [],
+        tags: ["tag-a"],
+        folderId: "folder-1",
+        images: undefined,
+        videos: undefined,
+        source: undefined,
+        notes: undefined,
+      });
+    });
+
+    expect(selectPrompt).toHaveBeenCalledWith("prompt-copy-1");
+    expect(showToast).toHaveBeenCalledWith("Prompt duplicate created", "success");
   });
 });

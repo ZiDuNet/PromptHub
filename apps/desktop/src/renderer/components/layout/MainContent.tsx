@@ -346,6 +346,7 @@ function PromptSkillMainContent() {
   const selectedIds = usePromptStore((state) => state.selectedIds);
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const setSelectedIds = usePromptStore((state) => state.setSelectedIds);
+  const createPrompt = usePromptStore((state) => state.createPrompt);
   const toggleFavorite = usePromptStore((state) => state.toggleFavorite);
   const togglePinned = usePromptStore((state) => state.togglePinned);
   const deletePrompt = usePromptStore((state) => state.deletePrompt);
@@ -1391,6 +1392,28 @@ function PromptSkillMainContent() {
     }
   };
 
+  const handleDuplicatePrompt = useCallback(async (prompt: Prompt) => {
+    const duplicatedPrompt = await createPrompt({
+      title: `${prompt.title} (${t('prompt.duplicateSuffix', 'Duplicate')})`,
+      description: prompt.description ?? undefined,
+      promptType: prompt.promptType,
+      systemPrompt: prompt.systemPrompt ?? undefined,
+      systemPromptEn: prompt.systemPromptEn ?? undefined,
+      userPrompt: prompt.userPrompt,
+      userPromptEn: prompt.userPromptEn ?? undefined,
+      variables: prompt.variables,
+      tags: prompt.tags,
+      folderId: prompt.folderId,
+      images: prompt.images,
+      videos: prompt.videos,
+      source: prompt.source ?? undefined,
+      notes: prompt.notes ?? undefined,
+    });
+
+    selectPrompt(duplicatedPrompt.id);
+    showToast(t('prompt.promptDuplicated', 'Prompt duplicate created'), 'success');
+  }, [createPrompt, selectPrompt, showToast, t]);
+
   // Handle deleting prompt (for table view)
   // 处理删除 Prompt（表格视图用）
   const handleDeletePrompt = useCallback((prompt: Prompt) => {
@@ -1587,6 +1610,11 @@ function PromptSkillMainContent() {
         onClick: () => handleCopyPrompt(contextMenu.prompt),
       },
       {
+        label: t('prompt.duplicate', 'Create Duplicate'),
+        icon: <CopyIcon className="w-4 h-4" />,
+        onClick: () => void handleDuplicatePrompt(contextMenu.prompt),
+      },
+      {
         label: t('prompt.shareJSON', '分享为 JSON'),
         icon: <Share2Icon className="w-4 h-4" />,
         onClick: () => handleSharePrompt(contextMenu.prompt),
@@ -1624,7 +1652,7 @@ function PromptSkillMainContent() {
         onClick: () => handleDeletePrompt(contextMenu.prompt),
       },
     ];
-  }, [contextMenu, flattenedFolders, folderPathById, t, toggleFavorite, togglePinned, handleViewDetail, handleCopyPrompt, handleSharePrompt, handleAiTestFromTable, handleVersionHistory, handleDeletePrompt, handleMovePrompt]);
+  }, [contextMenu, flattenedFolders, folderPathById, t, toggleFavorite, togglePinned, handleViewDetail, handleCopyPrompt, handleDuplicatePrompt, handleSharePrompt, handleAiTestFromTable, handleVersionHistory, handleDeletePrompt, handleMovePrompt]);
 
   const handleAiUsageIncrement = async (id: string, model?: string) => {
     await incrementUsageCount(id);

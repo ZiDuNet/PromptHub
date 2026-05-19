@@ -1550,7 +1550,7 @@ function duplicatePrompt(promptDb: PromptDB, id: string): Prompt {
   const existing = requirePrompt(promptDb, id);
   return promptDb.create({
     visibility: existing.visibility,
-    title: `${existing.title} (Copy)`,
+    title: `${existing.title} (Duplicate)`,
     description: existing.description ?? undefined,
     promptType: existing.promptType,
     systemPrompt: existing.systemPrompt ?? undefined,

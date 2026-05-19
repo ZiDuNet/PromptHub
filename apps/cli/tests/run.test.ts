@@ -355,7 +355,7 @@ describe("standalone cli wiring", () => {
     ]);
 
     expect(duplicateRes.exitCode).toBe(0);
-    expect(duplicateRes.json.title).toBe("Original Prompt (Copy)");
+    expect(duplicateRes.json.title).toBe("Original Prompt (Duplicate)");
     expect(duplicateRes.json.userPrompt).toBe("Original body");
     expect(duplicateRes.json.tags).toEqual(["copy", "test"]);
   });
