@@ -147,6 +147,8 @@
     "descriptionPlaceholder": "簡單描述這個 Prompt 的用途",
     "folderOptional": "資料夾（選填）",
     "noFolder": "不選擇資料夾",
+    "moveTo": "移動到...",
+    "movedToNoFolder": "已移出目前資料夾",
     "tagsOptional": "標籤（選填）",
     "selectExistingTags": "選擇已有標籤：",
     "enterTagHint": "輸入新標籤後按 Enter",

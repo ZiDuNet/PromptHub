@@ -17,10 +17,16 @@ vi.mock("../../../src/renderer/stores/prompt.store", () => ({
     usePromptStoreMock(selector),
 }));
 
-vi.mock("../../../src/renderer/stores/folder.store", () => ({
-  useFolderStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    useFolderStoreMock(selector),
-}));
+vi.mock("../../../src/renderer/stores/folder.store", async () => {
+  const actual = await vi.importActual(
+    "../../../src/renderer/stores/folder.store",
+  );
+  return {
+    ...(actual as Record<string, unknown>),
+    useFolderStore: (selector: (state: Record<string, unknown>) => unknown) =>
+      useFolderStoreMock(selector),
+  };
+});
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
   useSettingsStore: (selector: (state: Record<string, unknown>) => unknown) =>

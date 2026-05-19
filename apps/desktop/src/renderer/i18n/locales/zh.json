@@ -149,6 +149,8 @@
     "descriptionPlaceholder": "简单描述这个 Prompt 的用途",
     "folderOptional": "文件夹（可选）",
     "noFolder": "不选择文件夹",
+    "moveTo": "移动到...",
+    "movedToNoFolder": "已移出当前文件夹",
     "tagsOptional": "标签（可选）",
     "selectExistingTags": "选择已有标签：",
     "enterTagHint": "输入新标签后按回车",

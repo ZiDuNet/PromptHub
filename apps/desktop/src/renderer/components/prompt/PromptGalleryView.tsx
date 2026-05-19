@@ -181,8 +181,8 @@ type GallerySize = 'small' | 'medium' | 'large';
 
 const GAP_PX = 16; // gap-4
 const PADDING_X = 16; // p-4 horizontal padding
-const PADDING_Y = 16; // p-4 vertical padding
-const BOTTOM_GUTTER = 80; // pb-20
+const PADDING_Y = 20; // slightly larger top/bottom breathing room
+const BOTTOM_GUTTER = 96; // ensure the last row never hugs the viewport edge
 
 // Target column widths chosen so the visible column count matches what the
 // previous Tailwind responsive grid produced for typical viewport sizes:
@@ -316,7 +316,7 @@ export function PromptGalleryView({
     const totalHeight = rowVirtualizer.getTotalSize();
 
     return (
-        <div ref={scrollParentRef} className="h-full overflow-y-auto">
+        <div ref={scrollParentRef} className="flex-1 min-h-0 overflow-y-auto">
             <div
                 style={{
                     height: `${totalHeight + BOTTOM_GUTTER}px`,

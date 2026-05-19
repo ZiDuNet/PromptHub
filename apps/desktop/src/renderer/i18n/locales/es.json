@@ -147,6 +147,8 @@
     "descriptionPlaceholder": "Describe brevemente el propósito de este Prompt",
     "folderOptional": "Carpeta (opcional)",
     "noFolder": "Sin carpeta",
+    "moveTo": "Mover a...",
+    "movedToNoFolder": "Se quitó de la carpeta actual",
     "tagsOptional": "Etiquetas (opcional)",
     "selectExistingTags": "Seleccionar etiquetas existentes:",
     "enterTagHint": "Escribe una nueva etiqueta y presiona Enter",

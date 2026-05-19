@@ -1,11 +1,22 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import {
   ContextMenu,
   type ContextMenuItem,
 } from "../../../src/renderer/components/ui/ContextMenu";
 
 describe("ContextMenu", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    act(() => {
+      vi.runOnlyPendingTimers();
+    });
+    vi.useRealTimers();
+  });
+
   function makeItems(onEach: () => void = vi.fn()): ContextMenuItem[] {
     return [
       { label: "Copy", onClick: onEach },
@@ -83,5 +94,38 @@ describe("ContextMenu", () => {
       />,
     );
     expect(screen.getByText("⌘S")).toBeInTheDocument();
+  });
+
+  it("keeps submenu open while moving across the hover gap", () => {
+    render(
+      <ContextMenu
+        x={0}
+        y={0}
+        items={[
+          {
+            label: "Move to...",
+            children: [{ label: "Folder A", onClick: vi.fn() }],
+          },
+        ]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const moveButton = screen.getByRole("button", { name: /Move to\.\.\./i });
+    const moveRow = moveButton.parentElement as HTMLElement;
+
+    act(() => {
+      fireEvent.mouseEnter(moveRow);
+    });
+    expect(screen.getByRole("button", { name: "Folder A" })).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.mouseLeave(moveRow);
+    });
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(screen.getByRole("button", { name: "Folder A" })).toBeInTheDocument();
   });
 });

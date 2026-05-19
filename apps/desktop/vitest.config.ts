@@ -18,6 +18,10 @@ export default defineConfig({
       "@shared": path.resolve(__dirname, "../../packages/shared"),
       "@prompthub/shared": path.resolve(__dirname, "../../packages/shared"),
       "@prompthub/db": path.resolve(__dirname, "../../packages/db/src"),
+      "@tanstack/react-virtual": path.resolve(
+        __dirname,
+        "tests/mocks/tanstack-react-virtual.ts",
+      ),
     },
   },
 });

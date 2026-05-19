@@ -147,6 +147,8 @@
     "descriptionPlaceholder": "この Prompt の用途を簡単に説明",
     "folderOptional": "フォルダ（任意）",
     "noFolder": "フォルダを選択しない",
+    "moveTo": "移動先...",
+    "movedToNoFolder": "現在のフォルダから外しました",
     "tagsOptional": "タグ（任意）",
     "selectExistingTags": "既存のタグを選択：",
     "enterTagHint": "新しいタグを入力して Enter を押す",

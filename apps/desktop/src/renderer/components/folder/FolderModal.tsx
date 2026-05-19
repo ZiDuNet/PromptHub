@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { XIcon, FolderIcon, TrashIcon, LockIcon, AlertTriangleIcon, ChevronRightIcon, Folder as FolderIconLucide, FolderOpen, BookOpen, Code, Database, FileText, Image, Music, Video, Archive, Package, Briefcase, GraduationCap, Palette, Rocket, Heart, Star, Zap, Coffee, Home, Settings, BookMarked, Bug, Calendar, Camera, CheckCircle, Circle, Cloud, Cpu, CreditCard, Crown, Flame, Gamepad2, Gift, Globe, Hammer, Headphones, Inbox, Key, Layers, Lightbulb, Mail, Map, MessageSquare, Monitor, Moon, Newspaper, PenTool, Phone, Pizza, Plane, Play, Search, Shield, ShoppingCart, Smartphone, Sparkles, Sun, Tag, Target, Terminal, Trash2, Trophy, Truck, Tv, Upload, Users, Wallet, Watch, Wrench } from 'lucide-react';
 import { useFolderStore, buildFolderTree, FolderTreeNode, canSetParent, canCreateInParent, getFolderPath, MAX_FOLDER_DEPTH } from '../../stores/folder.store';
 import { usePromptStore } from '../../stores/prompt.store';
@@ -332,7 +333,7 @@ export function FolderModal({ isOpen, onClose, folder }: FolderModalProps) {
     }
   };
 
-  return (
+  const modalContent = (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {/* 背景遮罩 */}
@@ -824,7 +825,9 @@ export function FolderModal({ isOpen, onClose, folder }: FolderModalProps) {
           </div>
         </div>
       </div>
-    )}
+      )}
     </>
   );
+
+  return createPortal(modalContent, document.body);
 }

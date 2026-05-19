@@ -147,6 +147,8 @@
     "descriptionPlaceholder": "Décrivez brièvement l'objectif de ce Prompt",
     "folderOptional": "Dossier (optionnel)",
     "noFolder": "Aucun dossier",
+    "moveTo": "Déplacer vers...",
+    "movedToNoFolder": "Retiré du dossier actuel",
     "tagsOptional": "Tags (optionnel)",
     "selectExistingTags": "Sélectionner des tags existants :",
     "enterTagHint": "Entrez un nouveau tag et appuyez sur Entrée",

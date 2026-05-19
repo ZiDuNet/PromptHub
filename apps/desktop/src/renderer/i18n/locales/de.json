@@ -147,6 +147,8 @@
     "descriptionPlaceholder": "Beschreiben Sie kurz den Zweck dieses Prompts",
     "folderOptional": "Ordner (optional)",
     "noFolder": "Kein Ordner",
+    "moveTo": "Verschieben nach...",
+    "movedToNoFolder": "Aus dem aktuellen Ordner entfernt",
     "tagsOptional": "Tags (optional)",
     "selectExistingTags": "Vorhandene Tags auswählen:",
     "enterTagHint": "Neuen Tag eingeben und Enter drücken",

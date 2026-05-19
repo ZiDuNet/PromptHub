@@ -148,6 +148,8 @@
     "descriptionPlaceholder": "Briefly describe this Prompt",
     "folderOptional": "Folder (Optional)",
     "noFolder": "No folder",
+    "moveTo": "Move to...",
+    "movedToNoFolder": "Removed from current folder",
     "tagsOptional": "Tags (Optional)",
     "selectExistingTags": "Select existing tags:",
     "enterTagHint": "Enter new tag and press Enter",

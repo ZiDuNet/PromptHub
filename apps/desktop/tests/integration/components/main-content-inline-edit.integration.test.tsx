@@ -17,10 +17,16 @@ vi.mock("../../../src/renderer/stores/prompt.store", () => ({
     usePromptStoreMock(selector),
 }));
 
-vi.mock("../../../src/renderer/stores/folder.store", () => ({
-  useFolderStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    useFolderStoreMock(selector),
-}));
+vi.mock("../../../src/renderer/stores/folder.store", async () => {
+  const actual = await vi.importActual(
+    "../../../src/renderer/stores/folder.store",
+  );
+  return {
+    ...(actual as Record<string, unknown>),
+    useFolderStore: (selector: (state: Record<string, unknown>) => unknown) =>
+      useFolderStoreMock(selector),
+  };
+});
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
   useSettingsStore: (selector: (state: Record<string, unknown>) => unknown) =>
@@ -259,5 +265,20 @@ describe("MainContent inline edit integration", () => {
     expect(
       screen.getByRole("textbox", { name: "User Prompt" }).className,
     ).toContain("bg-transparent");
+  });
+
+  it("renders selected prompt tags without runtime icon errors", async () => {
+    const promptState = createPromptState(
+      createPrompt({ tags: ["tag-a", "tag-b"] }),
+    );
+
+    usePromptStoreMock.mockImplementation((selector) => selector(promptState));
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    expect(screen.getByText("tag-a")).toBeInTheDocument();
+    expect(screen.getByText("tag-b")).toBeInTheDocument();
   });
 });

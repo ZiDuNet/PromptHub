@@ -131,4 +131,42 @@ describe("PromptGalleryView", () => {
 
     expect(onViewDetail).toHaveBeenCalledWith(expect.objectContaining({ id: "prompt-1" }));
   });
+
+  it("preserves top and bottom gutters for the virtualized gallery scroller", async () => {
+    usePromptStore.setState({ galleryImageSize: "medium" });
+
+    const prompts = Array.from({ length: 3 }, (_, index) => ({
+      ...basePrompt,
+      id: `prompt-${index + 1}`,
+      title: `Prompt ${index + 1}`,
+    }));
+
+    await act(async () => {
+      await renderWithI18n(
+        <PromptGalleryView
+          prompts={prompts}
+          onSelect={vi.fn()}
+          onToggleFavorite={vi.fn()}
+          onCopy={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          onAiTest={vi.fn()}
+          onVersionHistory={vi.fn()}
+          onViewDetail={vi.fn()}
+          onContextMenu={vi.fn()}
+        />,
+        { language: "en" },
+      );
+    });
+
+    const firstCard = screen.getByRole("heading", { name: "Prompt 1", level: 3 })
+      .closest("div[class*='app-wallpaper-panel']");
+    const spacer = firstCard
+      ?.closest("[data-index]")
+      ?.parentElement as HTMLElement | null;
+
+    expect(spacer).not.toBeNull();
+    expect(spacer?.style.paddingTop).toBe("20px");
+    expect(spacer?.style.paddingBottom).toBe("96px");
+  });
 });

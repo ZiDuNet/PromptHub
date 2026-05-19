@@ -31,7 +31,7 @@ const loadingFallback = (
     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
   </div>
 );
-import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PaperclipIcon } from 'lucide-react';
+import { StarIcon, CopyIcon, HistoryIcon, HashIcon, FolderIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PaperclipIcon } from 'lucide-react';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { ImagePreviewModal } from '../ui/ImagePreviewModal';
 import { LocalImage } from '../ui/LocalImage';
@@ -58,6 +58,8 @@ import {
   filterVisiblePrompts,
   sortVisiblePrompts,
 } from '../../services/prompt-filter';
+import { getFlattenedTree } from './tree/utilities';
+import { renderFolderIcon } from './folderIconHelper';
 
 const PROMPT_CARD_ESTIMATED_HEIGHT = 76;
 const MAX_AI_TEST_IMAGES = 8;
@@ -1425,6 +1427,48 @@ function PromptSkillMainContent() {
   // 版本历史弹窗状态
   const [isVersionModalOpenTable, setIsVersionModalOpenTable] = useState(false);
   const [versionHistoryPrompt, setVersionHistoryPrompt] = useState<Prompt | null>(null);
+  const flattenedFolders = useMemo(
+    () => getFlattenedTree(folders, new Set(folders.map((folder) => folder.id))),
+    [folders],
+  );
+  const folderNameById = useMemo(
+    () => new Map(folders.map((folder) => [folder.id, folder.name])),
+    [folders],
+  );
+  const folderPathById = useMemo(() => {
+    const pathMap = new Map<string, string>();
+
+    for (const folder of folders) {
+      const ancestors: string[] = [];
+      let currentParentId = folder.parentId ?? null;
+
+      while (currentParentId) {
+        const parentName = folderNameById.get(currentParentId);
+        if (!parentName) break;
+
+        ancestors.unshift(parentName);
+        const parentFolder = folders.find((item) => item.id === currentParentId);
+        currentParentId = parentFolder?.parentId ?? null;
+      }
+
+      if (ancestors.length > 0) {
+        pathMap.set(folder.id, ancestors.join(' / '));
+      }
+    }
+
+    return pathMap;
+  }, [folders, folderNameById]);
+
+  const handleMovePrompt = useCallback(async (prompt: Prompt, folderId: string | undefined) => {
+    await updatePrompt(prompt.id, { folderId });
+    const folder = folderId ? folders.find((item) => item.id === folderId) : undefined;
+    showToast(
+      folder
+        ? `${t('toast.movedToFolder')}「${folder.name}」`
+        : t('prompt.movedToNoFolder', 'Removed from current folder'),
+      'success',
+    );
+  }, [folders, showToast, t, updatePrompt]);
 
   // View details - show modal
   // 查看详情 - 弹窗显示
@@ -1509,6 +1553,23 @@ function PromptSkillMainContent() {
   // 使用 useMemo 缓存右键菜单项，避免每次渲染都重新创建数组
   const menuItems: ContextMenuItem[] = useMemo(() => {
     if (!contextMenu) return [];
+
+    const moveTargetItems: ContextMenuItem[] = [
+      {
+        label: t('prompt.noFolder') || 'No folder',
+        onClick: () => void handleMovePrompt(contextMenu.prompt, undefined),
+        disabled: !contextMenu.prompt.folderId,
+      },
+      ...flattenedFolders.map((folder) => ({
+        label: folder.name,
+        description: folderPathById.get(folder.id),
+        icon: renderFolderIcon(folder.icon),
+        insetLevel: folder.depth,
+        onClick: () => void handleMovePrompt(contextMenu.prompt, folder.id),
+        disabled: contextMenu.prompt.folderId === folder.id,
+      })),
+    ];
+
     return [
       {
         label: t('prompt.viewDetail'),
@@ -1551,13 +1612,19 @@ function PromptSkillMainContent() {
         onClick: () => handleVersionHistory(contextMenu.prompt),
       },
       {
+        label: t('prompt.moveTo', 'Move to...'),
+        icon: <FolderIcon className="w-4 h-4" />,
+        children: moveTargetItems,
+        childrenClassName: 'max-h-[280px] overflow-y-auto',
+      },
+      {
         label: t('prompt.delete'),
         icon: <TrashIcon className="w-4 h-4" />,
         variant: 'destructive',
         onClick: () => handleDeletePrompt(contextMenu.prompt),
       },
     ];
-  }, [contextMenu, t, toggleFavorite, togglePinned, handleViewDetail, handleCopyPrompt, handleSharePrompt, handleAiTestFromTable, handleVersionHistory, handleDeletePrompt]);
+  }, [contextMenu, flattenedFolders, folderPathById, t, toggleFavorite, togglePinned, handleViewDetail, handleCopyPrompt, handleSharePrompt, handleAiTestFromTable, handleVersionHistory, handleDeletePrompt, handleMovePrompt]);
 
   const handleAiUsageIncrement = async (id: string, model?: string) => {
     await incrementUsageCount(id);
@@ -2501,7 +2568,6 @@ function PromptSkillMainContent() {
         cancelText={t('common.cancel')}
         variant="destructive"
       />
-
       {/* Context menu */}
       {/* 右键菜单 */}
       {contextMenu && (
