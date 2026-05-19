@@ -698,6 +698,7 @@
     "backupBeforeUpgrade": "Crear copia completa",
     "backupRequiredForUpgrade": "Se requiere una copia manual antes de actualizar desde la app",
     "backupRequiredForUpgradeDesc": "Crea primero una copia manual de la versión actual para desbloquear la instalación. Justo antes de iniciar el instalador, PromptHub seguirá creando una instantánea local automática.",
+    "backupOptionalForUpgradeDesc": "Si quieres exportar una copia completa adicional, puedes hacerlo aquí primero. También puedes continuar con la instalación sin esa exportación. PromptHub creará automáticamente una instantánea local justo antes de instalar.",
     "backupMissingForUpgrade": "Se requiere una copia manual de la versión {{version}} antes de instalar. Cuando empiece la instalación, PromptHub también creará una instantánea local automática.",
     "backupReadyForUpgrade": "Copia manual registrada a las {{time}}. La instalación ya está desbloqueada, y PromptHub también creará una instantánea local automática antes de instalar.",
     "backupConfirmUpgrade": "Ya he respaldado los datos relevantes y entiendo que la app se cerrará durante la instalación.",

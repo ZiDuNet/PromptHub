@@ -699,6 +699,7 @@
     "backupBeforeUpgrade": "建立完整備份",
     "backupRequiredForUpgrade": "應用程式內升級前必須先手動備份",
     "backupRequiredForUpgradeDesc": "請先為目前版本建立一份手動備份，安裝按鈕才會解鎖。真正開始安裝前，PromptHub 仍會再自動建立一份本地快照。",
+    "backupOptionalForUpgradeDesc": "如果你想額外匯出一份完整備份，可以先在這裡匯出；不匯出也可以繼續安裝。真正開始安裝前，PromptHub 仍會自動建立一份本地快照。",
     "backupMissingForUpgrade": "安裝前必須先為目前版本 {{version}} 建立手動備份。開始安裝後，PromptHub 還會自動建立一份本地快照。",
     "backupReadyForUpgrade": "已記錄手動備份時間：{{time}}。現在可以繼續安裝，且安裝前仍會自動建立本地快照。",
     "backupConfirmUpgrade": "我已經備份相關資料，並了解安裝過程中應用程式會關閉。",

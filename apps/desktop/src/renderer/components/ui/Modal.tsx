@@ -147,7 +147,7 @@ export function Modal({
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3 shrink-0 ml-4">
+            <div className="ml-4 flex max-w-full shrink-0 flex-wrap items-center justify-end gap-3">
               {headerActions}
               {showCloseButton ? (
                 <>
@@ -165,7 +165,7 @@ export function Modal({
         )}
 
         {/* Form / Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       </div>
     </div>
   );

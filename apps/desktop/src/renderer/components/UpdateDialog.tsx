@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { Modal } from './ui/Modal';
+import { Checkbox } from './ui/Checkbox';
 import { useSettingsStore } from '../stores/settings.store';
 import {
   getManualBackupStatus,
@@ -267,8 +268,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     !!currentVersion &&
     !!lastManualBackupAt &&
     lastManualBackupVersion === currentVersion;
-  const canInstallUpgrade =
-    hasCurrentVersionManualBackup && hasAcknowledgedBackup;
+  const canInstallUpgrade = hasAcknowledgedBackup;
   const channelLabel = t(
     updateChannel === 'preview'
       ? 'settings.previewChannel'
@@ -289,64 +289,63 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   }: {
     showDescription: boolean;
     showConfirmation: boolean;
-  }) => (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-      <div className="flex items-start gap-3">
-        <ZapIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">
-            {t('settings.backupRequiredForUpgrade')}
-          </p>
-          {showDescription ? (
-            <p className="mt-1 text-xs text-muted-foreground whitespace-pre-line">
-              {t('settings.backupRequiredForUpgradeDesc')}
-            </p>
-          ) : null}
-          {hasCurrentVersionManualBackup && lastManualBackupAt ? (
-            <p className="mt-2 text-xs text-green-600 dark:text-green-400">
-              {t('settings.backupReadyForUpgrade', { time: lastManualBackupAt })}
-            </p>
-          ) : showConfirmation ? (
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              {t('settings.backupMissingForUpgrade', { version: currentVersion })}
-            </p>
-          ) : null}
+  }) => {
+    const backupStatusMessage = hasCurrentVersionManualBackup && lastManualBackupAt
+      ? t('settings.backupReadyForUpgrade', { time: lastManualBackupAt })
+      : currentVersion
+        ? t('settings.backupMissingForUpgrade', { version: currentVersion })
+        : t('settings.backupRequiredForUpgradeDesc');
+    const backupStatusClass = hasCurrentVersionManualBackup
+      ? 'border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-300'
+      : 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300';
+
+    return (
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+        <div className="flex items-start gap-3">
+          <ZapIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                {t('settings.backupRequiredForUpgrade')}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {showDescription
+                  ? t('settings.backupRequiredForUpgradeDesc')
+                  : t('settings.backupOptionalForUpgradeDesc')}
+              </p>
+            </div>
+            <div className={`mt-3 rounded-lg border px-3 py-2 ${backupStatusClass}`}>
+              <p className="text-xs leading-5">{backupStatusMessage}</p>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          onClick={handleBackupBeforeUpgrade}
-          disabled={isCreatingBackup}
-          className={secondaryButtonClass}
-        >
-          {isCreatingBackup ? (
-            <Loader2Icon className="h-4 w-4 animate-spin" />
-          ) : (
-            <DownloadIcon className="h-4 w-4" />
-          )}
-          {t('settings.backupBeforeUpgrade')}
-        </button>
-      </div>
-      {showConfirmation ? (
-        <>
-          <label className="mt-3 flex items-start gap-2 text-xs text-foreground">
-            <input
-              type="checkbox"
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={handleBackupBeforeUpgrade}
+            disabled={isCreatingBackup}
+            className={secondaryButtonClass}
+          >
+            {isCreatingBackup ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : (
+              <DownloadIcon className="h-4 w-4" />
+            )}
+            {t('settings.backupBeforeUpgrade')}
+          </button>
+        </div>
+        {showConfirmation ? (
+          <div className="mt-3 rounded-lg border border-border/60 bg-background/60 px-3 py-3">
+            <Checkbox
               checked={hasAcknowledgedBackup}
-              onChange={(event) => setHasAcknowledgedBackup(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              onChange={setHasAcknowledgedBackup}
+              label={t('settings.backupConfirmUpgrade')}
+              className="items-start gap-3 text-left"
             />
-            <span>{t('settings.backupConfirmUpgrade')}</span>
-          </label>
-          {!hasAcknowledgedBackup && (
-            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-              {t('settings.backupConfirmRequired')}
-            </p>
-          )}
-        </>
-      ) : null}
-    </div>
-  );
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderReleaseNotes = (releaseNotes: string) => (
     <section className="rounded-xl border border-border/60 bg-muted/30">
@@ -355,7 +354,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
           {t('settings.releaseNotes')}
         </p>
       </div>
-      <div className="max-h-[240px] overflow-y-auto px-4 py-3">
+      <div className="max-h-[360px] overflow-y-auto px-4 py-3 sm:max-h-[440px]">
         <div className="prose prose-sm dark:prose-invert max-w-none break-words prose-headings:text-foreground prose-h1:text-base prose-h1:font-semibold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-sm prose-h3:font-medium prose-p:my-2 prose-p:text-[13px] prose-p:text-foreground/85 prose-li:text-[13px] prose-li:text-foreground/85 prose-pre:overflow-x-auto prose-pre:border prose-pre:border-border prose-pre:bg-background/80 prose-code:text-primary">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
             {releaseNotes}
@@ -637,7 +636,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
       subtitle={`${t('settings.version')}: ${currentVersion || '...'}`}
       size="xl"
       headerActions={
-        <>
+        <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
           <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
             {channelLabel}
           </span>
@@ -646,12 +645,13 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
               preserveVisibleStatus: isStableUpgradeState(updateStatus),
             })}
             disabled={isManualRefreshPending}
+            aria-label={t('settings.checkUpdate')}
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
           >
             <RefreshCwIcon className={`h-3.5 w-3.5 ${isManualRefreshPending ? 'animate-spin' : ''}`} />
-            {t('settings.checkUpdate')}
+            <span className="hidden sm:inline">{t('settings.checkUpdate')}</span>
           </button>
-        </>
+        </div>
       }
     >
       {renderContent()}

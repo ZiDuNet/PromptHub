@@ -699,6 +699,7 @@
     "backupBeforeUpgrade": "Créer une sauvegarde complète",
     "backupRequiredForUpgrade": "Une sauvegarde manuelle est requise avant la mise à niveau intégrée",
     "backupRequiredForUpgradeDesc": "Créez d'abord une sauvegarde manuelle de la version actuelle pour déverrouiller l'installation. Juste avant de lancer l'installateur, PromptHub créera quand même un instantané local automatique.",
+    "backupOptionalForUpgradeDesc": "Si vous voulez exporter une sauvegarde complète supplémentaire, vous pouvez le faire ici. Vous pouvez aussi continuer l'installation sans cette exportation. PromptHub créera automatiquement un instantané local juste avant l'installation.",
     "backupMissingForUpgrade": "Une sauvegarde manuelle de la version {{version}} est requise avant l'installation. Dès que l'installation démarre, PromptHub créera aussi un instantané local automatique.",
     "backupReadyForUpgrade": "Sauvegarde manuelle enregistrée à {{time}}. L'installation est maintenant déverrouillée et PromptHub créera aussi un instantané local automatique avant l'installation.",
     "backupConfirmUpgrade": "J'ai sauvegardé les données concernées et je comprends que l'application se fermera pendant l'installation.",

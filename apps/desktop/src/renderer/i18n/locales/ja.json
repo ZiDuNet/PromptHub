@@ -699,6 +699,7 @@
     "backupBeforeUpgrade": "完全バックアップを作成",
     "backupRequiredForUpgrade": "アプリ内アップグレード前に手動バックアップが必須です",
     "backupRequiredForUpgradeDesc": "現在のバージョンの手動バックアップを作成すると、インストールが解放されます。実際にインストーラーを開始する直前に、PromptHub は自動でローカルスナップショットも作成します。",
+    "backupOptionalForUpgradeDesc": "追加で完全バックアップを書き出したい場合は、ここで先に実行できます。実行しなくてもそのままインストールを続けられます。インストーラー開始直前には PromptHub が自動でローカルスナップショットを作成します。",
     "backupMissingForUpgrade": "インストール前に、バージョン {{version}} の手動バックアップが必要です。インストール開始後、PromptHub は自動でローカルスナップショットも作成します。",
     "backupReadyForUpgrade": "手動バックアップ記録時刻: {{time}}。これでインストールできます。さらに、インストール前に自動ローカルスナップショットも作成されます。",
     "backupConfirmUpgrade": "関連データをバックアップ済みであり、インストール中にアプリが終了することを理解しています。",

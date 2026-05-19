@@ -90,7 +90,7 @@ describe("UpdateDialog", () => {
     expect(screen.getByText("Release Notes")).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Confirm the backup acknowledgement before continuing with the upgrade.",
+        "Create a manual backup for the current version to unlock installation. PromptHub will still create an automatic local snapshot immediately before the installer starts.",
       ),
     ).not.toBeInTheDocument();
     expect(
@@ -157,7 +157,7 @@ describe("UpdateDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("requires a current-version manual backup and acknowledgement before allowing install", async () => {
+  it("requires only acknowledgement before allowing install", async () => {
     installWindowMocks({
       electron: {
         updater: {
@@ -187,35 +187,20 @@ describe("UpdateDialog", () => {
     expect(installButton).toBeDisabled();
     expect(
       screen.getByText(
-        "Confirm the backup acknowledgement before continuing with the upgrade.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
         "A manual backup for version 0.5.1 is required before installation. PromptHub will also create an automatic local snapshot once installation starts.",
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Confirm the backup acknowledgement before continuing with the upgrade.",
+      ),
+    ).not.toBeInTheDocument();
 
     fireEvent.click(
       screen.getByLabelText(
         "I have backed up the relevant data and understand the app will close during installation.",
       ),
     );
-
-    await waitFor(() => {
-      expect(installButton).toBeDisabled();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Create Full Backup",
-      }),
-    );
-
-    await waitFor(() => {
-      expect(runPreUpgradeBackupMock).toHaveBeenCalledTimes(1);
-      expect(runPreUpgradeBackupMock).toHaveBeenCalledWith("0.5.1");
-    });
 
     await waitFor(() => {
       expect(installButton).not.toBeDisabled();
@@ -226,6 +211,7 @@ describe("UpdateDialog", () => {
     await waitFor(() => {
       expect(window.electron.updater.install).toHaveBeenCalledTimes(1);
     });
+    expect(runPreUpgradeBackupMock).not.toHaveBeenCalled();
   });
 
   it("keeps a visible available state when a transient checking event arrives", async () => {
