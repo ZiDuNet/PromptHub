@@ -20,6 +20,15 @@ Desktop platform deployment MUST install the full managed skill directory for a 
 - Then the platform skill directory itself is a directory symlink to the managed skill repo
 - And changes to files already present in that managed repo are reflected through the platform directory symlink
 
+#### Scenario: symlink install falls back to copy with explicit feedback
+
+- Given the user deploys a skill in symlink mode
+- And the target platform cannot create directory symlinks because of filesystem permissions or platform limitations
+- When PromptHub falls back to a copy install to keep the deployment usable
+- Then the install still completes successfully with the copied skill directory
+- And the desktop renderer receives structured fallback metadata instead of treating the install as a plain symlink success
+- And the UI shows a warning that copy mode was used for the affected platforms, including the fallback reason
+
 ### GitHub-backed registry installs preserve repository assets
 
 GitHub-backed registry installs MUST sync the full skill directory into the managed local repo without corrupting binary attachments.

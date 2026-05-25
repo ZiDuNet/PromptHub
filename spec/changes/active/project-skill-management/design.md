@@ -216,3 +216,49 @@
 - 先标准化 `customAgents`。
 - 若标准化后为空，再显式回退到 `customAgentRootPaths`、`customSkillScanPaths`。
 - `customSkillScanPaths` 继续作为兼容字段镜像，但不再主导配置来源。
+
+## Unified Agent Config Direction
+
+当前 PromptHub 已经把 custom agents 建模成“根目录 + 相对路径资产”的完整配置对象，但 built-in platforms 仍主要停留在“固定协议 + 仅 root override”的半统一状态。
+
+这会造成两个问题：
+
+- UI 上“Agent 顺序管理”和“Agent 配置管理”被拆成两套不同心智：上半部分像管理 agent，下半部分却只对 built-in 暴露 root path 覆写。
+- 运行时上 `skills / rules / commands / agents / config files` 的派生来源不统一：custom agent 走完整配置，built-in 走平台常量 + root override。
+
+本轮收敛方向：
+
+- 将 built-in platforms 也提升为完整 agent config 的一种，只是其 `name/icon/id` 来自内置元数据。
+- 设置层允许 built-in agent 覆写以下字段，而不仅是 root path：
+  - `rootPath`
+  - `skillsRelativePath`
+  - `rulesRelativePath`
+  - `agentsRelativePath`
+  - `commandsRelativePath`
+  - `configRelativePaths`
+- `customAgents` 继续代表用户新增 agent；built-in agent 的覆写单独存入 keyed overrides，避免与内置平台生命周期混淆。
+
+### Runtime Consumption Contract
+
+运行时需要统一从“effective agent config”消费，而不是一部分读平台常量，一部分读 custom agent：
+
+- Skills 平台列表：built-in platform metadata + built-in overrides + custom agents
+- Rules 全局规则：built-in canonical templates + effective built-in rule path overrides + custom agent rules
+- Agent/command/config 预览：统一通过 agent asset preview 派生
+
+### Compatibility Strategy
+
+为避免一次性打破现有设置快照，本轮采用兼容迁移：
+
+- 现有 `customPlatformRootPaths` 继续读取，并迁移进 built-in agent overrides 的 `rootPath`
+- `customSkillPlatformPaths` 继续作为 legacy fallback 读取
+- 新增 built-in overrides 后，主进程优先读取新结构；若不存在，再回退旧字段
+
+### Project Rules Scope
+
+项目规则继续保持为用户手动管理的 workspace-level `AGENTS.md`，不自动跟随某个 agent 配置派生。
+
+也就是说：
+
+- global rules 跟 agent config 走
+- project rules 仍是用户显式选择的项目规则文件约定

@@ -17,3 +17,7 @@
 - [x] 修复项目技能部署到自身目录树时的嵌套复制问题
 - [x] 修复设置加载时对 legacy custom agent 路径的回退短路问题
 - [x] 修复 Skill Settings 中包含 custom agents 时的平台排序按钮边界
+- [x] 修复 Rules 页面中 custom agent 配置变更后的缓存残留与刷新不一致问题
+- [x] 为 built-in agent 引入完整 override 配置模型（root + relative paths）
+- [x] 统一 renderer / main process 对 effective agent config 的派生逻辑
+- [x] 将 Skill Settings 中 built-in agent 配置升级为完整路径配置 UI

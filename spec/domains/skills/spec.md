@@ -22,6 +22,18 @@
 - Skill 版本历史属于稳定产品能力。
 - 版本快照、恢复、差异对比与平台分发属于 Skill 域内关键流程。
 
+### 3.1 Platform Distribution Feedback Contract
+
+- 当用户选择符号链接方式分发 Skill 到平台目录时，PromptHub 必须明确区分“真实 symlink 成功”和“因权限/文件系统限制而回退为 copy 安装”。
+- 如果主进程回退为 copy 安装，渲染层必须收到结构化结果，并向用户显示包含受影响平台与原因的警告提示。
+- 回退 copy 安装仍属于成功分发，但不得伪装成普通 symlink 成功。
+
+### 3.2 Project-Local Distribution Contract
+
+- PromptHub 必须支持将项目级 Skill 直接分发到当前项目内的本地目录，而不强制要求先纳入 `My Skills`。
+- 项目级分发默认目标为当前项目的 `.agents/skills`，并允许用户额外选择多个目标目录。
+- 项目级分发必须复制整个 Skill 目录到 `<target>/<skill-name>/`，而不是只写单个 `SKILL.md` 文件。
+
 ### 4. Translation Contract
 
 - Skill 详情页的 AI 翻译结果属于可恢复的本地用户状态。

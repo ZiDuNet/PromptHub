@@ -41,7 +41,7 @@
 
 <br/>
 
-PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 或自部署 Web 同步到其他设备。
+PromptHub 把你的 Prompt、SKILL.md 和项目级 AI 编程资产放进一个本地工作区。它能把同一份 Skill 一键安装到 Claude Code、Cursor、Codex、Windsurf、Gemini CLI、Cline 等十几个工具，给 Prompt 做版本管理与多模型测试，并通过 WebDAV 或自部署 Web 同步到其他设备。
 
 数据默认存在你自己的电脑上。
 
@@ -153,7 +153,7 @@ sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
 ### 🧩 Skill 商店与一键分发
 
 - **技能商店**：内置 20+ 精选技能（来自 Anthropic、OpenAI 等），可叠加自定义商店源（GitHub / skills.sh / 本地目录）
-- **一键安装到平台**：Claude Code、Cursor、Windsurf、Codex、Kiro、Gemini CLI、Qoder、QoderWork、CodeBuddy、Trae、OpenCode、Roo Code 等 15+ 平台
+- **一键安装到平台**：Claude Code、Cursor、Windsurf、Codex、Kiro、Gemini CLI、Cline、Qoder、QoderWork、CodeBuddy、Trae、Trae CN、OpenCode、Roo Code 等 15+ 平台
 - **本地扫描**：自动发现本地已有 SKILL.md，预览选择后导入，避免在多个工具目录间复制粘贴
 - **Symlink / Copy 双模式**：选 symlink 共享编辑，选 copy 各平台保留独立副本
 - **平台目标目录可覆写**：为每个平台单独配置 Skills 目录，扫描和分发保持一致
@@ -352,7 +352,7 @@ workspace export / import
 - AI 工作台、模型管理、端点编辑、连接测试与场景默认模型
 - skills.sh 社区商店接入，支持榜单、安装量、Star
 - skill-installer God Class 拆分、SSRF 防护、URL 协议校验
-- 多平台 Skill 一键安装：Claude Code、Cursor、Windsurf、Codex 等十几个平台
+- 多平台 Skill 一键安装：Claude Code、Cursor、Windsurf、Codex、Cline 等十几个平台
 - AI 翻译、AI 生成 Skill、本地批量扫描
 
 ### 在做 / 在想

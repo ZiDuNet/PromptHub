@@ -54,6 +54,14 @@ In progress.
 - 设置迁移与平台排序回归修复
   - `loadSettingsFromMainProcess()` 现在会先标准化 `customAgents`，当主进程未返回新结构时再显式回退到 `customAgentRootPaths` / `customSkillScanPaths`，避免旧配置在 renderer 加载时被空数组短路
   - Skill Settings 中平台顺序列表的上下移动边界现在基于完整的 `managedAgentEntries`，custom agent 出现在末尾时不再错误允许继续下移
+  - Rules workspace 的 cached global descriptors 现在会按当前 `customAgents` 重新过滤；custom agent 被删除或禁用后，旧的 custom rule 不会继续残留在 Rules 页面
+  - Settings 中修改 `customAgents`、`disabledPlatformIds`、`setRulePlatformTracked()` 后会主动触发 Rules workspace 强制重扫，确保“上面改顺序/启用状态，下面规则配置立即生效”
+  - `rules.store` 内部的 section title 不再写死英文，避免其他调用点误用未本地化标题
+  - built-in platforms 现在新增 `builtinAgentOverrides` 持久化结构，支持 `rootPath / skillsRelativePath / rulesRelativePath / agentsRelativePath / commandsRelativePath / configRelativePaths` 完整覆写，不再只支持 root override
+  - renderer 与 main process 现在都优先从 `builtinAgentOverrides` 计算 effective built-in agent config；旧 `customPlatformRootPaths` / `customSkillPlatformPaths` 仅作为兼容迁移来源，并继续镜像输出 `rootPath`
+  - `SkillSettings` 中原先分离的“Platform Root Directories”已升级为统一的 `Agent Configurations` 区块，built-in agents 和 custom agents 都按同样的“root + relative paths + derived assets”心智管理
+  - `self-hosted-sync` 已同步备份/恢复 `builtinAgentOverrides`，避免跨端同步时只保留 legacy root override 而丢失 built-in relative path 配置
+  - 在全量测试收口阶段，顺手修复了两个既有 UI 回归：`SkillListView.tsx` 补回 `useSettingsStore` 导入；`SkillProjectDeployPanel.tsx` 对 `projects` 做空数组防御，避免 integration mock 未给 `skillProjects` 时 `.map()` 崩溃
 - 搜索与标签语义修正
   - 在 `apps/desktop/src/renderer/services/skill-filter.ts` 新增 `filterVisibleScannedSkills()`，专用于项目扫描结果过滤
   - 在 `apps/desktop/src/renderer/services/skill-stats.ts` 与 `apps/desktop/src/renderer/components/skill/skill-modal-utils.ts` 中，仅将 `http(s)` 型 `source_url` 识别为远程来源，避免本地路径型 `source_url` 污染原始标签/来源判定
@@ -72,6 +80,10 @@ In progress.
 - 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillProjectsView.tsx tests/unit/components/skill-projects-view.test.tsx`
 - 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillProjectsView.tsx src/renderer/components/settings/SkillSettings.tsx src/renderer/stores/settings.store.ts src/renderer/services/project-skill-targets.ts src/main/services/skill-installer-repo.ts tests/unit/components/skill-projects-view.test.tsx tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-agent-roots.test.ts tests/unit/main/skill-installer.test.ts`
 - 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-agent-roots.test.ts tests/unit/main/skill-installer.test.ts`
+- 通过：`pnpm exec vitest run tests/unit/stores/settings-agent-roots.test.ts tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-rules-sync.test.ts tests/unit/main/skill-installer-utils.test.ts tests/unit/services/self-hosted-sync.test.ts`（在 `apps/desktop/` 下执行）
+- 通过：`pnpm exec vitest run`（在 `apps/desktop/` 下执行）
+- 通过：`pnpm build`（在 `apps/desktop/` 下执行）
+- 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/services/agent-root-paths.ts src/renderer/stores/settings.store.ts src/renderer/components/settings/SkillSettings.tsx src/renderer/services/self-hosted-sync.ts src/main/services/skill-installer-utils.ts src/main/ipc/settings.ipc.ts tests/unit/stores/settings-agent-roots.test.ts tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-rules-sync.test.ts tests/unit/main/skill-installer-utils.test.ts tests/unit/services/self-hosted-sync.test.ts`
 - 通过：`node -e "for (const f of ['en','zh','zh-TW','ja','fr','de','es']) JSON.parse(require('fs').readFileSync('apps/desktop/src/renderer/i18n/locales/'+f+'.json','utf8'));"` 
 - 通过：`pnpm --filter @prompthub/desktop build`
 - 未通过：`pnpm --filter @prompthub/desktop typecheck`
@@ -111,11 +123,24 @@ In progress.
   - 覆盖当目标技能目录与源目录相同时拒绝复制
 - `apps/desktop/tests/unit/stores/settings-agent-roots.test.ts`
   - 覆盖主进程仅返回 legacy `customAgentRootPaths` 时，renderer 仍正确加载兼容字段
+  - 覆盖 legacy `customPlatformRootPaths` 会在 renderer migrate 时提升为 `builtinAgentOverrides`
 - `apps/desktop/tests/unit/components/skill-settings.test.tsx`
   - 覆盖 custom agent 存在时最后一个托管条目的“下移”按钮禁用边界
+  - 覆盖 built-in agent 在统一配置区中修改 root override 时会写回 built-in override 配置
+- `apps/desktop/tests/unit/stores/settings-rules-sync.test.ts`
+  - 覆盖修改 built-in root override 后会同步写回 `builtinAgentOverrides` 并强制刷新 Rules
+- `apps/desktop/tests/unit/main/skill-installer-utils.test.ts`
+  - 覆盖主进程从 `builtinAgentOverrides` 读取 built-in root / skills / rules relative path 覆写
+- `apps/desktop/tests/unit/services/self-hosted-sync.test.ts`
+  - 覆盖 self-hosted sync push 时包含 `builtinAgentOverrides` 备份字段
+- `apps/desktop/tests/unit/stores/rules.store.test.ts`
+  - 覆盖 custom rule 在 settings 中被禁用后，重新加载会从可见列表中消失
+- `apps/desktop/tests/unit/main/rules-workspace.test.ts`
+  - 覆盖 custom agent 已从当前配置移除时，`listCachedRuleDescriptors()` 不再返回旧的 cached custom rule descriptor
 
 ## Remaining
 
 - 更新版本号到 `0.5.6`
+- 视需要继续把 built-in agent overrides 扩展到更多运行时消费面（如 config/commands/agents 的主进程写入链路）
 - 视需要扩展项目分发目标预设（如 `.claude/skills`、`.gemini/skills`）与更明确的目标模板 UI
 - 视需要修复仓库内既有 `typecheck` 阻塞：`AISettingsPrototype.tsx`

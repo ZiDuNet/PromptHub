@@ -151,7 +151,7 @@ Want to try the next dev preview? Open *Settings → About* and toggle the previ
 ### 🧩 Skill store & one-click distribution
 
 - **Skill store** with 20+ curated skills (Anthropic, OpenAI, etc.) plus stackable custom sources (GitHub repo / skills.sh / local folder)
-- **One-click install** to Claude Code, Cursor, Windsurf, Codex, Kiro, Gemini CLI, Qoder, QoderWork, CodeBuddy, Trae, OpenCode, Roo Code and 15+ more
+- **One-click install** to Claude Code, Cursor, Windsurf, Codex, Kiro, Gemini CLI, Cline, Qoder, QoderWork, CodeBuddy, Trae, Trae CN, OpenCode, Roo Code and 15+ more
 - **Local scan** picks up existing SKILL.md files so you no longer copy-paste between tool directories
 - **Symlink / Copy modes** — symlink for shared edits, copy for independent per-platform copies
 - **Per-platform skill directory override** keeps scan and install on the same path
@@ -346,7 +346,7 @@ See the changelog above.
 - AI workbench with model management, endpoint editing, connection testing, scenario defaults
 - skills.sh community store integration with rankings, install counts, and stars
 - skill-installer god-class breakup, SSRF protection, URL protocol validation
-- One-click skill install to a dozen platforms (Claude Code, Cursor, Windsurf, Codex, etc.)
+- One-click skill install to a dozen platforms (Claude Code, Cursor, Windsurf, Codex, Cline, etc.)
 - AI translation, AI skill generation, batch local scan
 
 ### Pondering / planned
