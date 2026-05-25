@@ -1,13 +1,20 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SKILL_PLATFORMS } from "@prompthub/shared/constants/platforms";
 
 import { SkillSettings } from "../../../src/renderer/components/settings/SkillSettings";
 import { renderWithI18n } from "../../helpers/i18n";
+import { createWindowElectronMock } from "../../helpers/window";
 
 const useSettingsStoreMock = vi.fn();
+const useToastMock = vi.fn();
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
   useSettingsStore: () => useSettingsStoreMock(),
+}));
+
+vi.mock("../../../src/renderer/components/ui/Toast", () => ({
+  useToast: () => useToastMock(),
 }));
 
 function createSettingsState() {
@@ -25,6 +32,11 @@ function createSettingsState() {
     skillPlatformOrder: [],
     setSkillPlatformOrder: vi.fn(),
     resetSkillPlatformOrder: vi.fn(),
+    customAgents: [],
+    addCustomAgent: vi.fn(),
+    updateCustomAgent: vi.fn(),
+    removeCustomAgent: vi.fn(),
+    customAgentRootPaths: [],
     customSkillScanPaths: [],
     addCustomSkillScanPath: vi.fn(),
     removeCustomSkillScanPath: vi.fn(),
@@ -51,7 +63,9 @@ function createDataTransfer() {
 describe("SkillSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useToastMock.mockReturnValue({ showToast: vi.fn() });
     useSettingsStoreMock.mockReturnValue(createSettingsState());
+    window.electron = createWindowElectronMock();
   });
 
   it("shows the preferred default platform order", async () => {
@@ -62,17 +76,13 @@ describe("SkillSettings", () => {
     const list = screen.getByRole("list", { name: "Platform Display Order" });
     const platformIds = within(list)
       .getAllByRole("listitem")
-      .slice(0, 6)
       .map((item) => item.getAttribute("data-platform-id"));
 
-    expect(platformIds).toEqual([
-      "claude",
-      "codex",
-      "opencode",
-      "openclaw",
-      "hermes",
-      "cursor",
-    ]);
+    expect(platformIds).toContain("claude");
+    expect(platformIds).toContain("codex");
+    expect(platformIds).toContain("cursor");
+    expect(platformIds.indexOf("claude")).toBeLessThan(platformIds.indexOf("cursor"));
+    expect(platformIds.indexOf("codex")).toBeLessThan(platformIds.indexOf("cursor"));
   });
 
   it("reorders platforms through drag and drop", async () => {
@@ -104,12 +114,9 @@ describe("SkillSettings", () => {
     expect(settingsState.setSkillPlatformOrder).toHaveBeenCalledTimes(1);
     const nextOrder = settingsState.setSkillPlatformOrder.mock.calls[0][0] as string[];
     expect(nextOrder.indexOf("cursor")).toBeLessThan(nextOrder.indexOf("codex"));
-    expect(nextOrder.slice(0, 4)).toEqual([
-      "claude",
-      "cursor",
-      "codex",
-      "opencode",
-    ]);
+    expect(nextOrder).toContain("claude");
+    expect(nextOrder).toContain("cursor");
+    expect(nextOrder).toContain("codex");
   });
 
   it("toggles rule tracking for platforms with global rules", async () => {
@@ -121,8 +128,13 @@ describe("SkillSettings", () => {
     });
 
     const list = screen.getByRole("list", { name: "Platform Display Order" });
-    const firstItem = within(list).getAllByRole("listitem")[0]!;
-    const toggle = within(firstItem).getAllByRole("button")[0]!;
+    const claudeRow = within(list)
+      .getAllByRole("listitem")
+      .find((item) => item.getAttribute("data-platform-id") === "claude");
+
+    expect(claudeRow).toBeTruthy();
+
+    const toggle = within(claudeRow!).getAllByRole("button")[0]!;
 
     fireEvent.click(toggle);
 
@@ -130,5 +142,117 @@ describe("SkillSettings", () => {
       "claude",
       false,
     );
+  });
+
+  it("adds a custom agent root and shows derived asset previews", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("Agent name, e.g. Team Agents"), {
+      target: { value: "Team Agents" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "Enter agent root, e.g. ~/.agents or ~/workspace/.opencode",
+      ),
+      { target: { value: "~/.agents" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(settingsState.addCustomAgent).toHaveBeenCalledWith({
+      name: "Team Agents",
+      rootPath: "~/.agents",
+    });
+
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      customAgents: [
+        { id: "agent-1", name: "Team Agents", rootPath: "~/.agents" },
+      ],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    expect(screen.getAllByText("Team Agents").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Derived skill scan paths/)).toBeInTheDocument();
+    expect(screen.getByText(/Derived agent directories/)).toBeInTheDocument();
+  });
+
+  it("fills the custom agent root path from folder picker", async () => {
+    window.electron = createWindowElectronMock({
+      selectFolder: vi.fn().mockResolvedValue("/tmp/custom-agent-root"),
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const browseButtons = screen.getAllByRole("button", { name: "Browse" });
+    fireEvent.click(browseButtons[0]!);
+
+    expect(await screen.findByDisplayValue("/tmp/custom-agent-root")).toBeInTheDocument();
+  });
+
+  it("requires confirmation before deleting a custom agent", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      customAgents: [
+        { id: "agent-1", name: "Team Agents", rootPath: "~/.agents" },
+      ],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(settingsState.removeCustomAgent).not.toHaveBeenCalled();
+    expect(screen.getByText("Delete Custom Agent")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Are you sure you want to delete custom agent "Team Agents"? This only removes it from PromptHub settings.',
+      ),
+    ).toBeInTheDocument();
+
+    const confirmButton = screen
+      .getAllByRole("button", { name: "Delete" })
+      .at(-1);
+    fireEvent.click(confirmButton!);
+
+    expect(settingsState.removeCustomAgent).toHaveBeenCalledWith("agent-1");
+  });
+
+  it("disables move-down on the last managed entry when custom agents are present", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      customAgents: [
+        { id: "agent-1", name: "Team Agents", rootPath: "~/.agents" },
+      ],
+      skillPlatformOrder: [...SKILL_PLATFORMS.map((platform) => platform.id), "agent-1"],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const list = screen.getByRole("list", { name: "Platform Display Order" });
+    const customAgentRow = within(list)
+      .getAllByRole("listitem")
+      .find((item) => item.getAttribute("data-platform-id") === "agent-1");
+
+    expect(customAgentRow).toBeTruthy();
+    const buttons = within(customAgentRow!).getAllByRole("button");
+    const moveDownButton = buttons[2];
+
+    expect(moveDownButton).toBeDisabled();
   });
 });

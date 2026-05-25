@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import i18n, { changeLanguage } from "../i18n";
 import type {
+  CustomAgentConfig,
   Settings,
   SkillProject,
   SyncProviderKind,
@@ -10,6 +11,11 @@ import type { UpdateChannel } from "@prompthub/shared/types";
 import type { AIProtocol } from "@prompthub/shared/types";
 import { isPrereleaseVersion } from "../../utils/version";
 import { resolveLocalImageSrc } from "../utils/media-url";
+import { normalizeAgentRootPath } from "../services/agent-root-paths";
+import {
+  normalizeCustomAgentDraft,
+  normalizeCustomAgents,
+} from "../services/agent-root-paths";
 
 const SUPPORTED_LANGUAGES = [
   "zh",
@@ -62,6 +68,75 @@ export type DesktopHomeModule = (typeof DESKTOP_HOME_MODULES)[number];
 const createProjectRecordId = (): string =>
   `project_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 const normalizeProjectRecordPath = (value: string): string => value.trim();
+
+function getDefaultProjectDeployTargets(rootPath: string): string[] {
+  const normalizedRoot = normalizeProjectRecordPath(rootPath).replace(/[\\/]+$/, "");
+  if (!normalizedRoot) {
+    return [];
+  }
+
+  return [`${normalizedRoot}/.agents/skills`];
+}
+
+function normalizeProjectDeployTargets(
+  deployTargets: string[] | undefined,
+  rootPath: string,
+): string[] {
+  return Array.from(
+    new Set(
+      (deployTargets ?? getDefaultProjectDeployTargets(rootPath))
+        .map((entry) => normalizeProjectRecordPath(entry))
+        .filter((entry) => entry.length > 0),
+    ),
+  );
+}
+
+function normalizeAgentRootPaths(paths: string[] | undefined): string[] {
+  return Array.from(
+    new Set(
+      (paths ?? [])
+        .map((entry) => normalizeAgentRootPath(entry))
+        .filter((entry) => entry.length > 0),
+    ),
+  );
+}
+
+function getCustomAgentRootPaths(agents: CustomAgentConfig[]): string[] {
+  return normalizeAgentRootPaths(agents.map((agent) => agent.rootPath));
+}
+
+function isTraeCnLikePath(value: string | undefined): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return /(?:^|[\\/])\.trae-cn(?:$|[\\/])/i.test(value.trim());
+}
+
+function migrateTraeCnPlatformState(next: Pick<
+  SettingsState,
+  "customPlatformRootPaths" | "disabledPlatformIds" | "skillPlatformOrder"
+>): void {
+  const traeRootOverride = next.customPlatformRootPaths.trae;
+  const traeCnRootOverride = next.customPlatformRootPaths["trae-cn"];
+
+  if (isTraeCnLikePath(traeRootOverride) && !traeCnRootOverride?.trim()) {
+    next.customPlatformRootPaths["trae-cn"] = traeRootOverride.trim();
+    delete next.customPlatformRootPaths.trae;
+  }
+
+  if (next.disabledPlatformIds.includes("trae") && !next.disabledPlatformIds.includes("trae-cn")) {
+    next.disabledPlatformIds = next.disabledPlatformIds.map((platformId) =>
+      platformId === "trae" ? "trae-cn" : platformId,
+    );
+  }
+
+  if (next.skillPlatformOrder.includes("trae") && !next.skillPlatformOrder.includes("trae-cn")) {
+    next.skillPlatformOrder = next.skillPlatformOrder.map((platformId) =>
+      platformId === "trae" ? "trae-cn" : platformId,
+    );
+  }
+}
 
 function normalizeDesktopHomeModule(value: unknown): DesktopHomeModule | null {
   return typeof value === "string" && DESKTOP_HOME_MODULES.includes(value as DesktopHomeModule)
@@ -500,6 +575,8 @@ interface SettingsState {
 
   sourceHistory: string[];
 
+  customAgents: CustomAgentConfig[];
+  customAgentRootPaths: string[];
   customSkillScanPaths: string[];
   skillProjects: SkillProject[];
 
@@ -608,6 +685,24 @@ interface SettingsState {
   setTranslationMode: (mode: TranslationMode) => void;
   addSourceHistory: (source: string) => void;
   applyTheme: () => void;
+  setCustomAgents: (agents: CustomAgentConfig[]) => void;
+  addCustomAgent: (input: { name: string; rootPath: string }) => void;
+  updateCustomAgent: (
+    agentId: string,
+    updates: Partial<
+      Pick<
+        CustomAgentConfig,
+        | "name"
+        | "rootPath"
+        | "skillsRelativePath"
+        | "rulesRelativePath"
+        | "agentsRelativePath"
+        | "commandsRelativePath"
+        | "configRelativePaths"
+      >
+    >,
+  ) => void;
+  removeCustomAgent: (agentId: string) => void;
   setCustomSkillScanPaths: (paths: string[]) => void;
   addCustomSkillScanPath: (path: string) => void;
   removeCustomSkillScanPath: (path: string) => void;
@@ -615,10 +710,16 @@ interface SettingsState {
     name: string;
     rootPath: string;
     scanPaths?: string[];
+    deployTargets?: string[];
   }) => SkillProject;
   updateSkillProject: (
     projectId: string,
-    updates: Partial<Pick<SkillProject, "name" | "rootPath" | "scanPaths" | "lastScannedAt">>,
+    updates: Partial<
+      Pick<
+        SkillProject,
+        "name" | "rootPath" | "scanPaths" | "deployTargets" | "lastScannedAt"
+      >
+    >,
   ) => void;
   removeSkillProject: (projectId: string) => void;
   setCustomPlatformRootPath: (platformId: string, path: string) => void;
@@ -689,8 +790,24 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
     normalizeSyncProvider(settings.sync?.provider),
     state,
   );
+  const normalizedCustomAgents = normalizeCustomAgents(
+    settings.customAgents ?? state.customAgents,
+  );
+  const fallbackCustomAgentRootPaths = normalizeAgentRootPaths(
+    normalizedCustomAgents.length > 0
+      ? normalizedCustomAgents.map((agent) => agent.rootPath)
+      : settings.customAgentRootPaths ??
+          settings.customSkillScanPaths ??
+          state.customAgentRootPaths,
+  );
 
   useSettingsStore.setState({
+    customAgents: normalizedCustomAgents,
+    customAgentRootPaths:
+      normalizedCustomAgents.length > 0
+        ? getCustomAgentRootPaths(normalizedCustomAgents)
+        : fallbackCustomAgentRootPaths,
+    customSkillScanPaths: fallbackCustomAgentRootPaths,
     launchAtStartup,
     minimizeOnLaunch,
     githubToken,
@@ -735,6 +852,11 @@ export const useSettingsStore = create<SettingsState>()(
 
         return normalized;
       };
+
+      const normalizeProjectDeployPaths = (
+        deployTargets: string[] | undefined,
+        rootPath: string,
+      ): string[] => normalizeProjectDeployTargets(deployTargets, rootPath);
 
       return {
         // Default values
@@ -828,6 +950,8 @@ export const useSettingsStore = create<SettingsState>()(
         creationMode: "manual" as CreationMode,
         translationMode: "immersive" as TranslationMode,
         sourceHistory: [],
+        customAgents: [],
+        customAgentRootPaths: [],
         customSkillScanPaths: [],
         skillProjects: [],
         customPlatformRootPaths: {},
@@ -1414,20 +1538,92 @@ export const useSettingsStore = create<SettingsState>()(
           }
         },
 
-        setCustomSkillScanPaths: (paths) =>
-          setTouched({ customSkillScanPaths: paths }),
-        addCustomSkillScanPath: (path) =>
+        setCustomAgents: (agents) => {
+          const normalizedAgents = normalizeCustomAgents(agents);
+          const nextPaths = getCustomAgentRootPaths(normalizedAgents);
           setTouched({
-            customSkillScanPaths: get().customSkillScanPaths.includes(path)
-              ? get().customSkillScanPaths
-              : [...get().customSkillScanPaths, path],
+            customAgents: normalizedAgents,
+            customAgentRootPaths: nextPaths,
+            customSkillScanPaths: nextPaths,
+          });
+          syncSettingsToMain({
+            customAgents: normalizedAgents,
+            customAgentRootPaths: nextPaths,
+          });
+        },
+        addCustomAgent: (input) => {
+          const nextAgent = normalizeCustomAgentDraft(input);
+          if (!nextAgent.name || !nextAgent.rootPath) {
+            throw new Error("Custom agent name and rootPath are required");
+          }
+          const hasConflict = get().customAgents.some(
+            (agent) => agent.rootPath.toLowerCase() === nextAgent.rootPath.toLowerCase(),
+          );
+          if (hasConflict) {
+            throw new Error("Custom agent root path already exists");
+          }
+          get().setCustomAgents([nextAgent, ...get().customAgents]);
+        },
+        updateCustomAgent: (agentId, updates) => {
+          const currentAgents = get().customAgents;
+          const currentAgent = currentAgents.find((agent) => agent.id === agentId);
+          if (!currentAgent) {
+            return;
+          }
+          const nextAgent = normalizeCustomAgentDraft({
+            id: currentAgent.id,
+            name: updates.name ?? currentAgent.name,
+            rootPath: updates.rootPath ?? currentAgent.rootPath,
+            enabled: updates.enabled ?? currentAgent.enabled,
+            skillsRelativePath:
+              updates.skillsRelativePath ?? currentAgent.skillsRelativePath,
+            rulesRelativePath: updates.rulesRelativePath ?? currentAgent.rulesRelativePath,
+            agentsRelativePath:
+              updates.agentsRelativePath ?? currentAgent.agentsRelativePath,
+            commandsRelativePath:
+              updates.commandsRelativePath ?? currentAgent.commandsRelativePath,
+            configRelativePaths:
+              updates.configRelativePaths ?? currentAgent.configRelativePaths,
+          });
+          if (!nextAgent.name || !nextAgent.rootPath) {
+            throw new Error("Custom agent name and rootPath are required");
+          }
+          const hasConflict = currentAgents.some(
+            (agent) =>
+              agent.id !== agentId &&
+              agent.rootPath.toLowerCase() === nextAgent.rootPath.toLowerCase(),
+          );
+          if (hasConflict) {
+            throw new Error("Custom agent root path already exists");
+          }
+          get().setCustomAgents(
+            currentAgents.map((agent) =>
+              agent.id === agentId ? nextAgent : agent,
+            ),
+          );
+        },
+        removeCustomAgent: (agentId) => {
+          get().setCustomAgents(
+            get().customAgents.filter((agent) => agent.id !== agentId),
+          );
+        },
+        setCustomSkillScanPaths: (paths) =>
+          get().setCustomAgents(
+            normalizeAgentRootPaths(paths).map((path, index) => ({
+              id: `legacy_agent_${index}_${path}`,
+              name: `Custom Agent ${index + 1}`,
+              rootPath: path,
+            })),
+          ),
+        addCustomSkillScanPath: (path) =>
+          get().addCustomAgent({
+            name: `Custom Agent ${get().customAgents.length + 1}`,
+            rootPath: path,
           }),
         removeCustomSkillScanPath: (path) =>
-          setTouched({
-            customSkillScanPaths: get().customSkillScanPaths.filter(
-              (p) => p !== path,
-            ),
-          }),
+          get()
+            .customAgents.filter((agent) => agent.rootPath === normalizeAgentRootPath(path))
+            .forEach((agent) => get().removeCustomAgent(agent.id)),
         addSkillProject: (input) => {
           const name = input.name.trim();
           const rootPath = normalizeProjectRecordPath(input.rootPath);
@@ -1441,6 +1637,7 @@ export const useSettingsStore = create<SettingsState>()(
             name,
             rootPath,
             scanPaths: normalizeProjectScanPaths(input.scanPaths, rootPath),
+            deployTargets: normalizeProjectDeployPaths(input.deployTargets, rootPath),
             createdAt: now,
             updatedAt: now,
           };
@@ -1502,6 +1699,10 @@ export const useSettingsStore = create<SettingsState>()(
                 updates.scanPaths === undefined
                   ? project.scanPaths
                   : normalizeProjectScanPaths(updates.scanPaths, nextRootPath),
+              deployTargets:
+                updates.deployTargets === undefined
+                  ? normalizeProjectDeployPaths(project.deployTargets, nextRootPath)
+                  : normalizeProjectDeployPaths(updates.deployTargets, nextRootPath),
               lastScannedAt:
                 updates.lastScannedAt === undefined
                   ? project.lastScannedAt
@@ -1630,7 +1831,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 11,
+      version: 13,
       partialize: stripEphemeralSettings,
       merge: (persistedState, currentState) => {
         const next = {
@@ -1701,6 +1902,49 @@ export const useSettingsStore = create<SettingsState>()(
         if (next.tagFilterMode !== "single" && next.tagFilterMode !== "multi") {
           next.tagFilterMode = "multi";
         }
+        if (!Array.isArray(next.customAgents)) {
+          next.customAgents = [];
+        }
+        next.customAgents = normalizeCustomAgents(next.customAgents);
+        if (
+          !Array.isArray(next.customAgentRootPaths) ||
+          next.customAgentRootPaths.some((entry) => typeof entry !== "string")
+        ) {
+          next.customAgentRootPaths = [];
+        }
+        next.customAgentRootPaths = normalizeAgentRootPaths(
+          next.customAgentRootPaths,
+        );
+        if (
+          !Array.isArray(next.customSkillScanPaths) ||
+          next.customSkillScanPaths.some((entry) => typeof entry !== "string")
+        ) {
+          next.customSkillScanPaths = [];
+        }
+        next.customSkillScanPaths = normalizeAgentRootPaths(
+          next.customSkillScanPaths,
+        );
+        if (
+          version < 12 &&
+          next.customAgents.length === 0 &&
+          next.customAgentRootPaths.length === 0 &&
+          next.customSkillScanPaths.length > 0
+        ) {
+          next.customAgentRootPaths = [...next.customSkillScanPaths];
+        }
+        if (next.customAgents.length === 0 && next.customAgentRootPaths.length > 0) {
+          next.customAgents = next.customAgentRootPaths.map((rootPath, index) =>
+            normalizeCustomAgentDraft({
+              id: `migrated_agent_${index}`,
+              name: `Custom Agent ${index + 1}`,
+              rootPath,
+            }),
+          );
+        }
+        next.customAgentRootPaths = getCustomAgentRootPaths(next.customAgents);
+        if (next.customAgentRootPaths.length > 0) {
+          next.customSkillScanPaths = [...next.customAgentRootPaths];
+        }
         if (
           !next.customPlatformRootPaths ||
           typeof next.customPlatformRootPaths !== "object" ||
@@ -1758,6 +2002,7 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.skillPlatformOrder = [];
         }
+        migrateTraeCnPlatformState(next);
         if (!Array.isArray(next.skillProjects)) {
           next.skillProjects = [];
         } else {
@@ -1794,6 +2039,14 @@ export const useSettingsStore = create<SettingsState>()(
                 name: project.name.trim(),
                 rootPath: normalizedRootPath,
                 scanPaths: normalizedScanPaths,
+                deployTargets: normalizeProjectDeployTargets(
+                  Array.isArray(project.deployTargets)
+                    ? project.deployTargets.filter(
+                        (entry): entry is string => typeof entry === "string",
+                      )
+                    : undefined,
+                  normalizedRootPath,
+                ),
                 createdAt:
                   typeof project.createdAt === "number"
                     ? project.createdAt
@@ -1889,6 +2142,8 @@ export const useSettingsStore = create<SettingsState>()(
           backgroundImageBlur: state?.backgroundImageBlur,
         });
         syncSettingsToMain({
+          customAgents: state?.customAgents || [],
+          customAgentRootPaths: state?.customAgentRootPaths || [],
           customPlatformRootPaths: state?.customPlatformRootPaths || {},
           disabledPlatformIds: state?.disabledPlatformIds || [],
           customSkillPlatformPaths: state?.customSkillPlatformPaths || {},

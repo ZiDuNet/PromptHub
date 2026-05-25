@@ -274,7 +274,7 @@ describe("SkillInstaller.exportAsJson", () => {
 describe("SkillInstaller.getSupportedPlatforms", () => {
   it("returns the full SKILL_PLATFORMS list", () => {
     const platforms = SkillInstaller.getSupportedPlatforms();
-    expect(platforms).toBe(SKILL_PLATFORMS);
+    expect(platforms).toStrictEqual(SKILL_PLATFORMS);
     expect(platforms.length).toBeGreaterThan(0);
   });
 
@@ -294,6 +294,82 @@ describe("SkillInstaller.getSupportedPlatforms", () => {
   it("platform IDs are unique", () => {
     const ids = SkillInstaller.getSupportedPlatforms().map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("SkillInstaller.copyRepoByPathToDirectory", () => {
+  it("copies a whole skill directory into a project target directory", async () => {
+    const sourceDir = path.join(tmpDir, "source-skill");
+    const targetRootDir = path.join(tmpDir, "project", ".agents", "skills");
+    await fs.mkdir(path.join(sourceDir, "docs"), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "SKILL.md"), "# demo", "utf-8");
+    await fs.writeFile(path.join(sourceDir, "docs", "guide.md"), "guide", "utf-8");
+
+    const targetDir = await SkillInstaller.copyRepoByPathToDirectory(
+      sourceDir,
+      "demo-skill",
+      targetRootDir,
+    );
+
+    expect(targetDir).toBe(path.join(targetRootDir, "demo-skill"));
+    await expect(fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8")).resolves.toBe(
+      "# demo",
+    );
+    await expect(
+      fs.readFile(path.join(targetDir, "docs", "guide.md"), "utf-8"),
+    ).resolves.toBe("guide");
+  });
+
+  it("skips an existing project target when requested", async () => {
+    const sourceDir = path.join(tmpDir, "source-skill-skip");
+    const targetRootDir = path.join(tmpDir, "project-skip", ".agents", "skills");
+    const targetDir = path.join(targetRootDir, "demo-skill");
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "SKILL.md"), "# new", "utf-8");
+    await fs.writeFile(path.join(targetDir, "SKILL.md"), "# existing", "utf-8");
+
+    const result = await SkillInstaller.copyRepoByPathToDirectory(
+      sourceDir,
+      "demo-skill",
+      targetRootDir,
+      { ifExists: "skip" },
+    );
+
+    expect(result).toBe(targetDir);
+    await expect(fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8")).resolves.toBe(
+      "# existing",
+    );
+  });
+
+  it("rejects project targets nested inside the source skill directory", async () => {
+    const sourceDir = path.join(tmpDir, "source-skill");
+    const nestedTargetRootDir = path.join(sourceDir, ".agents", "skills");
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "SKILL.md"), "# demo", "utf-8");
+
+    await expect(
+      SkillInstaller.copyRepoByPathToDirectory(
+        sourceDir,
+        "demo-skill",
+        nestedTargetRootDir,
+      ),
+    ).rejects.toThrow(/Target directory must not be inside the source skill directory/);
+  });
+
+  it("rejects copying a skill back onto the same target skill directory", async () => {
+    const sourceDir = path.join(tmpDir, "project", ".agents", "skills", "demo-skill");
+    const targetRootDir = path.join(tmpDir, "project", ".agents", "skills");
+    await fs.mkdir(sourceDir, { recursive: true });
+    await fs.writeFile(path.join(sourceDir, "SKILL.md"), "# demo", "utf-8");
+
+    await expect(
+      SkillInstaller.copyRepoByPathToDirectory(
+        sourceDir,
+        "demo-skill",
+        targetRootDir,
+      ),
+    ).rejects.toThrow(/Target skill directory must not equal the source skill directory/);
   });
 });
 

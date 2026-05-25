@@ -31,8 +31,29 @@ In progress.
   - 继续复用 `scanLocalPreview(customPaths)` 与 `importScannedSkills()`
   - `importScannedSkills()` 返回 `importedSkills`，并为项目导入 Skill 写入本地路径型 `source_url` 与 `local_repo_path`
   - `scanProjectSkills()` 在扫描失败时保留项目扫描状态并向调用方抛错，避免 UI 将失败误显示为 “扫描到 0 个”
-  - `scanProjectSkills()` 现在会自动扩展项目默认技能目录：`rootPath`、`.claude/skills`、`.agents/skills`、`skills`、`.gemini`，而不再只扫描项目根目录或用户手填路径
+  - `scanProjectSkills()` 现在会自动扩展项目默认技能目录：`.claude/skills`、`.agents/skills`、`skills`、`.gemini`，而不再只扫描用户手填路径
+  - 项目默认扫描路径不再包含整个项目根目录，避免刷新时遍历 `node_modules`、`packages` 等大型项目目录导致长时间转圈；如果用户确实要扫描项目根目录，可将根目录显式加入额外扫描路径
+  - 项目扫描不再复用全局 `scanLocalPreview()` 的 `isLoading/error` 状态流，而是直接调用 IPC 并只更新 `projectScanState`，避免项目刷新与全局导入预览互相污染
+  - 项目刷新不再传入 AI 安全扫描配置，避免把 40+ 个项目技能的刷新变成串行模型调用导致界面长时间转圈；安全扫描仍保留在显式详情操作中
   - 修复项目 Skill 文件页读取失败：`*ByPath` 本地仓库 API 不再错误要求路径必须位于 PromptHub 自有 `skills` 目录内；项目模式现在以传入的 Skill 根目录为边界，并继续阻止相对路径逃逸根目录
+- 项目内目录级分发链路
+  - 在项目 Skill 详情右侧新增“Project Deployment”面板，不再只提供“Import to My Skills”单一路径
+  - 项目分发目标持久化到 `skillProjects[].deployTargets`，默认预置当前项目的 `.agents/skills`
+  - 用户可继续添加多个项目内目标目录，并在详情页多选后执行一次分发
+  - 主进程新增按绝对路径复制整个 Skill 目录到任意目标目录的能力，目标结构为 `<target>/<skill-name>/...`
+  - 分发后自动触发当前项目重扫，使新目录下的 Skill 立即出现在项目扫描结果里
+  - 项目页头部现已增加“从我的技能导入”按钮，用户可直接从库内 Skill 多选并导入到当前项目
+  - 导入弹窗改为卡片网格布局并支持搜索
+  - 导入弹窗支持高级目录设置：默认 `.agents/skills`，也可多选 `.claude/skills`、`.gemini/skills` 或自定义目录
+  - 库内 Skill 导入现在先调用 `getRepoPath(skill.id)` 确保存在完整本地 repo，再复制整个 Skill 目录，避免只复制 `SKILL.md` 或因缺少 repo 而卡住
+  - 从“我的技能”导入到项目时，按目标目录检测 `<target>/<skill-name>` 是否已经存在；已存在的目标会在 UI 中显示 `Already Imported` 并禁止重复选择
+  - 项目扫描卡片现在只按稳定路径识别是否已存在于“我的技能”库，不再按同名兜底，避免把不同来源的项目 Skill 误判为库内 Skill
+  - 批量导入项目目录使用 `ifExists: "skip"` 作为主进程复制兜底，避免 stale UI 或并发点击把同名项目 Skill 直接覆盖
+  - 项目 Skill 重新部署到项目目录前，会先过滤与源 Skill 相同或位于源 Skill 内部的目标，避免生成 `<target>/<skill>/<skill>` 形式的嵌套副本
+  - 主进程 `copyRepoByPathToDirectory()` 额外阻止“目标技能目录与源技能目录相同”的危险复制，即使其他入口绕过前端保护也不会落盘
+- 设置迁移与平台排序回归修复
+  - `loadSettingsFromMainProcess()` 现在会先标准化 `customAgents`，当主进程未返回新结构时再显式回退到 `customAgentRootPaths` / `customSkillScanPaths`，避免旧配置在 renderer 加载时被空数组短路
+  - Skill Settings 中平台顺序列表的上下移动边界现在基于完整的 `managedAgentEntries`，custom agent 出现在末尾时不再错误允许继续下移
 - 搜索与标签语义修正
   - 在 `apps/desktop/src/renderer/services/skill-filter.ts` 新增 `filterVisibleScannedSkills()`，专用于项目扫描结果过滤
   - 在 `apps/desktop/src/renderer/services/skill-stats.ts` 与 `apps/desktop/src/renderer/components/skill/skill-modal-utils.ts` 中，仅将 `http(s)` 型 `source_url` 识别为远程来源，避免本地路径型 `source_url` 污染原始标签/来源判定
@@ -44,12 +65,19 @@ In progress.
 - 通过：`pnpm lint`
 - 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/top-bar.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/components/skill-detail-utils.test.ts tests/unit/components/skill-i18n-smoke.test.tsx tests/unit/stores/skill.store.test.ts`
 - 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx tests/unit/components/top-bar.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/components/skill-i18n-smoke.test.tsx`
+- 通过：`pnpm --filter @prompthub/desktop test:run tests/unit/stores/skill.store.test.ts`
+- 通过：`pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-projects-view.test.tsx`
+- 通过：`pnpm --filter @prompthub/desktop test:run tests/unit/main/skill-installer.test.ts`
+- 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillProjectsView.tsx src/renderer/stores/skill.store.ts src/main/services/skill-installer-repo.ts src/preload/api/skill.ts src/main/ipc/skill/local-repo-handlers.ts tests/unit/components/skill-projects-view.test.tsx tests/unit/stores/skill.store.test.ts tests/unit/main/skill-installer.test.ts`
+- 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillProjectsView.tsx tests/unit/components/skill-projects-view.test.tsx`
+- 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillProjectsView.tsx src/renderer/components/settings/SkillSettings.tsx src/renderer/stores/settings.store.ts src/renderer/services/project-skill-targets.ts src/main/services/skill-installer-repo.ts tests/unit/components/skill-projects-view.test.tsx tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-agent-roots.test.ts tests/unit/main/skill-installer.test.ts`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-agent-roots.test.ts tests/unit/main/skill-installer.test.ts`
+- 通过：`node -e "for (const f of ['en','zh','zh-TW','ja','fr','de','es']) JSON.parse(require('fs').readFileSync('apps/desktop/src/renderer/i18n/locales/'+f+'.json','utf8'));"` 
 - 通过：`pnpm --filter @prompthub/desktop build`
+- 未通过：`pnpm --filter @prompthub/desktop typecheck`
+  - 现存仓库问题：`src/main/services/skill-installer.ts(295,35)`、`SkillSettings.tsx` 的 `enabled` 字段类型、`SkillListView.tsx` 缺少 `useSettingsStore`、`rule-platform-order.ts` 的 `RulePlatformId` 类型、`settings.store.ts` 的既有设置字段类型
 - 部分通过但未最终绿灯：`pnpm --filter @prompthub/desktop test:run`
   - 大部分测试已执行通过，但在接近结束时因 Node/Vitest worker OOM 退出，属于仓库级测试资源问题，不是本轮变更的明确功能回归
-- 未通过：`pnpm typecheck`
-  - 现存仓库问题：`apps/desktop/src/renderer/components/settings/AISettingsPrototype.tsx`
-  - 报错与本轮项目级 Skill 改动无直接关联
 
 ## Tests Added / Updated
 
@@ -61,6 +89,7 @@ In progress.
 - `apps/desktop/tests/unit/stores/skill.store.test.ts`
   - 覆盖 `scanProjectSkills()` 失败时保留扫描状态并抛错
   - 覆盖项目扫描会自动补齐默认技能目录
+  - 覆盖项目默认扫描不再包含项目根目录，根目录只有显式配置时才参与扫描
 - `apps/desktop/tests/unit/components/skill-detail-utils.test.ts`
   - 覆盖本地路径型 `source_url` 仍被判定为本地来源
 - `apps/desktop/tests/unit/components/skill-i18n-smoke.test.tsx`
@@ -70,11 +99,23 @@ In progress.
   - 覆盖点击 Skill 卡片后切换到全宽详情页
   - 覆盖从项目详情返回到项目内 Skill 卡片列表
   - 覆盖进入详情后不再显示项目侧栏与其他 Skill 卡片内容
+  - 覆盖项目内 Skill 直接分发到默认 `.agents/skills` 目标目录
+  - 覆盖从“我的技能”导入到项目时，对已存在于目标目录的同名 Skill 展示 `Already Imported` 并禁止重复导入
+  - 覆盖同名但不同路径的项目 Skill 不再误判为 `In My Skills`
+  - 覆盖项目 Skill 已位于选中目标目录树内时阻止重复部署并提示 warning
 - `apps/desktop/tests/unit/main/skill-installer.test.ts`
   - 覆盖外部项目 Skill 根目录上的 `list/read/write/create/rename/delete` by-path 文件操作
   - 覆盖外部项目 Skill 根目录仍会拒绝 `../` 相对路径逃逸
+  - 覆盖将整个 Skill 目录复制到项目目标目录，以及拒绝复制到源目录内部
+  - 覆盖项目目标目录已存在时可按 `ifExists: "skip"` 保留原文件并跳过覆盖
+  - 覆盖当目标技能目录与源目录相同时拒绝复制
+- `apps/desktop/tests/unit/stores/settings-agent-roots.test.ts`
+  - 覆盖主进程仅返回 legacy `customAgentRootPaths` 时，renderer 仍正确加载兼容字段
+- `apps/desktop/tests/unit/components/skill-settings.test.tsx`
+  - 覆盖 custom agent 存在时最后一个托管条目的“下移”按钮禁用边界
 
 ## Remaining
 
 - 更新版本号到 `0.5.6`
+- 视需要扩展项目分发目标预设（如 `.claude/skills`、`.gemini/skills`）与更明确的目标模板 UI
 - 视需要修复仓库内既有 `typecheck` 阻塞：`AISettingsPrototype.tsx`

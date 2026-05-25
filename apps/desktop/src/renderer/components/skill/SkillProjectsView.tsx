@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BookOpenIcon,
+  ChevronDownIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   Loader2Icon,
@@ -14,9 +15,11 @@ import {
   SearchIcon,
   FolderIcon,
   CheckCircle2Icon,
+  CheckIcon,
+  Settings2Icon,
 } from "lucide-react";
 
-import type { ScannedSkill, Skill, SkillProject } from "@prompthub/shared/types";
+import type { Skill, SkillProject } from "@prompthub/shared/types";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useToast } from "../ui/Toast";
@@ -26,14 +29,15 @@ import { SkillQuickInstall } from "./SkillQuickInstall";
 import { filterVisibleScannedSkills } from "../../services/skill-filter";
 import { SkillFullDetailPage } from "./SkillFullDetailPage";
 import { buildProjectDetailSkill } from "./project-detail-adapter";
+import {
+  getDeployableProjectTargetDirs,
+  getMissingProjectTargetDirs,
+  normalizeProjectPathForComparison,
+} from "../../services/project-skill-targets";
 
 const OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT = "open-create-skill-project-modal";
 const PROJECT_SECTION_HEADER_CLASS =
   "h-[152px] border-b border-border app-wallpaper-panel-strong";
-
-function normalizePathForComparison(value: string): string {
-  return value.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
-}
 
 function inferProjectNameFromPath(rootPath: string): string {
   const normalized = rootPath.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -47,10 +51,67 @@ function getProjectInitial(name: string): string {
 }
 
 function getExtraProjectScanPaths(rootPath: string, scanPaths: string[]): string[] {
-  const normalizedRoot = normalizePathForComparison(rootPath);
+  const normalizedRoot = normalizeProjectPathForComparison(rootPath);
   return scanPaths.filter(
-    (entry) => normalizePathForComparison(entry) !== normalizedRoot,
+    (entry) => normalizeProjectPathForComparison(entry) !== normalizedRoot,
   );
+}
+
+function getDefaultProjectDeployTargets(rootPath: string): string[] {
+  const normalizedRoot = rootPath.replace(/[\\/]+$/, "");
+  if (!normalizedRoot) {
+    return [];
+  }
+  return [`${normalizedRoot}/.agents/skills`];
+}
+
+function getProjectDeployTargets(project: SkillProject): string[] {
+  const configured = Array.isArray(project.deployTargets)
+    ? project.deployTargets.filter((entry) => typeof entry === "string" && entry.trim().length > 0)
+    : [];
+  return Array.from(new Set(configured.length > 0 ? configured : getDefaultProjectDeployTargets(project.rootPath)));
+}
+
+function getPresetProjectImportTargets(rootPath: string): Array<{
+  id: string;
+  label: string;
+  path: string;
+}> {
+  const normalizedRoot = rootPath.replace(/[\\/]+$/, "");
+  return [
+    {
+      id: `${normalizedRoot}/.agents/skills`,
+      label: ".agents/skills",
+      path: `${normalizedRoot}/.agents/skills`,
+    },
+    {
+      id: `${normalizedRoot}/.claude/skills`,
+      label: ".claude/skills",
+      path: `${normalizedRoot}/.claude/skills`,
+    },
+    {
+      id: `${normalizedRoot}/.gemini/skills`,
+      label: ".gemini/skills",
+      path: `${normalizedRoot}/.gemini/skills`,
+    },
+  ];
+}
+
+function getTargetSummary(targetDirs: string[], projectRootPath: string): string {
+  const normalizedRoot = projectRootPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const labels = Array.from(
+    new Set(
+      targetDirs.map((targetDir) => {
+        const normalizedTarget = targetDir.replace(/\\/g, "/").replace(/\/+$/, "");
+        if (normalizedRoot && normalizedTarget.startsWith(`${normalizedRoot}/`)) {
+          return normalizedTarget.slice(normalizedRoot.length + 1);
+        }
+        return normalizedTarget;
+      }),
+    ),
+  );
+
+  return labels.join(", ");
 }
 
 interface ProjectFormModalProps {
@@ -305,14 +366,373 @@ function ProjectFormModal({
   );
 }
 
-function buildInstalledProjectPathSet(skills: Skill[]): Set<string> {
-  return new Set(
-    skills.flatMap((skill) =>
-      [skill.local_repo_path, skill.source_url].filter(
-        (value): value is string =>
-          typeof value === "string" && value.trim().length > 0,
-      ),
-    ),
+interface LibrarySkillImportModalProps {
+  isOpen: boolean;
+  isDeploying: boolean;
+  onClose: () => void;
+  onConfirm: (payload: { skillIds: string[]; targetDirs: string[] }) => void | Promise<void>;
+  onPickCustomTarget: () => Promise<string | null | undefined>;
+  project: SkillProject | null;
+  projectScannedSkills: ScannedSkill[];
+  skills: Skill[];
+}
+
+function LibrarySkillImportModal({
+  isOpen,
+  isDeploying,
+  onClose,
+  onConfirm,
+  onPickCustomTarget,
+  project,
+  projectScannedSkills,
+  skills,
+}: LibrarySkillImportModalProps) {
+  const { t } = useTranslation();
+  const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [customTargets, setCustomTargets] = useState<string[]>([]);
+  const presetTargets = useMemo(
+    () => (project ? getPresetProjectImportTargets(project.rootPath) : []),
+    [project],
+  );
+  const [selectedTargetIds, setSelectedTargetIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedSkillIds(new Set());
+      setSearchQuery("");
+      setShowAdvanced(false);
+      setCustomTargets([]);
+      setSelectedTargetIds(new Set());
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setSelectedTargetIds(
+      new Set(presetTargets[0] ? [presetTargets[0].id] : []),
+    );
+  }, [isOpen, presetTargets]);
+
+  const visibleSkills = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    if (!keyword) {
+      return skills;
+    }
+
+    return skills.filter((skill) =>
+      [skill.name, skill.description, skill.author, ...(skill.tags || [])]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .some((value) => value.toLowerCase().includes(keyword)),
+    );
+  }, [searchQuery, skills]);
+
+  const allTargetPaths = useMemo(
+    () => [...presetTargets.map((target) => target.path), ...customTargets],
+    [customTargets, presetTargets],
+  );
+
+  const selectedTargetDirs = useMemo(
+    () => allTargetPaths.filter((target) => selectedTargetIds.has(target)),
+    [allTargetPaths, selectedTargetIds],
+  );
+
+  useEffect(() => {
+    setSelectedSkillIds((previous) => {
+      const next = new Set(
+        [...previous].filter((skillId) => {
+          const skill = skills.find((entry) => entry.id === skillId);
+          if (!skill) {
+            return false;
+          }
+          return (
+            getMissingProjectTargetDirs(
+              projectScannedSkills,
+              skill.name,
+              selectedTargetDirs,
+            ).length > 0
+          );
+        }),
+      );
+
+      if (next.size === previous.size) {
+        return previous;
+      }
+      return next;
+    });
+  }, [projectScannedSkills, selectedTargetDirs, skills]);
+
+  const toggleSkill = (skill: Skill) => {
+    const missingTargetDirs = getMissingProjectTargetDirs(
+      projectScannedSkills,
+      skill.name,
+      selectedTargetDirs,
+    );
+    if (missingTargetDirs.length === 0) {
+      return;
+    }
+
+    setSelectedSkillIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(skill.id)) {
+        next.delete(skill.id);
+      } else {
+        next.add(skill.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleTarget = (targetId: string) => {
+    setSelectedTargetIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(targetId)) {
+        next.delete(targetId);
+      } else {
+        next.add(targetId);
+      }
+      return next;
+    });
+  };
+
+  const handleAddCustomTarget = async () => {
+    const selectedPath = await onPickCustomTarget();
+    if (!selectedPath) {
+      return;
+    }
+
+    setCustomTargets((previous) =>
+      previous.includes(selectedPath) ? previous : [...previous, selectedPath],
+    );
+    setSelectedTargetIds((previous) => new Set([...previous, selectedPath]));
+  };
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("skill.importFromMySkills", "Import from My Skills")}
+      size="xl"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "skill.importFromMySkillsHint",
+            "Select one or more skills from My Skills and deploy them into this project's local agent folders.",
+          )}
+        </p>
+
+        <Input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder={t("skill.searchSkill", "Search skills...")}
+        />
+
+        {skills.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            {t("skill.noSkills", "No skills found")}
+          </div>
+        ) : (
+          <div className="max-h-[420px] overflow-y-auto pr-1">
+            {visibleSkills.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                {t("skill.noResults", "No skills found")}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleSkills.map((skill) => {
+              const isSelected = selectedSkillIds.has(skill.id);
+              const missingTargetDirs = getMissingProjectTargetDirs(
+                projectScannedSkills,
+                skill.name,
+                selectedTargetDirs,
+              );
+              const deployedTargetCount =
+                selectedTargetDirs.length - missingTargetDirs.length;
+              const isFullyImported =
+                selectedTargetDirs.length > 0 && missingTargetDirs.length === 0;
+              const isPartiallyImported =
+                deployedTargetCount > 0 && !isFullyImported;
+
+              return (
+                <button
+                  key={skill.id}
+                  type="button"
+                  onClick={() => toggleSkill(skill)}
+                  disabled={isFullyImported}
+                  className={`flex min-h-[148px] flex-col items-start justify-between gap-4 rounded-2xl border px-4 py-4 text-left transition-colors ${
+                    isSelected
+                      ? "border-primary/40 bg-primary/5"
+                      : isFullyImported
+                        ? "border-border bg-accent/20 opacity-70"
+                        : "border-border bg-accent/40 hover:bg-accent"
+                  }`}
+                >
+                  <div className="min-w-0 w-full flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="truncate text-base font-semibold text-foreground">
+                        {skill.name}
+                      </div>
+                      {isFullyImported ? (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
+                          <CheckCircle2Icon className="h-3 w-3" />
+                          {t("skill.importedBadge", "Already Imported")}
+                        </span>
+                      ) : isPartiallyImported ? (
+                        <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                          {t("skill.partiallyImportedBadge", "Partially Imported")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                      {skill.description || skill.author || skill.local_repo_path || skill.source_url}
+                    </div>
+                  </div>
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {(skill.tags || []).slice(0, 3).join(", ")}
+                    </div>
+                    <div
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
+                      isSelected
+                        ? "border-primary bg-primary text-white"
+                        : isFullyImported
+                          ? "border-muted-foreground/20 bg-muted"
+                          : "border-muted-foreground/30"
+                    }`}
+                  >
+                    {isSelected ? <CheckIcon className="h-3 w-3" /> : null}
+                  </div>
+                  </div>
+                </button>
+              );
+            })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-border app-wallpaper-surface p-4">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((previous) => !previous)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Settings2Icon className="h-4 w-4" />
+                {t("skill.advancedImportSettings", "Advanced Import Settings")}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {t(
+                  "skill.advancedImportSettingsHint",
+                  "Choose one or more target folders. If you skip this, PromptHub defaults to .agents/skills.",
+                )}
+              </div>
+            </div>
+            <ChevronDownIcon
+              className={`h-4 w-4 text-muted-foreground transition-transform ${
+                showAdvanced ? "rotate-180" : "rotate-0"
+              }`}
+            />
+          </button>
+
+          {showAdvanced ? (
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {presetTargets.map((target) => {
+                  const isSelected = selectedTargetIds.has(target.id);
+                  return (
+                    <button
+                      key={target.id}
+                      type="button"
+                      onClick={() => toggleTarget(target.id)}
+                      className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                        isSelected
+                          ? "border-primary/40 bg-primary/5"
+                          : "border-border bg-background hover:bg-accent"
+                      }`}
+                    >
+                      <div className="text-sm font-medium text-foreground">{target.label}</div>
+                      <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                        {target.path}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {customTargets.length > 0 ? (
+                <div className="space-y-2">
+                  {customTargets.map((target) => {
+                    const isSelected = selectedTargetIds.has(target);
+                    return (
+                      <button
+                        key={target}
+                        type="button"
+                        onClick={() => toggleTarget(target)}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
+                          isSelected
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border bg-background hover:bg-accent"
+                        }`}
+                      >
+                        <div className="text-sm font-medium text-foreground">
+                          {t("skill.customProjectDeployTarget", "Custom target")}
+                        </div>
+                        <div className="mt-1 break-all font-mono text-[11px] text-muted-foreground">
+                          {target}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => void handleAddCustomTarget()}
+                className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+              >
+                <FolderPlusIcon className="h-4 w-4" />
+                {t("skill.addDeployTarget", "Add Folder")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 py-2 text-sm text-foreground transition-colors hover:bg-accent"
+          >
+            {t("common.cancel", "Cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              void onConfirm({
+                skillIds: Array.from(selectedSkillIds),
+                targetDirs: selectedTargetDirs,
+              })
+            }
+            disabled={selectedSkillIds.size === 0 || selectedTargetDirs.length === 0 || isDeploying}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+          >
+            {isDeploying ? <Loader2Icon className="h-4 w-4 animate-spin" /> : null}
+            {t("skill.importSelectedToProject", {
+              count: selectedSkillIds.size,
+              defaultValue: `Import ${selectedSkillIds.size} selected skill(s)`,
+            })}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -346,6 +766,9 @@ export function SkillProjectsView() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [quickInstallSkill, setQuickInstallSkill] = useState<Skill | null>(null);
   const [isImportingPath, setIsImportingPath] = useState<string | null>(null);
+  const [isDeployingPath, setIsDeployingPath] = useState<string | null>(null);
+  const [isLibraryImportModalOpen, setIsLibraryImportModalOpen] = useState(false);
+  const [isImportingLibrarySkills, setIsImportingLibrarySkills] = useState(false);
   const [selectedProjectSkillPath, setSelectedProjectSkillPath] = useState<string | null>(null);
   const autoScannedProjectIdsRef = useRef<Set<string>>(new Set());
 
@@ -374,11 +797,10 @@ export function SkillProjectsView() {
 
   const currentProjectState =
     (selectedProject && projectScanState[selectedProject.id]) || null;
-  const installedProjectPaths = useMemo(
-    () => buildInstalledProjectPathSet(skills),
-    [skills],
+  const currentProjectDeployTargets = useMemo(
+    () => (selectedProject ? getProjectDeployTargets(selectedProject) : []),
+    [selectedProject],
   );
-
   const visibleProjectSkills = useMemo(() => {
     return filterVisibleScannedSkills(
       currentProjectState?.scannedSkills || [],
@@ -412,6 +834,21 @@ export function SkillProjectsView() {
     setEditingProject(null);
     setIsProjectModalOpen(true);
   }, []);
+
+  const handleAddProjectDeployTarget = useCallback(async () => {
+    if (!selectedProject) {
+      return;
+    }
+
+    const selectedPath = await window.electron?.selectFolder?.();
+    if (!selectedPath) {
+      return;
+    }
+
+    updateSkillProject(selectedProject.id, {
+      deployTargets: [...currentProjectDeployTargets, selectedPath],
+    });
+  }, [currentProjectDeployTargets, selectedProject, updateSkillProject]);
 
   useEffect(() => {
     const handleOpenProjectModal = () => {
@@ -472,7 +909,10 @@ export function SkillProjectsView() {
   };
 
   const handleScanProject = useCallback(
-    async (project: SkillProject, options?: { suppressToast?: boolean }) => {
+    async (
+      project: SkillProject,
+      options?: { suppressToast?: boolean; suppressErrorToast?: boolean },
+    ) => {
       try {
         const scanned = await scanProjectSkills(project);
         updateSkillProject(project.id, { lastScannedAt: Date.now() });
@@ -487,12 +927,14 @@ export function SkillProjectsView() {
         }
         return scanned;
       } catch (error) {
-        showToast(
-          error instanceof Error
-            ? error.message
-            : t("skill.projectScanFailed", "Failed to scan project skills"),
-          "error",
-        );
+        if (!options?.suppressErrorToast) {
+          showToast(
+            error instanceof Error
+              ? error.message
+              : t("skill.projectScanFailed", "Failed to scan project skills"),
+            "error",
+          );
+        }
         throw error;
       }
     },
@@ -564,18 +1006,27 @@ export function SkillProjectsView() {
     });
   }, [handleScanProject, projectScanState, selectedProject]);
 
-  const importedLibrarySkillByPath = useMemo(() => {
-    const pathMap = new Map<string, Skill>();
+  const importedLibrarySkillLookup = useMemo(() => {
+    const byPath = new Map<string, Skill>();
     for (const skill of skills) {
       if (skill.local_repo_path) {
-        pathMap.set(skill.local_repo_path, skill);
+        byPath.set(normalizeProjectPathForComparison(skill.local_repo_path), skill);
       }
       if (skill.source_url) {
-        pathMap.set(skill.source_url, skill);
+        byPath.set(normalizeProjectPathForComparison(skill.source_url), skill);
       }
     }
-    return pathMap;
+    return byPath;
   }, [skills]);
+
+  const getImportedLibrarySkill = useCallback(
+    (scannedSkill: ScannedSkill): Skill | null =>
+      importedLibrarySkillLookup.get(
+        normalizeProjectPathForComparison(scannedSkill.localPath),
+      ) ??
+      null,
+    [importedLibrarySkillLookup],
+  );
 
   const selectedScannedSkill = useMemo(
     () =>
@@ -588,9 +1039,9 @@ export function SkillProjectsView() {
   const selectedImportedSkill = useMemo(
     () =>
       selectedScannedSkill
-        ? importedLibrarySkillByPath.get(selectedScannedSkill.localPath) ?? null
+        ? getImportedLibrarySkill(selectedScannedSkill)
         : null,
-    [importedLibrarySkillByPath, selectedScannedSkill],
+    [getImportedLibrarySkill, selectedScannedSkill],
   );
 
   const selectedDetailSkill = useMemo(() => {
@@ -601,8 +1052,181 @@ export function SkillProjectsView() {
       scannedSkill: selectedScannedSkill,
       importedSkill: selectedImportedSkill,
       projectName: selectedProject.name,
+      projectRootPath: selectedProject.rootPath,
+      projectDeployTargets: currentProjectDeployTargets,
     });
-  }, [selectedImportedSkill, selectedProject, selectedScannedSkill]);
+  }, [currentProjectDeployTargets, selectedImportedSkill, selectedProject, selectedScannedSkill]);
+
+  const handleDeployProjectSkill = useCallback(
+    async (targetDirs: string[]) => {
+      if (!selectedProject || !selectedDetailSkill || targetDirs.length === 0) {
+        return;
+      }
+
+      const sourcePath =
+        selectedDetailSkill.local_repo_path || selectedDetailSkill.source_url || "";
+      if (!sourcePath.trim()) {
+        showToast(
+          t("skill.projectDeployMissingSource", "Missing local skill source path."),
+          "error",
+        );
+        return;
+      }
+
+      const deployableTargetDirs = getDeployableProjectTargetDirs(
+        sourcePath,
+        selectedDetailSkill.name,
+        targetDirs,
+      );
+      if (deployableTargetDirs.length === 0) {
+        showToast(
+          t(
+            "skill.projectDeployAlreadyAtTarget",
+            "This skill is already inside the selected project target folders.",
+          ),
+          "warning",
+        );
+        return;
+      }
+
+      setIsDeployingPath(sourcePath);
+      try {
+        await Promise.all(
+          deployableTargetDirs.map((targetDir) =>
+            window.api.skill.copyRepoByPathToDirectory(
+              sourcePath,
+              selectedDetailSkill.name,
+              targetDir,
+            ),
+          ),
+        );
+        await handleScanProject(selectedProject, { suppressToast: true });
+        showToast(
+          t("skill.projectDeploySuccess", {
+            count: deployableTargetDirs.length,
+            defaultValue: "Deployed to {{count}} project folder(s).",
+          }),
+          "success",
+        );
+      } catch (error) {
+        showToast(
+          t("skill.projectDeployFailed", {
+            reason: error instanceof Error ? error.message : String(error),
+            defaultValue: "Failed to deploy project skill: {{reason}}",
+          }),
+          "error",
+        );
+      } finally {
+        setIsDeployingPath(null);
+      }
+    },
+    [handleScanProject, selectedDetailSkill, selectedProject, showToast, t],
+  );
+
+  const handleImportLibrarySkillsToProject = useCallback(
+    async ({
+      skillIds,
+      targetDirs,
+    }: {
+      skillIds: string[];
+      targetDirs: string[];
+    }) => {
+      if (!selectedProject || skillIds.length === 0 || targetDirs.length === 0) {
+        return;
+      }
+
+      const selectedLibrarySkills = skills.filter((skill) => skillIds.includes(skill.id));
+
+      setIsImportingLibrarySkills(true);
+      try {
+        const ensuredRepoPaths = await Promise.all(
+          selectedLibrarySkills.map(async (skill) => {
+            const repoPath = await window.api.skill.getRepoPath(skill.id);
+            if (!repoPath) {
+              throw new Error(
+                `${skill.name}: ${t(
+                  "skill.projectDeployMissingSource",
+                  "Missing local skill source path.",
+                )}`,
+              );
+            }
+            return {
+              skill,
+              repoPath,
+            };
+          }),
+        );
+
+        const scannedProjectSkills = currentProjectState?.scannedSkills ?? [];
+        const copyJobs = ensuredRepoPaths.flatMap(({ skill, repoPath }) =>
+          getMissingProjectTargetDirs(
+            scannedProjectSkills,
+            skill.name,
+            targetDirs,
+          ).map((targetDir) => ({
+            repoPath,
+            skill,
+            targetDir,
+          })),
+        );
+
+        if (copyJobs.length === 0) {
+          showToast(
+            t(
+              "skill.projectImportAlreadyExists",
+              "Selected skills are already imported into the selected project folders.",
+            ),
+            "warning",
+          );
+          return;
+        }
+
+        await Promise.all(
+          copyJobs.map(({ skill, repoPath, targetDir }) =>
+            window.api.skill.copyRepoByPathToDirectory(
+              repoPath,
+              skill.name,
+              targetDir,
+              { ifExists: "skip" },
+            ),
+          ),
+        );
+        setIsLibraryImportModalOpen(false);
+        showToast(
+          t("skill.projectImportLibrarySuccess", {
+            count: selectedLibrarySkills.length,
+            targets: getTargetSummary(targetDirs, selectedProject.rootPath),
+            defaultValue:
+              "Imported {{count}} library skill(s) into this project ({{targets}}).",
+          }),
+          "success",
+        );
+        void handleScanProject(selectedProject, {
+          suppressToast: true,
+          suppressErrorToast: true,
+        }).catch(() => {
+          showToast(
+            t("skill.projectImportLibraryRescanFailed", {
+              defaultValue:
+                "Import completed, but PromptHub could not refresh the project list. Please rescan manually.",
+            }),
+            "warning",
+          );
+        });
+      } catch (error) {
+        showToast(
+          t("skill.projectDeployFailed", {
+            reason: error instanceof Error ? error.message : String(error),
+            defaultValue: "Failed to deploy project skill: {{reason}}",
+          }),
+          "error",
+        );
+      } finally {
+        setIsImportingLibrarySkills(false);
+      }
+    },
+    [currentProjectState?.scannedSkills, handleScanProject, selectedProject, showToast, skills, t],
+  );
 
   const isShowingProjectDetail = Boolean(selectedScannedSkill && selectedDetailSkill);
 
@@ -617,13 +1241,18 @@ export function SkillProjectsView() {
                   scannedSkill: selectedScannedSkill,
                   importedSkill: selectedImportedSkill,
                   projectName: selectedProject.name,
+                  projectRootPath: selectedProject.rootPath,
+                  projectDeployTargets: currentProjectDeployTargets,
                 }
               : null
           }
           projectActions={
             selectedScannedSkill && !selectedImportedSkill
               ? {
+                  isDeploying: isDeployingPath === selectedScannedSkill.localPath,
                   isImporting: isImportingPath === selectedScannedSkill.localPath,
+                  onAddDeployTarget: handleAddProjectDeployTarget,
+                  onDeployToProjectTargets: handleDeployProjectSkill,
                   onImport: () => handleImportProjectSkill(selectedScannedSkill),
                 }
               : null
@@ -748,6 +1377,14 @@ export function SkillProjectsView() {
                   <div className="flex shrink-0 flex-wrap gap-2 self-end">
                     <button
                       type="button"
+                      onClick={() => setIsLibraryImportModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                    >
+                      <BookOpenIcon className="h-4 w-4" />
+                      {t("skill.importFromMySkills", "Import from My Skills")}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void handleScanProject(selectedProject)}
                       disabled={currentProjectState?.isScanning}
                       className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent disabled:opacity-60"
@@ -804,10 +1441,8 @@ export function SkillProjectsView() {
                 ) : (
                   <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
                     {visibleProjectSkills.map((scannedSkill) => {
-                      const importedSkill = importedLibrarySkillByPath.get(
-                        scannedSkill.localPath,
-                      );
-                      const isImported = installedProjectPaths.has(scannedSkill.localPath);
+                      const importedSkill = getImportedLibrarySkill(scannedSkill);
+                      const isInMySkills = Boolean(importedSkill);
 
                       return (
                         <article
@@ -830,10 +1465,10 @@ export function SkillProjectsView() {
                                       v{scannedSkill.version}
                                     </span>
                                   ) : null}
-                                  {isImported ? (
+                                  {isInMySkills ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-300">
                                       <CheckCircle2Icon className="h-3 w-3" />
-                                      {t("skill.importedBadge", "Already Imported")}
+                                      {t("skill.inMySkillsBadge", "In My Skills")}
                                     </span>
                                   ) : null}
                                 </div>
@@ -856,7 +1491,7 @@ export function SkillProjectsView() {
                               <FolderOpenIcon className="h-3.5 w-3.5" />
                               {t("skill.openSkillFolder", "Open Folder")}
                             </button>
-                            {isImported && importedSkill ? (
+                            {isInMySkills && importedSkill ? (
                               <>
                                 <button
                                   type="button"
@@ -938,6 +1573,17 @@ export function SkillProjectsView() {
           onClose={() => setQuickInstallSkill(null)}
         />
       ) : null}
+
+      <LibrarySkillImportModal
+        isOpen={isLibraryImportModalOpen}
+        isDeploying={isImportingLibrarySkills}
+        onClose={() => setIsLibraryImportModalOpen(false)}
+        onPickCustomTarget={() => window.electron?.selectFolder?.()}
+        onConfirm={handleImportLibrarySkillsToProject}
+        project={selectedProject}
+        projectScannedSkills={currentProjectState?.scannedSkills ?? []}
+        skills={skills}
+      />
     </div>
   );
 }

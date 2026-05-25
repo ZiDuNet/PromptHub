@@ -28,6 +28,10 @@ export interface SkillLocalFileBufferEntry {
   data: Uint8Array;
 }
 
+export interface CopyRepoByPathToDirectoryOptions {
+  ifExists?: "overwrite" | "skip" | "error";
+}
+
 // ==================== Constants ====================
 
 /** Maximum recursion depth for directory walking */
@@ -236,6 +240,72 @@ export async function saveToLocalRepo(
   });
 
   return destDir;
+}
+
+export async function copyRepoByPathToDirectory(
+  sourceDir: string,
+  skillName: string,
+  targetRootDir: string,
+  options: CopyRepoByPathToDirectoryOptions = {},
+): Promise<string> {
+  validateSkillName(skillName);
+
+  const resolvedSourceDir = path.resolve(sourceDir);
+  const resolvedTargetRootDir = path.resolve(targetRootDir);
+
+  const sourceStat = await fs.stat(resolvedSourceDir).catch((error: unknown) => {
+    if (getErrorCode(error) === "ENOENT") {
+      throw new Error(`Source skill directory does not exist: ${resolvedSourceDir}`);
+    }
+    throw error;
+  });
+  if (!sourceStat.isDirectory()) {
+    throw new Error(`Source skill directory is not a directory: ${resolvedSourceDir}`);
+  }
+
+  const targetDir = path.join(resolvedTargetRootDir, skillName);
+  if (resolvedSourceDir === targetDir) {
+    throw new Error(
+      `Target skill directory must not equal the source skill directory: ${targetDir}`,
+    );
+  }
+  if (isPathWithin(resolvedSourceDir, resolvedTargetRootDir)) {
+    throw new Error(
+      `Target directory must not be inside the source skill directory: ${resolvedTargetRootDir}`,
+    );
+  }
+
+  await fs.mkdir(resolvedTargetRootDir, { recursive: true });
+  if (await fileExists(targetDir)) {
+    const ifExists = options.ifExists ?? "overwrite";
+    if (ifExists === "skip") {
+      return targetDir;
+    }
+    if (ifExists === "error") {
+      throw new Error(`Skill already exists in target directory: ${targetDir}`);
+    }
+    await fs.rm(targetDir, { recursive: true, force: true });
+  }
+  await fs.cp(resolvedSourceDir, targetDir, {
+    recursive: true,
+    filter: async (src: string) => {
+      const relativePath = path.relative(resolvedSourceDir, src);
+      if (!relativePath) {
+        return true;
+      }
+      if (isInternalSkillRepoEntry(relativePath)) {
+        return false;
+      }
+      try {
+        const stat = await fs.lstat(src);
+        return !stat.isSymbolicLink();
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  return targetDir;
 }
 
 /**

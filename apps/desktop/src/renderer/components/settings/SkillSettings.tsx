@@ -5,26 +5,43 @@ import {
   EyeIcon,
   EyeOffIcon,
   ExternalLinkIcon,
+  FolderOpenIcon,
   GripVerticalIcon,
+  PencilIcon,
   PlusIcon,
   RotateCcwIcon,
+  SaveIcon,
   TrashIcon,
+  XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { CustomAgentConfig } from "@prompthub/shared/types";
+import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 
 import {
   SKILL_PLATFORMS,
   getPlatformGlobalRuleTemplate,
   getPlatformRootTemplate,
-  getPlatformSkillsTemplate,
 } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
+import { buildAgentRootAssetPreview } from "../../services/agent-root-paths";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
 import { getSafetyScanAIConfig } from "../skill/detail-utils";
 import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
+
+interface ManagedAgentEntry {
+  id: string;
+  name: string;
+  rootPath: string;
+  kind: "builtin" | "custom";
+  iconPlatformId?: string;
+  platform?: SkillPlatform;
+  customAgent?: CustomAgentConfig;
+}
 
 function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
   const platform = navigator.userAgent.toLowerCase();
@@ -55,6 +72,53 @@ function useOrderedPlatforms() {
   }, [settings.skillPlatformOrder]);
 }
 
+function useManagedAgentEntries() {
+  const settings = useSettingsStore();
+  const orderedPlatforms = useOrderedPlatforms();
+  const currentPlatformKey = getCurrentPlatformKey();
+
+  return useMemo<ManagedAgentEntry[]>(() => {
+    const builtinEntries: ManagedAgentEntry[] = orderedPlatforms.map((platform) => ({
+      id: platform.id,
+      name: platform.name,
+      rootPath:
+        settings.customPlatformRootPaths[platform.id] ||
+        getPlatformRootTemplate(platform, currentPlatformKey),
+      kind: "builtin",
+      iconPlatformId: platform.id,
+      platform,
+    }));
+
+    const customEntries: ManagedAgentEntry[] = settings.customAgents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      rootPath: agent.rootPath,
+      kind: "custom",
+      customAgent: agent,
+    }));
+
+    const preferredOrder = settings.skillPlatformOrder ?? [];
+    const allEntries = [...builtinEntries, ...customEntries];
+    const orderIndex = new Map(preferredOrder.map((id, index) => [id, index]));
+
+    return [...allEntries].sort((left, right) => {
+      const leftIndex = orderIndex.get(left.id);
+      const rightIndex = orderIndex.get(right.id);
+      if (leftIndex != null && rightIndex != null) return leftIndex - rightIndex;
+      if (leftIndex != null) return -1;
+      if (rightIndex != null) return 1;
+      if (left.kind !== right.kind) return left.kind === "builtin" ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
+  }, [
+    currentPlatformKey,
+    orderedPlatforms,
+    settings.customAgents,
+    settings.customPlatformRootPaths,
+    settings.skillPlatformOrder,
+  ]);
+}
+
 function reorderPlatformIds(
   currentOrder: string[],
   sourceId: string,
@@ -79,9 +143,21 @@ function reorderPlatformIds(
 export function SkillSettings() {
   const { t } = useTranslation();
   const settings = useSettingsStore();
+  const { showToast } = useToast();
   const orderedPlatforms = useOrderedPlatforms();
+  const managedAgentEntries = useManagedAgentEntries();
   const currentPlatformKey = getCurrentPlatformKey();
-  const [newScanPath, setNewScanPath] = useState("");
+  const [newAgentName, setNewAgentName] = useState("");
+  const [newAgentRootPath, setNewAgentRootPath] = useState("");
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [editingAgentName, setEditingAgentName] = useState("");
+  const [editingAgentRootPath, setEditingAgentRootPath] = useState("");
+  const [editingAgentSkillsPath, setEditingAgentSkillsPath] = useState("");
+  const [editingAgentRulesPath, setEditingAgentRulesPath] = useState("");
+  const [editingAgentAgentsPath, setEditingAgentAgentsPath] = useState("agents");
+  const [editingAgentCommandsPath, setEditingAgentCommandsPath] = useState("commands");
+  const [editingAgentConfigPaths, setEditingAgentConfigPaths] = useState("");
+  const [editingAgentEnabled, setEditingAgentEnabled] = useState(true);
   const [draggingPlatformId, setDraggingPlatformId] = useState<string | null>(
     null,
   );
@@ -89,9 +165,12 @@ export function SkillSettings() {
     null,
   );
   const [isGithubTokenVisible, setIsGithubTokenVisible] = useState(false);
+  const [pendingDeleteAgent, setPendingDeleteAgent] = useState<CustomAgentConfig | null>(
+    null,
+  );
 
   const movePlatformOrder = (platformId: string, direction: "up" | "down") => {
-    const nextOrder = orderedPlatforms.map((platform) => platform.id);
+    const nextOrder = managedAgentEntries.map((platform) => platform.id);
     const currentIndex = nextOrder.indexOf(platformId);
     if (currentIndex === -1) {
       return;
@@ -111,7 +190,7 @@ export function SkillSettings() {
 
   const applyDraggedPlatformOrder = (sourceId: string, targetId: string) => {
     const nextOrder = reorderPlatformIds(
-      orderedPlatforms.map((platform) => platform.id),
+      managedAgentEntries.map((platform) => platform.id),
       sourceId,
       targetId,
     );
@@ -154,6 +233,37 @@ export function SkillSettings() {
   const handleDragEnd = () => {
     setDraggingPlatformId(null);
     setDropTargetPlatformId(null);
+  };
+
+  const handleAddCustomAgent = () => {
+    if (!newAgentName.trim() || !newAgentRootPath.trim()) {
+      return;
+    }
+
+    try {
+      settings.addCustomAgent({
+        name: newAgentName.trim(),
+        rootPath: newAgentRootPath.trim(),
+      });
+      setNewAgentName("");
+      setNewAgentRootPath("");
+    } catch (error) {
+      showToast(String(error), "error");
+    }
+  };
+
+  const handlePickNewAgentRootPath = async () => {
+    const selectedPath = await window.electron?.selectFolder?.();
+    if (selectedPath) {
+      setNewAgentRootPath(selectedPath);
+    }
+  };
+
+  const handlePickEditingAgentRootPath = async () => {
+    const selectedPath = await window.electron?.selectFolder?.();
+    if (selectedPath) {
+      setEditingAgentRootPath(selectedPath);
+    }
   };
 
   return (
@@ -306,7 +416,7 @@ export function SkillSettings() {
             aria-label={t("settings.platformDisplayOrder", "Platform Display Order")}
             className="space-y-2 rounded-xl border border-border/70 app-wallpaper-surface p-3"
           >
-            {orderedPlatforms.map((platform, index) => (
+            {managedAgentEntries.map((platform, index) => (
               <div
                 key={platform.id}
                 role="listitem"
@@ -326,30 +436,49 @@ export function SkillSettings() {
               >
                 <div className="flex min-w-0 items-center gap-3">
                   <GripVerticalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <PlatformIcon platformId={platform.id} size={20} />
+                  <PlatformIcon
+                    platformId={platform.iconPlatformId || "custom-agent"}
+                    size={20}
+                  />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <div className="text-sm font-medium text-foreground">
                         {platform.name}
                       </div>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                        {settings.disabledPlatformIds.includes(platform.id)
+                        {platform.kind === "custom"
+                          ? t("settings.customAgentBadge", "Custom")
+                          : t("settings.builtinAgentBadge", "Built-in")}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {(platform.kind === "custom"
+                          ? platform.customAgent?.enabled === false
+                          : settings.disabledPlatformIds.includes(platform.id))
                           ? t("settings.platformDisabled", "Disabled")
                           : t("settings.platformEnabled", "Enabled")}
                       </span>
                     </div>
                     <div className="text-[11px] text-muted-foreground">
-                      {settings.customPlatformRootPaths[platform.id] ||
-                        getPlatformRootTemplate(platform, currentPlatformKey)}
+                      {platform.rootPath}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <ToggleSwitch
-                    checked={!settings.disabledPlatformIds.includes(platform.id)}
-                    onChange={(checked) =>
-                      settings.setRulePlatformTracked(platform.id, checked)
+                    checked={
+                      platform.kind === "custom"
+                        ? platform.customAgent?.enabled !== false
+                        : !settings.disabledPlatformIds.includes(platform.id)
                     }
+                    onChange={(checked) => {
+                      if (platform.kind === "custom" && platform.customAgent) {
+                        settings.updateCustomAgent(platform.customAgent.id, {
+                          enabled: checked,
+                        });
+                        return;
+                      }
+                      settings.setRulePlatformTracked(platform.id, checked);
+                    }}
                   />
                   <button
                     onClick={() => movePlatformOrder(platform.id, "up")}
@@ -361,7 +490,7 @@ export function SkillSettings() {
                   </button>
                   <button
                     onClick={() => movePlatformOrder(platform.id, "down")}
-                    disabled={index === orderedPlatforms.length - 1}
+                    disabled={index === managedAgentEntries.length - 1}
                     className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                     title={t("settings.movePlatformDown", "Move Down")}
                   >
@@ -487,72 +616,428 @@ export function SkillSettings() {
       </SettingSection>
 
       <SettingSection
-        title={t("settings.extraSkillScanPaths", "Extra Scan Directories")}
+        title={t("settings.customAgents", "Custom Agents")}
       >
         <div className="p-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "settings.extraSkillScanPathsDesc",
-              "Add extra Skill directories for import and discovery. These do not replace the platform default directories.",
-            )}
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={newScanPath}
-              onChange={(e) => setNewScanPath(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newScanPath.trim()) {
-                  settings.addCustomSkillScanPath(newScanPath.trim());
-                  setNewScanPath("");
-                }
-              }}
-              placeholder={t(
-                "settings.customSkillScanPathPlaceholder",
-                "Enter path, e.g. ~/myskills",
-              )}
-              className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-            />
-            <button
-              onClick={() => {
-                if (newScanPath.trim()) {
-                  settings.addCustomSkillScanPath(newScanPath.trim());
-                  setNewScanPath("");
-                }
-              }}
-              className="h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-1.5"
-            >
-              <PlusIcon className="w-4 h-4" />
-              {t("common.add", "Add")}
-            </button>
-          </div>
-          {settings.customSkillScanPaths.length > 0 ? (
-            <div className="rounded-lg border border-border overflow-hidden">
-              {settings.customSkillScanPaths.map((path, idx) => (
-                <div
-                  key={`${path}-${idx}`}
-                  className="flex items-center justify-between px-3 py-2.5 border-b border-border/70 last:border-0 hover:bg-muted/20 transition-colors"
-                >
-                  <span className="text-sm font-mono text-foreground truncate flex-1 mr-3">
-                    {path}
-                  </span>
+          <div className="rounded-xl border border-border/70 app-wallpaper-surface p-4 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-3xl text-xs text-muted-foreground">
+                {t(
+                  "settings.customAgentsDesc",
+                  "Add your own agent/tool entries with a name and root directory. PromptHub will derive scan paths and known local assets from each custom agent.",
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={handleAddCustomAgent}
+                disabled={!newAgentName.trim() || !newAgentRootPath.trim()}
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <PlusIcon className="h-4 w-4" />
+                {t("common.add", "Add")}
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              <div className="grid gap-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {t("settings.customAgentNameLabel", "Agent name")}
+                </label>
+                <input
+                  type="text"
+                  value={newAgentName}
+                  onChange={(e) => setNewAgentName(e.target.value)}
+                  placeholder={t(
+                    "settings.customAgentNamePlaceholder",
+                    "Agent name, e.g. Team Agents",
+                  )}
+                  className="h-10 w-full rounded-lg bg-muted px-3 text-sm placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {t("settings.agentRootPathLabel", "Root directory")}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newAgentRootPath}
+                    onChange={(e) => setNewAgentRootPath(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleAddCustomAgent();
+                      }
+                    }}
+                    placeholder={t(
+                      "settings.customAgentRootPathPlaceholder",
+                      "Enter agent root, e.g. ~/.agents or ~/workspace/.opencode",
+                    )}
+                    className="h-10 w-full flex-1 rounded-lg bg-muted px-3 text-sm font-mono placeholder:text-muted-foreground/50"
+                  />
                   <button
-                    onClick={() => settings.removeCustomSkillScanPath(path)}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
-                    title={t("common.delete", "Delete")}
+                    type="button"
+                    onClick={() => void handlePickNewAgentRootPath()}
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-4 text-sm text-foreground transition-colors hover:bg-accent"
                   >
-                    <TrashIcon className="w-3.5 h-3.5" />
+                    <FolderOpenIcon className="h-4 w-4" />
+                    {t("skill.browseFolder", "Browse")}
                   </button>
                 </div>
-              ))}
+              </div>
+            </div>
+          </div>
+          {settings.customAgents.length > 0 ? (
+            <div className="rounded-lg border border-border overflow-hidden">
+              {settings.customAgents.map((agent, idx) => {
+                const preview = buildAgentRootAssetPreview(agent);
+                const isEditing = editingAgentId === agent.id;
+
+                return (
+                  <div
+                    key={`${agent.id}-${idx}`}
+                    className="border-b border-border/70 p-4 last:border-0"
+                  >
+                    <div className="space-y-4 rounded-xl border border-border/60 bg-background/40 p-4 transition-colors hover:bg-muted/10">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-base font-semibold text-foreground">
+                              {agent.name}
+                            </div>
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                              {t("settings.customAgentBadge", "Custom")}
+                            </span>
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                              {agent.enabled === false
+                                ? t("settings.platformDisabled", "Disabled")
+                                : t("settings.platformEnabled", "Enabled")}
+                            </span>
+                          </div>
+                          <div className="mt-2 text-sm font-mono text-muted-foreground break-all">
+                            {agent.rootPath}
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-1 self-start">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    settings.updateCustomAgent(agent.id, {
+                                      name: editingAgentName,
+                                      rootPath: editingAgentRootPath,
+                                      skillsRelativePath: editingAgentSkillsPath,
+                                      rulesRelativePath: editingAgentRulesPath,
+                                      agentsRelativePath: editingAgentAgentsPath,
+                                      commandsRelativePath: editingAgentCommandsPath,
+                                      enabled: editingAgentEnabled,
+                                      configRelativePaths: editingAgentConfigPaths
+                                        .split(",")
+                                        .map((entry) => entry.trim())
+                                        .filter((entry) => entry.length > 0),
+                                    });
+                                    setEditingAgentId(null);
+                                  } catch (error) {
+                                    showToast(String(error), "error");
+                                  }
+                                }}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                                title={t("common.save", "Save")}
+                              >
+                                <SaveIcon className="h-3.5 w-3.5" />
+                                {t("common.save", "Save")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingAgentId(null)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:bg-accent"
+                                title={t("common.cancel", "Cancel")}
+                              >
+                                <XIcon className="h-3.5 w-3.5" />
+                                {t("common.cancel", "Cancel")}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingAgentId(agent.id);
+                                  setEditingAgentName(agent.name);
+                                  setEditingAgentRootPath(agent.rootPath);
+                                  setEditingAgentSkillsPath(agent.skillsRelativePath || "");
+                                  setEditingAgentRulesPath(agent.rulesRelativePath || "");
+                                  setEditingAgentAgentsPath(
+                                    agent.agentsRelativePath || "agents",
+                                  );
+                                  setEditingAgentCommandsPath(
+                                    agent.commandsRelativePath || "commands",
+                                  );
+                                  setEditingAgentEnabled(agent.enabled !== false);
+                                  setEditingAgentConfigPaths(
+                                    (agent.configRelativePaths || []).join(", "),
+                                  );
+                                }}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:bg-accent"
+                                title={t("common.edit", "Edit")}
+                              >
+                                <PencilIcon className="h-3.5 w-3.5" />
+                                {t("common.edit", "Edit")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPendingDeleteAgent(agent)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                title={t("common.delete", "Delete")}
+                              >
+                                <TrashIcon className="h-3.5 w-3.5" />
+                                {t("common.delete", "Delete")}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {isEditing ? (
+                        <div className="grid w-full gap-4 rounded-xl border border-border/60 bg-muted/20 p-4">
+                          <div className="grid gap-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              {t("settings.customAgentNameLabel", "Agent name")}
+                            </label>
+                            <input
+                              type="text"
+                              value={editingAgentName}
+                              onChange={(event) => setEditingAgentName(event.target.value)}
+                              className="h-10 w-full rounded-md bg-muted px-3 text-sm"
+                              placeholder={t(
+                                "settings.customAgentNamePlaceholder",
+                                "Agent name, e.g. Team Agents",
+                              )}
+                            />
+                          </div>
+
+                          <div className="grid gap-1">
+                            <label className="text-xs font-medium text-muted-foreground">
+                              {t("settings.agentRootPathLabel", "Root directory")}
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingAgentRootPath}
+                                onChange={(event) =>
+                                  setEditingAgentRootPath(event.target.value)
+                                }
+                                className="h-10 w-full flex-1 rounded-md bg-muted px-3 text-sm font-mono"
+                                placeholder={t(
+                                  "settings.customAgentRootPathPlaceholder",
+                                  "Enter agent root, e.g. ~/.agents or ~/workspace/.opencode",
+                                )}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void handlePickEditingAgentRootPath()}
+                                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-4 text-sm text-foreground transition-colors hover:bg-accent"
+                              >
+                                <FolderOpenIcon className="h-4 w-4" />
+                                {t("skill.browseFolder", "Browse")}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2">
+                            <div>
+                              <div className="text-sm font-medium text-foreground">
+                                {t("settings.platformEnabled", "Enabled")}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {t(
+                                  "settings.customAgentEnabledHint",
+                                  "Disabled custom agents stay in settings but are hidden from Skills and Rules selections.",
+                                )}
+                              </div>
+                            </div>
+                            <ToggleSwitch
+                              checked={editingAgentEnabled}
+                              onChange={setEditingAgentEnabled}
+                            />
+                          </div>
+
+                          <div className="grid gap-3">
+                            <div className="grid gap-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Skills
+                              </label>
+                              <input
+                                type="text"
+                                value={editingAgentSkillsPath}
+                                onChange={(event) =>
+                                  setEditingAgentSkillsPath(event.target.value)
+                                }
+                                placeholder={t(
+                                  "settings.customAgentSkillsPathPlaceholder",
+                                  "skills relative path (optional)",
+                                )}
+                                className="h-10 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Rules
+                              </label>
+                              <input
+                                type="text"
+                                value={editingAgentRulesPath}
+                                onChange={(event) =>
+                                  setEditingAgentRulesPath(event.target.value)
+                                }
+                                placeholder={t(
+                                  "settings.customAgentRulesPathPlaceholder",
+                                  "rules file path (optional)",
+                                )}
+                                className="h-10 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Agents
+                              </label>
+                              <input
+                                type="text"
+                                value={editingAgentAgentsPath}
+                                onChange={(event) =>
+                                  setEditingAgentAgentsPath(event.target.value)
+                                }
+                                placeholder={t(
+                                  "settings.customAgentAgentsPathPlaceholder",
+                                  "agents relative path",
+                                )}
+                                className="h-10 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Commands
+                              </label>
+                              <input
+                                type="text"
+                                value={editingAgentCommandsPath}
+                                onChange={(event) =>
+                                  setEditingAgentCommandsPath(event.target.value)
+                                }
+                                placeholder={t(
+                                  "settings.customAgentCommandsPathPlaceholder",
+                                  "commands relative path",
+                                )}
+                                className="h-10 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Config
+                              </label>
+                              <input
+                                type="text"
+                                value={editingAgentConfigPaths}
+                                onChange={(event) =>
+                                  setEditingAgentConfigPaths(event.target.value)
+                                }
+                                placeholder={t(
+                                  "settings.customAgentConfigPathsPlaceholder",
+                                  "config files, comma separated",
+                                )}
+                                className="h-10 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="grid gap-2 rounded-lg bg-muted/30 p-3 text-[11px] text-muted-foreground">
+                        <div>
+                          {t("settings.agentDerivedSkillScanPaths", "Derived skill scan paths")}
+                          :
+                          <span className="ml-1 font-mono break-all">
+                            {preview.skillScanPaths.join(", ")}
+                          </span>
+                        </div>
+                        {preview.ruleCandidates.length > 0 ? (
+                          <div>
+                            {t("settings.agentDerivedRulePaths", "Derived rule files")}
+                            :
+                            <span className="ml-1 font-mono break-all">
+                              {preview.ruleCandidates.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                        <div>
+                          {t("settings.agentDerivedAgentDirs", "Derived agent directories")}
+                          :
+                          <span className="ml-1 font-mono break-all">
+                            {preview.agentDirectories.join(", ")}
+                          </span>
+                        </div>
+                        <div>
+                          {t(
+                            "settings.agentDerivedCommandDirs",
+                            "Derived command directories",
+                          )}
+                          :
+                          <span className="ml-1 font-mono break-all">
+                            {preview.commandDirectories.join(", ")}
+                          </span>
+                        </div>
+                        {preview.configCandidates.length > 0 ? (
+                          <div>
+                            {t("settings.agentDerivedConfigPaths", "Derived config files")}
+                            :
+                            <span className="ml-1 font-mono break-all">
+                              {preview.configCandidates.join(", ")}
+                            </span>
+                          </div>
+                        ) : null}
+                        <div className="text-[10px] text-muted-foreground/80">
+                          {t(
+                            "settings.agentRootPathHint",
+                            "PromptHub treats this as an agent root and derives known local assets from it instead of scanning only one Skill folder.",
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground/60 italic">
-              {t("settings.noCustomPaths", "No custom paths added yet")}
+              {t("settings.noCustomAgents", "No custom agents added yet")}
             </p>
           )}
         </div>
       </SettingSection>
+
+      <ConfirmDialog
+        isOpen={pendingDeleteAgent !== null}
+        onClose={() => setPendingDeleteAgent(null)}
+        onConfirm={() => {
+          if (!pendingDeleteAgent) {
+            return;
+          }
+          settings.removeCustomAgent(pendingDeleteAgent.id);
+          setPendingDeleteAgent(null);
+        }}
+        variant="destructive"
+        title={t("settings.confirmDeleteCustomAgentTitle", "Delete Custom Agent")}
+        message={t("settings.confirmDeleteCustomAgentMessage", {
+          name: pendingDeleteAgent?.name ?? "",
+          defaultValue:
+            'Are you sure you want to delete custom agent "{{name}}"? This only removes it from PromptHub settings.',
+        })}
+        confirmText={t("common.delete", "Delete")}
+        cancelText={t("common.cancel", "Cancel")}
+      />
     </div>
   );
 }

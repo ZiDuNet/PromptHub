@@ -179,3 +179,40 @@
 - 不利于表达“直接管理 / 纳入库”两条不同生命周期
 
 结论：优先方案 A。
+
+## Regression Hardening
+
+项目级 Skill 第一版接通后，回归审查发现需要立刻补强三条约束，避免错误状态被 UI 放大：
+
+- 项目扫描结果与库内 Skill 的关联只能基于稳定来源，不应退化为按名称模糊关联。
+- 项目内“再次部署”必须阻止把一个 Skill 重新复制回其自身所在的目标目录树。
+- 设置迁移必须优先保全旧的 `customSkillScanPaths` / `customAgentRootPaths` 数据，不能因为新字段为空数组而提前短路。
+
+### Project Skill Identity
+
+项目扫描出的 Skill 与库内 Skill 可以共享名称，因此不能使用 `skill.name` 作为“已在我的技能中”的兜底判断。
+
+本轮修复采用：
+
+- 仅在项目扫描路径与库内 `local_repo_path` / `source_url` 明确一致时，才认为该项目 Skill 已存在于 My Skills。
+- 项目页面中的 `In My Skills`、`Open in My Skills`、`Distribute` 等动作全部依赖路径级匹配结果。
+- 如果未来需要跨路径识别“逻辑上同一个 Skill”，应新增显式关联字段，而不是继续扩大名称匹配规则。
+
+### Project Deploy Guardrails
+
+项目内 Skill 直接部署到项目目录时，目标目录默认是 `<project>/.agents/skills`。当源 Skill 本身已经位于这个根目录下时，继续部署会形成 `<target>/<skill>/<skill>` 递归嵌套。
+
+本轮修复采用双重约束：
+
+- Renderer 在展示项目部署动作时，对已经位于目标根目录中的源 Skill 禁止继续向该根目录部署。
+- Main process 的目录复制能力补充“源目录与目标目录相同”以及“目标目录位于源目录内部”的保护，避免其他入口绕过前端保护。
+
+### Settings Migration Safety
+
+`loadSettingsFromMainProcess()` 需要兼容主进程返回的新旧设置结构。由于空数组也会结束空值合并链，不能把 `.map()` 结果直接置于 `??` 前。
+
+本轮修复采用：
+
+- 先标准化 `customAgents`。
+- 若标准化后为空，再显式回退到 `customAgentRootPaths`、`customSkillScanPaths`。
+- `customSkillScanPaths` 继续作为兼容字段镜像，但不再主导配置来源。
