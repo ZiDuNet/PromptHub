@@ -302,4 +302,62 @@ describe("MainContent inline edit integration", () => {
     expect(screen.getByText("tag-a")).toBeInTheDocument();
     expect(screen.getByText("tag-b")).toBeInTheDocument();
   });
+
+  it("removes a tag directly from the selected prompt detail", async () => {
+    const promptState = createPromptState(
+      createPrompt({ tags: ["tag-a", "tag-b"] }),
+    );
+    const showToast = vi.fn();
+
+    usePromptStoreMock.mockImplementation((selector) => selector(promptState));
+    useToastMock.mockReturnValue({ showToast });
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag: tag-a" }));
+
+    await waitFor(() => {
+      expect(promptState.updatePrompt).toHaveBeenCalledWith("prompt-1", {
+        tags: ["tag-b"],
+      });
+    });
+
+    expect(showToast).toHaveBeenCalledWith("Saved successfully", "success");
+  });
+
+  it("adds a tag to the selected prompt when a sidebar tag is dropped", async () => {
+    const promptState = createPromptState(createPrompt({ tags: ["tag-a"] }));
+    const showToast = vi.fn();
+
+    usePromptStoreMock.mockImplementation((selector) => selector(promptState));
+    useToastMock.mockReturnValue({ showToast });
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    const dataTransfer = {
+      getData: vi.fn((type: string) =>
+        type === "application/x-prompthub-tag" ? "tag-b" : "",
+      ),
+      setData: vi.fn(),
+      types: ["application/x-prompthub-tag"],
+      dropEffect: "copy",
+    };
+
+    fireEvent.drop(screen.getByTestId("prompt-detail-tags-dropzone"), {
+      dataTransfer,
+    });
+
+    await waitFor(() => {
+      expect(promptState.updatePrompt).toHaveBeenCalledWith("prompt-1", {
+        tags: ["tag-a", "tag-b"],
+      });
+    });
+
+    expect(showToast).toHaveBeenCalledWith("Saved successfully", "success");
+  });
+
 });

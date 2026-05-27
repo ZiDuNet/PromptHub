@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo, type CSSProperties } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import { StarIcon, HashIcon, PlusIcon, LayoutGridIcon, SettingsIcon, XIcon, ChevronDownIcon, ChevronUpIcon, ChevronRightIcon, ImageIcon, MessageSquareTextIcon, CommandIcon, CuboidIcon, StoreIcon, GlobeIcon, Clock3Icon, FolderPlusIcon, BookOpenIcon, LinkIcon, FolderOpenIcon, Trash2Icon, RefreshCwIcon } from 'lucide-react';
 import { useFolderStore } from '../../stores/folder.store';
 import { usePromptStore } from '../../stores/prompt.store';
@@ -167,6 +168,12 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
 
     if (currentPage !== 'home') onNavigate('home');
   }, [currentPage, filterTags, onNavigate, tagFilterMode, toggleFilterTag]);
+
+  const handlePromptTagDragStart = useCallback((tag: string) => (event: ReactDragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('application/x-prompthub-tag', tag);
+    event.dataTransfer.setData('text/plain', tag);
+  }, []);
   
   // Skill store
   const skills = useSkillStore((state) => state.skills);
@@ -905,15 +912,17 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
             {!isCollapsed ? (
               !isTagsCollapsed && (
                 <div className="flex-1 overflow-y-auto px-6 pb-4 scrollbar-hide animate-in fade-in slide-in-from-bottom-2 duration-smooth">
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {(showAllTags ? uniqueTags : uniqueTags.slice(0, 8)).map((tag, index) => (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          handlePromptTagClick(tag);
-                        }}
-                        style={{ animationDelay: `${index * 30}ms`, animationFillMode: 'both' }}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-base animate-in fade-in slide-in-from-left-1 ${filterTags.includes(tag) && currentPage === 'home'
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {(showAllTags ? uniqueTags : uniqueTags.slice(0, 8)).map((tag, index) => (
+                        <button
+                          key={tag}
+                          draggable
+                          onDragStart={handlePromptTagDragStart(tag)}
+                          onClick={() => {
+                            handlePromptTagClick(tag);
+                          }}
+                          style={{ animationDelay: `${index * 30}ms`, animationFillMode: 'both' }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors duration-base animate-in fade-in slide-in-from-left-1 ${filterTags.includes(tag) && currentPage === 'home'
                           ? 'bg-primary text-white'
                           : 'bg-sidebar-accent text-sidebar-foreground/70 hover:bg-primary hover:text-white'
                           }`}

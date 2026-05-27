@@ -615,4 +615,24 @@ describe("Sidebar", () => {
     expect(usePromptStore.getState().filterTags).toEqual(["alpha", "beta"]);
     expect(screen.getByRole("button", { name: /gamma/i })).toBeInTheDocument();
   });
+
+  it("renders prompt tags as draggable chips", async () => {
+    useUIStore.setState({
+      appModule: "prompt",
+      viewMode: "prompt",
+      isSidebarCollapsed: false,
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    expect(screen.getByRole("button", { name: /alpha/i })).toHaveAttribute(
+      "draggable",
+      "true",
+    );
+  });
 });

@@ -103,6 +103,8 @@ describe("MainContent selection restore integration", () => {
       selector({
         renderMarkdown: true,
         setRenderMarkdown: vi.fn(),
+        promptTagCatalog: [],
+        addPromptTagCatalogEntry: vi.fn(),
         aiProvider: "openai",
         aiApiProtocol: "openai",
         aiApiKey: "",

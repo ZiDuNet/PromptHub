@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, Children, isValidElement, cloneElement, memo, lazy, Suspense, type CSSProperties } from 'react';
+import type { DragEvent as ReactDragEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { usePromptStore, ViewMode } from '../../stores/prompt.store';
@@ -387,6 +388,7 @@ function PromptSkillMainContent() {
   const setRenderMarkdownPref = useSettingsStore((state) => state.setRenderMarkdown);
   const [renderMarkdownEnabled, setRenderMarkdownEnabled] = useState(renderMarkdownPref);
   const [showEnglish, setShowEnglish] = useState(false);
+  const [isTagDropActive, setIsTagDropActive] = useState(false);
   const promptTypeFilter = usePromptStore((state) => state.promptTypeFilter);
   const setPromptTypeFilter = usePromptStore((state) => state.setPromptTypeFilter);
   const tagFilterMode = useSettingsStore((state) => state.tagFilterMode);
@@ -1612,6 +1614,77 @@ function PromptSkillMainContent() {
     toggleFilterTag(tag);
   }, [filterTags, tagFilterMode, toggleFilterTag]);
 
+  const handleDetailAddTag = useCallback(
+    async (rawTag: string) => {
+      const normalizedTag = rawTag.trim();
+      if (!selectedPrompt || !normalizedTag || selectedPrompt.tags.includes(normalizedTag)) {
+        return;
+      }
+
+      try {
+        await updatePrompt(selectedPrompt.id, {
+          tags: [...selectedPrompt.tags, normalizedTag],
+        });
+        showToast(t('toast.saved'), 'success');
+      } catch (error) {
+        console.error('Failed to add prompt tag from detail view:', error);
+        showToast(t('toast.updateFailed'), 'error');
+      }
+    },
+    [selectedPrompt, showToast, t, updatePrompt],
+  );
+
+  const handleDetailRemoveTag = useCallback(
+    async (tagToRemove: string) => {
+      if (!selectedPrompt) {
+        return;
+      }
+
+      try {
+        await updatePrompt(selectedPrompt.id, {
+          tags: selectedPrompt.tags.filter((tag) => tag !== tagToRemove),
+        });
+        showToast(t('toast.saved'), 'success');
+      } catch (error) {
+        console.error('Failed to remove prompt tag from detail view:', error);
+        showToast(t('toast.updateFailed'), 'error');
+      }
+    },
+    [selectedPrompt, showToast, t, updatePrompt],
+  );
+
+  const handleDetailTagDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setIsTagDropActive(false);
+
+      const droppedTag = event.dataTransfer.getData('application/x-prompthub-tag');
+      if (!droppedTag) {
+        return;
+      }
+
+      void handleDetailAddTag(droppedTag);
+    },
+    [handleDetailAddTag],
+  );
+
+  const handleDetailTagDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('application/x-prompthub-tag')) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    setIsTagDropActive(true);
+  }, []);
+
+  const handleDetailTagDragLeave = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    setIsTagDropActive(false);
+  }, []);
+
   // Memoize context menu items to avoid re-creating the array on every render
   // 使用 useMemo 缓存右键菜单项，避免每次渲染都重新创建数组
   const menuItems: ContextMenuItem[] = useMemo(() => {
@@ -1706,6 +1779,10 @@ function PromptSkillMainContent() {
     // 同时更新缓存以便立即显示
     setAiResponseCache((prev) => ({ ...prev, [promptId]: response }));
   };
+
+  useEffect(() => {
+    setIsTagDropActive(false);
+  }, [selectedId]);
 
   // Batch operations
   // 批量操作函数
@@ -2026,39 +2103,80 @@ function PromptSkillMainContent() {
                   )}
 
                   {/* Prompt Type Badge / 类型标识 */}
-                  <div className="flex flex-wrap gap-1.5 mb-4">
-                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${
-                      (selectedPrompt.promptType || 'text') === 'image'
-                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                        : 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
-                    }`}>
-                      {(selectedPrompt.promptType || 'text') === 'image' 
-                        ? <ImageIcon className="w-3 h-3" />
-                        : <MessageSquareTextIcon className="w-3 h-3" />
-                      }
-                      {(selectedPrompt.promptType || 'text') === 'image' 
-                        ? t('prompt.typeImage', '绘图')
-                        : t('prompt.typeText', '文本')
-                      }
-                    </span>
-                    
-                    {/* Tags */}
-                    {/* 标签 */}
-                    {selectedPrompt.tags.map((tag) => (
-                      <button
-                        type="button"
-                        key={tag}
-                        onClick={() => handleTagFilterClick(tag)}
-                        title={t('prompt.filterByTag', 'Filter by tag')}
-                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filterTags.includes(tag)
-                          ? 'bg-primary text-white'
-                          : 'bg-accent text-accent-foreground hover:bg-primary hover:text-white'
-                        }`}
-                      >
-                        <HashIcon className="w-3 h-3" />
-                        {tag}
-                      </button>
-                    ))}
+                  <div className="mb-4 space-y-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-sm ${
+                        (selectedPrompt.promptType || 'text') === 'image'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                          : 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                      }`}>
+                        {(selectedPrompt.promptType || 'text') === 'image'
+                          ? <ImageIcon className="h-3 w-3" />
+                          : <MessageSquareTextIcon className="h-3 w-3" />
+                        }
+                        {(selectedPrompt.promptType || 'text') === 'image'
+                          ? t('prompt.typeImage', '绘图')
+                          : t('prompt.typeText', '文本')
+                        }
+                      </span>
+                    </div>
+
+                    <div
+                      data-testid="prompt-detail-tags-dropzone"
+                      onDragOver={handleDetailTagDragOver}
+                      onDrop={handleDetailTagDrop}
+                      onDragLeave={handleDetailTagDragLeave}
+                      className={`flex min-h-[2rem] flex-wrap items-center gap-1.5 rounded-xl transition-colors ${isTagDropActive
+                        ? 'bg-primary/6 ring-2 ring-primary/20 ring-inset'
+                        : ''
+                      }`}
+                    >
+                      {selectedPrompt.tags.map((tag) => {
+                        const isTagFiltered = filterTags.includes(tag);
+
+                        return (
+                          <span
+                            key={tag}
+                            className={`inline-flex max-w-full items-center rounded-full text-xs font-medium transition-colors ${isTagFiltered
+                              ? 'bg-primary text-white'
+                              : 'bg-accent text-accent-foreground'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleTagFilterClick(tag)}
+                              title={t('prompt.filterByTag', 'Filter by tag')}
+                              className={`inline-flex min-w-0 items-center gap-1 rounded-l-full px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${isTagFiltered
+                                ? 'hover:bg-primary/90'
+                                : 'hover:bg-primary hover:text-white'
+                              }`}
+                            >
+                              <HashIcon className="h-3 w-3 shrink-0" />
+                              <span className="max-w-[11rem] truncate">{tag}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDetailRemoveTag(tag)}
+                              title={t('prompt.removeTag', 'Remove tag')}
+                              aria-label={`${t('prompt.removeTag', 'Remove tag')}: ${tag}`}
+                              className={`inline-flex items-center justify-center rounded-r-full py-1.5 pl-1 pr-2 transition-colors focus-visible:outline-none focus-visible:ring-2 ${isTagFiltered
+                                ? 'text-white/85 hover:bg-primary/90 hover:text-white focus-visible:ring-primary-foreground/30'
+                                : 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/30'
+                              }`}
+                            >
+                              <XIcon className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+
+                      {selectedPrompt.tags.length === 0 && (
+                        <div className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1.5 text-xs text-muted-foreground">
+                          <HashIcon className="h-3 w-3" />
+                          <span>{t('prompt.selectExistingTags', 'Select existing tags')}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Source / 来源 */}
