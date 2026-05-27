@@ -3,9 +3,9 @@
 ## Source
 
 - Repository: `legeling/PromptHub`
-- Snapshot date: `2026-05-12`
+- Snapshot date: `2026-05-27`
 - Capture method: `gh issue list --state closed --limit 200 --json ...`
-- Closed issues captured: `90`
+- Closed issues captured: `106`
 
 ## Notes
 
@@ -16,9 +16,23 @@
 
 | # | 标题 | 标签 | 创建时间 | 关闭时间 | 链接 |
 |---|---|---|---|---|---|
+| #142 | [Feature]: 复制功能只复制了SKILL.md，缺失了其他文件 | enhancement, version: 0.5.6 | 2026-05-21 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/142 |
+| #140 | [Feature]: 加入“移动到...”菜单项，点击列出当前所有文件夹，方便提示词整理 | enhancement, version: 0.5.6 | 2026-05-19 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/140 |
+| #137 | [Feature]: 建议增加创建副本功能 | enhancement, version: 0.5.6 | 2026-05-19 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/137 |
+| #136 | [Feature]: 建议标签加入增删改管理功能 | enhancement, version: 0.5.6 | 2026-05-19 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/136 |
+| #135 | [Feature]:建议增加快捷恢复备份 | enhancement, version: 0.5.5 | 2026-05-16 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/135 |
+| #134 | [Feature]: 支持重命名自定义添加的 Skill 商店 | enhancement, version: 0.5.5 | 2026-05-13 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/134 |
+| #133 | [Feature]: 在 Skill 视图面板中直接展示每个技能的标签信息 | enhancement, version: 0.5.5 | 2026-05-13 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/133 |
+| #131 | [Bug]: 安装 Skill 导致 skill.md 头部 YAML 前置注释重复叠加 | bug, version: 0.5.5 | 2026-05-13 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/131 |
+| #129 | [Bug]: 本地文件夹 Skill 的更新报错问题、重导入本地 skill源不读取最新 skill问题 | bug, version: 0.5.5 | 2026-05-12 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/129 |
+| #127 | 界面很漂亮，我撸了款Skill完整的创作平台工具SkillNexus，欢迎legeling指点 | enhancement, version: 0.5.5 | 2026-05-10 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/127 |
+| #120 | [Feature]: 希望增加个文件夹直接拖进来自动识别skill功能, | enhancement | 2026-05-09 | 2026-05-26 | https://github.com/legeling/PromptHub/issues/120 |
+| #119 | [Feature]:几个易用性小需求，请 git主考虑 | enhancement, version: 0.5.5 | 2026-05-08 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/119 |
 | #118 | [Bug]: 检测更新重复刷新 无法点击下载 | bug, version: 版本 0.5.5-beta.1 | 2026-05-08 | 2026-05-10 | https://github.com/legeling/PromptHub/issues/118 |
 | #117 | [Bug]: 检查更新弹窗界面闪烁 | bug, version: 0.5.4 | 2026-05-07 | 2026-05-10 | https://github.com/legeling/PromptHub/issues/117 |
+| #116 | [Feature]: 测试功能增加提交附件文件，支持测试多模态模型 | enhancement, version: 0.5.5 | 2026-05-07 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/116 |
 | #115 | [Bug]: 启动时最小化未生效 | bug | 2026-05-04 | 2026-05-10 | https://github.com/legeling/PromptHub/issues/115 |
+| #113 | [Feature]: 建议把卡片视图的标题、用户提示词显示框设置为可编辑，这样就太方便了 | enhancement | 2026-05-02 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/113 |
 | #112 | [Bug]: web版compose up -d build后，添加AI模型提示失败 | bug | 2026-04-29 | 2026-04-29 | https://github.com/legeling/PromptHub/issues/112 |
 | #111 | [Feature]: 啥时候集成 hermes agent | enhancement | 2026-04-29 | 2026-05-07 | https://github.com/legeling/PromptHub/issues/111 |
 | #109 | [Bug]: 无法更新到最新的版本 | bug | 2026-04-28 | 2026-04-28 | https://github.com/legeling/PromptHub/issues/109 |
@@ -39,6 +53,7 @@
 | #83 | skill描述手动更新后，我的skill预览页并没有更新 |  | 2026-04-04 | 2026-04-09 | https://github.com/legeling/PromptHub/issues/83 |
 | #82 | skill描述手动更新后，我的skill预览页并没有更新 |  | 2026-04-04 | 2026-04-08 | https://github.com/legeling/PromptHub/issues/82 |
 | #81 | Feature Request: Support WSL2 as a separate distribution target alongside Windows |  | 2026-04-04 | 2026-04-26 | https://github.com/legeling/PromptHub/issues/81 |
+| #80 | skill添加商店只能支持github前缀吗？能支持本地的git仓库地址吗 |  | 2026-04-03 | 2026-05-13 | https://github.com/legeling/PromptHub/issues/80 |
 | #78 | 启动软件时报错 |  | 2026-04-02 | 2026-04-08 | https://github.com/legeling/PromptHub/issues/78 |
 | #77 | 无法导入备份资料 |  | 2026-04-01 | 2026-04-16 | https://github.com/legeling/PromptHub/issues/77 |
 | #75 | 建议标题支持双击编辑修改功能 |  | 2026-03-30 | 2026-05-07 | https://github.com/legeling/PromptHub/issues/75 |
@@ -62,6 +77,7 @@
 | #54 | PromptHub 0.4.0 windows 11 启动报错 |  | 2026-02-13 | 2026-02-14 | https://github.com/legeling/PromptHub/issues/54 |
 | #53 | PromptHub 0.3.9 win11启动报错 |  | 2026-02-10 | 2026-02-13 | https://github.com/legeling/PromptHub/issues/53 |
 | #52 | 0.3.9安装报错，尝试了arm64和x64架构，均报错 |  | 2026-02-06 | 2026-02-07 | https://github.com/legeling/PromptHub/issues/52 |
+| #51 | 标签-修改 |  | 2026-02-05 | 2026-05-16 | https://github.com/legeling/PromptHub/issues/51 |
 | #50 | prompt编辑框：加入列表 |  | 2026-01-31 | 2026-02-13 | https://github.com/legeling/PromptHub/issues/50 |
 | #49 | 关于“双语对照”的逻辑bug：英文版prompt转换后还是英文版 |  | 2026-01-30 | 2026-02-13 | https://github.com/legeling/PromptHub/issues/49 |
 | #46 | Mac安装应用打不开 |  | 2026-01-20 | 2026-01-29 | https://github.com/legeling/PromptHub/issues/46 |

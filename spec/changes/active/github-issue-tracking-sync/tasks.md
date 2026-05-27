@@ -6,5 +6,5 @@
 - [x] 新增 `spec/issues/README.md` 作为 issue 跟踪导航入口。
 - [x] 记录当前 open issues 到 `spec/issues/active/`。
 - [x] 记录当前 closed issues 到 `spec/issues/archive/`。
-- [x] 同步更新 `spec/README.md` 与 `spec/domains/system/spec.md`。
+- [x] 同步更新 `spec/README.md` 与 `spec/knowledge/context/system.md`。
 - [x] 更新 implementation.md，记录本次同步方式与快照时间。

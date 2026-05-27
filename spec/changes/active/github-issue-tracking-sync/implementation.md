@@ -6,7 +6,8 @@
 - 新增 `spec/issues/active/github-open.md`，记录当前 `legeling/PromptHub` 仓库的 open GitHub issues 快照。
 - 新增 `spec/issues/archive/github-closed.md`，记录当前 `legeling/PromptHub` 仓库的 closed GitHub issues 快照。
 - 更新 `spec/README.md`，把 `spec/issues/archive/` 和 `spec/issues/README.md` 纳入目录地图与职责说明。
-- 更新 `spec/domains/system/spec.md`，把 `spec/issues/archive/` 纳入稳定结构约束，并补充贡献者查看 issue 上下文的场景。
+- 更新 `spec/knowledge/context/system.md`，把 `spec/issues/archive/` 纳入稳定结构约束，并补充贡献者查看 issue 上下文的场景。
+- 已在 `2026-05-27` 刷新 GitHub issue 快照：open issues 从 `34` 变为 `30`，closed issues 从 `90` 变为 `106`。
 
 ## Verification
 
@@ -20,7 +21,7 @@
 - `spec/issues/active/github-open.md`
 - `spec/issues/archive/github-closed.md`
 - `spec/README.md`
-- `spec/domains/system/spec.md`
+- `spec/knowledge/context/system.md`
 
 ## Follow-ups
 

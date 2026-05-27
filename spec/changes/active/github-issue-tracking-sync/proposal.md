@@ -16,7 +16,7 @@
 - 为 `spec/issues/` 增加 `archive/` 层。
 - 记录当前仓库的 open issues 快照到 `spec/issues/active/`。
 - 记录当前仓库的 closed issues 快照到 `spec/issues/archive/`。
-- 同步更新 `spec/README.md` 与 `spec/domains/system/spec.md` 的稳定结构说明。
+- 同步更新 `spec/README.md` 与 `spec/knowledge/context/system.md` 的稳定结构说明。
 
 - Out of scope:
 - 自动化定时同步 GitHub issues。
