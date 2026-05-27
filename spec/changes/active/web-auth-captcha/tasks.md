@@ -5,3 +5,4 @@
 - [x] 更新认证与页面测试
 - [x] 运行 lint / typecheck / build:web / 相关测试
 - [x] 更新 implementation.md
+- [x] 修复 Docker / SSR bundle 下 `svg-captcha` 字体资源丢失导致的启动失败

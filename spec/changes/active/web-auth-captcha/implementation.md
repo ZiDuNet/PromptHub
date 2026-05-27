@@ -9,6 +9,8 @@
 - 更新 `apps/web/src/client/index.css` 与 7 个 locale 文件，使图形验证码样式、alt 文案与交互提示完整对齐。
 - 更新测试辅助 `apps/web/src/test-helpers/auth-captcha.ts`，通过动态导入 `getCaptchaAnswerForTesting(...)` 获取答案，避免 `vi.resetModules()` 后读取旧 challenge。
 - 补齐 `apps/web/src/routes/import-export.test.ts` 的导出 payload 类型字段，消除与 `images` / `videos` 字段不一致导致的 `typecheck` 误报。
+- 修复 `docker compose up -d --build` 下的 Web 启动失败：`apps/web/vite.server.config.ts` 现在将 `svg-captcha` 视为 SSR external dependency，避免 Vite 将其打进 server bundle 后破坏 `../fonts/Comismsh.ttf` 的相对路径读取。
+- 更新 `apps/web/src/build.test.ts`，把 `svg-captcha` 纳入 SSR external regression guard，防止后续再次被打包进 server bundle。
 
 ## Verification
 
@@ -20,7 +22,11 @@
   - 结果：通过
 - `pnpm --filter @prompthub/web exec vitest run src/routes/auth.test.ts`
   - 结果：通过（16/16）
+- `pnpm --filter @prompthub/web exec vitest run src/build.test.ts`
+  - 结果：通过（1/1）
 - `pnpm --filter @prompthub/web build`
+  - 结果：通过
+- `pnpm --filter @prompthub/web lint`
   - 结果：通过
 
 ## Notes
