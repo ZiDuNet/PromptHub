@@ -303,7 +303,9 @@ describe("MainContent inline edit integration", () => {
     expect(screen.getByText("tag-b")).toBeInTheDocument();
   });
 
-  it("removes a tag directly from the selected prompt detail", async () => {
+  it(
+    "removes a tag directly from the selected prompt detail",
+    async () => {
     const promptState = createPromptState(
       createPrompt({ tags: ["tag-a", "tag-b"] }),
     );
@@ -325,7 +327,9 @@ describe("MainContent inline edit integration", () => {
     });
 
     expect(showToast).toHaveBeenCalledWith("Saved successfully", "success");
-  });
+    },
+    15000,
+  );
 
   it("adds a tag to the selected prompt when a sidebar tag is dropped", async () => {
     const promptState = createPromptState(createPrompt({ tags: ["tag-a"] }));

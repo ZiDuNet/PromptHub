@@ -477,6 +477,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
             BUILTIN_SKILL_REGISTRY,
           )
         : await loadGitHubSkillRepo(githubUrl.trim(), {
+            branch: undefined,
+            directory: undefined,
             fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
             registrySkills: BUILTIN_SKILL_REGISTRY,
             rateLimitMessage: t(

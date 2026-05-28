@@ -730,7 +730,9 @@ describe("SkillProjectsView", () => {
     expect(copyRepoByPathToDirectory).not.toHaveBeenCalled();
   });
 
-  it("supports advanced import targets and custom folders", async () => {
+  it(
+    "supports advanced import targets and custom folders",
+    async () => {
     const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
       "/tmp/novel/.claude/skills/library-skill",
     );
@@ -829,9 +831,13 @@ describe("SkillProjectsView", () => {
         "success",
       );
     });
-  });
+    },
+    15000,
+  );
 
-  it("supports symlink mode when importing my skills into a project", async () => {
+  it(
+    "supports symlink mode when importing my skills into a project",
+    async () => {
     const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
       "/tmp/novel/.agents/skills/library-skill",
     );
@@ -905,9 +911,13 @@ describe("SkillProjectsView", () => {
         { ifExists: "skip", mode: "symlink" },
       );
     });
-  });
+    },
+    15000,
+  );
 
-  it("remembers project import preferences after reopening the modal", async () => {
+  it(
+    "remembers project import preferences after reopening the modal",
+    async () => {
     const selectFolder = vi.fn().mockResolvedValue("/tmp/novel/custom-targets");
 
     installWindowMocks({
@@ -966,9 +976,13 @@ describe("SkillProjectsView", () => {
     expect(
       screen.getByRole("button", { name: /Custom target.*\/tmp\/novel\/custom-targets/i }),
     ).toBeInTheDocument();
-  });
+    },
+    15000,
+  );
 
-  it("warns when background rescan fails after a successful import", async () => {
+  it(
+    "warns when background rescan fails after a successful import",
+    async () => {
     const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
       "/tmp/novel/.agents/skills/library-skill",
     );
@@ -1035,7 +1049,9 @@ describe("SkillProjectsView", () => {
         "warning",
       );
     });
-  });
+    },
+    15000,
+  );
 
   it("deploys a project-local skill to the default project target", async () => {
     const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(

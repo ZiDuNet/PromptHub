@@ -44,6 +44,7 @@ describe("SkillStore custom sources", () => {
       api: {
         skill: {
           fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          listRemoteBranches: vi.fn().mockResolvedValue(["main", "release"]),
           scanLocalPreview: vi.fn().mockResolvedValue([]),
           scanSafety: vi.fn().mockResolvedValue({
             level: "safe",
@@ -64,8 +65,10 @@ describe("SkillStore custom sources", () => {
         {
           id: "custom-docs",
           name: "Docs Store",
-          type: "marketplace-json",
-          url: "https://example.com/store.json",
+          type: "git-repo",
+          url: "https://github.com/example/store",
+          branch: "main",
+          directory: "skills/docs",
           enabled: true,
           order: 0,
           createdAt: Date.now(),
@@ -82,6 +85,9 @@ describe("SkillStore custom sources", () => {
 
     const input = screen.getByDisplayValue("Docs Store");
     fireEvent.change(input, { target: { value: "Docs Store Renamed" } });
+    fireEvent.change(screen.getByDisplayValue("main"), {
+      target: { value: "release" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
@@ -90,7 +96,197 @@ describe("SkillStore custom sources", () => {
       );
     });
 
+    expect(useSkillStore.getState().customStoreSources[0]?.branch).toBe(
+      "release",
+    );
     expect(screen.getAllByText("Docs Store Renamed").length).toBeGreaterThan(0);
+  });
+
+  it("normalizes GitHub tree URLs before requesting remote branches", async () => {
+    const listRemoteBranches = vi.fn().mockResolvedValue(["main", "release"]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          listRemoteBranches,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({ selectedStoreSourceId: "new-custom" } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Git Repository/i }));
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Store URL / manifest URL"),
+      {
+        target: {
+          value: "https://github.com/anthropics/skills/tree/main/skills/.curated",
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(listRemoteBranches).toHaveBeenCalledWith(
+        "https://github.com/anthropics/skills",
+      );
+    });
+  });
+
+  it("keeps main visible in branch suggestions when many branches exist", async () => {
+    const listRemoteBranches = vi.fn().mockResolvedValue([
+      "andibrae/create-top-level-namespace",
+      "klazuka/add-3p-notices",
+      "klazuka/add-cc-instructions",
+      "klazuka/add-cc-marketplace",
+      "klazuka/doc-skills",
+      "klazuka/export",
+      "klazuka/export-20260203",
+      "klazuka/frontend-design-skill",
+      "klazuka/pptx-cleanup",
+      "klazuka/spec",
+      "mahesh/add-to-readme",
+      "mahesh/clarify-claude-code-install",
+      "main",
+      "mattpic-ant/blog-small-fix",
+    ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          listRemoteBranches,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({ selectedStoreSourceId: "new-custom" } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Git Repository/i }));
+    fireEvent.change(screen.getByPlaceholderText("Store URL / manifest URL"), {
+      target: { value: "https://github.com/anthropics/skills/tree/main" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "main" })).toBeInTheDocument();
+    });
+  });
+
+  it("hides the selected branch from the suggestion list", async () => {
+    const listRemoteBranches = vi.fn().mockResolvedValue(["main", "release"]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          listRemoteBranches,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({ selectedStoreSourceId: "new-custom" } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Git Repository/i }));
+    fireEvent.change(screen.getByPlaceholderText("Store URL / manifest URL"), {
+      target: { value: "https://github.com/anthropics/skills" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Suggested branches")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "main" }));
+
+    expect(screen.getByDisplayValue("main")).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: "main" })).toHaveLength(0);
+  });
+
+  it("renders localized branch helper copy", async () => {
+    const listRemoteBranches = vi.fn().mockResolvedValue(["main", "release"]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          listRemoteBranches,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({ selectedStoreSourceId: "new-custom" } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "zh" });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Git 仓库/i }));
+    fireEvent.change(screen.getByPlaceholderText("商店地址 / manifest URL"), {
+      target: { value: "https://github.com/anthropics/skills" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("可选分支")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByPlaceholderText("分支（可选，留空则使用默认分支）"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("目录（可选，例如 skills/.curated）"),
+    ).toBeInTheDocument();
   });
 
   it("does not render duplicate custom store action cards in the main pane", async () => {

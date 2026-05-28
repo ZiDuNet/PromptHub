@@ -1,5 +1,26 @@
 ## [Unreleased]
 
+## [0.5.7-beta.2] - 2026-05-28
+
+### 新功能 / Features
+
+- 🌿 **Git 商店源支持 branch / directory**：自定义 Skill 商店源现在可以为 Git 仓库显式配置分支和子目录，支持 GitHub、SSH 仓库和远程分支建议列表
+  - **Git Store Sources Now Support Branch / Directory**: Custom Skill store sources can now target a specific Git branch and subdirectory, with support for GitHub, SSH repositories, and remote branch suggestions
+- 🧩 **Kilo Code 内置平台接入**：Agent 管理和 Skill 一键安装现在内置支持 `Kilo Code`，并移除 `Roo Code`
+  - **Built-in Kilo Code Platform Support**: Agent management and one-click Skill installation now include built-in `Kilo Code` support, replacing `Roo Code`
+
+### 问题修复 / Fixes
+
+- 📁 **项目 Skill 导入流程收口**：`从我的技能导入到项目` 现在支持 `copy / symlink` 高级导入模式，并按项目记住目标目录和导入偏好；`导入到我的技能` 保持单按钮复制导入
+  - **Project Skill Import Flow Refined**: `Import from My Skills` into a project now supports advanced `copy / symlink` modes and remembers per-project targets and import preferences, while `Import to My Skills` remains a single copy action
+- 🌍 **项目导入相关多语言补齐**：补全导入模式、目标目录与高级设置相关文案，修复项目页弹窗回退英文的问题
+  - **Project Import Localization Completed**: Added missing localization for import mode, target folders, and advanced import settings, fixing English fallback in the project import dialog
+
+### 优化 / Improvements
+
+- 🔗 **Git 仓库导入兼容性增强**：Git Skill 仓库导入与自定义源现在统一支持 GitHub、Gitea、自部署 Git，以及 HTTPS / SSH 仓库地址
+  - **Broader Git Repository Compatibility**: Git Skill repo import and custom sources now consistently support GitHub, Gitea, self-hosted Git servers, and both HTTPS / SSH repository URLs
+
 ## [0.5.7-beta.1] - 2026-05-26
 
 ### 新功能 / Features

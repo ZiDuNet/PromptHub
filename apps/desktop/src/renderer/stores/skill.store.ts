@@ -28,6 +28,7 @@ import {
 } from "../services/skill-filter";
 import { normalizeSkill, normalizeSkills } from "../services/skill-normalize";
 import {
+  normalizeGitStoreSourceInput,
   validateStoreSourceInput,
   isLikelyLocalSource,
   normalizeLocalSkillDirectoryPath,
@@ -509,6 +510,7 @@ interface SkillState {
   importScannedSkills: (
     skills: ScannedSkill[],
     userTagsByPath?: Record<string, string[]>,
+    importMode?: "copy" | "symlink",
   ) => Promise<ScannedImportResult>;
   scanInstalledSkillSafety: (
     skillIds?: string[],
@@ -575,6 +577,7 @@ interface SkillState {
     name: string,
     url: string,
     type?: CustomStoreSourceType,
+    options?: { branch?: string; directory?: string },
   ) => void;
   removeCustomStoreSource: (id: string) => void;
   toggleCustomStoreSource: (id: string) => void;
@@ -1399,8 +1402,21 @@ export const useSkillStore = create<SkillState>()(
         });
       },
 
-      addCustomStoreSource: (name, url, type = "marketplace-json") => {
+      addCustomStoreSource: (
+        name,
+        url,
+        type = "marketplace-json",
+        options,
+      ) => {
         const trimmedName = name.trim();
+        const normalizedGitSource =
+          type === "git-repo"
+            ? normalizeGitStoreSourceInput(
+                url.trim(),
+                options?.branch,
+                options?.directory,
+              )
+            : null;
         const trimmedUrl = validateStoreSourceInput(url.trim(), type);
         if (!trimmedName || !trimmedUrl) return;
 
@@ -1411,7 +1427,9 @@ export const useSkillStore = create<SkillState>()(
               id: newId,
               name: trimmedName,
               type,
-              url: trimmedUrl,
+              url: normalizedGitSource?.url ?? trimmedUrl,
+              branch: normalizedGitSource?.branch,
+              directory: normalizedGitSource?.directory,
               enabled: true,
               order: state.customStoreSources.length,
               createdAt: Date.now(),

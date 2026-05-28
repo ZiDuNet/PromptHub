@@ -1,11 +1,20 @@
 import type { SkillStoreSource } from "@prompthub/shared/types";
 
-import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import {
+  parseGitHubTreeLocation,
+  parseGitRepo,
+} from "@prompthub/shared/utils/git-repo";
 
 export type CustomStoreSourceType = Extract<
   SkillStoreSource["type"],
   "marketplace-json" | "git-repo" | "local-dir"
 >;
+
+export interface NormalizedStoreSourceInput {
+  url: string;
+  branch?: string;
+  directory?: string;
+}
 
 function normalizeWindowsPath(path: string) {
   if (/^\/[A-Za-z]:[\\/]/.test(path)) {
@@ -60,6 +69,47 @@ export function isSupportedGitRepoSource(input: string): boolean {
   return parseGitRepo(value) !== null;
 }
 
+function normalizeOptionalBranch(input?: string): string | undefined {
+  const trimmed = input?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeOptionalDirectory(input?: string): string | undefined {
+  const trimmed = input?.trim().replace(/^\/+|\/+$/g, "");
+  return trimmed ? trimmed : undefined;
+}
+
+export function normalizeGitStoreSourceInput(
+  input: string,
+  branch?: string,
+  directory?: string,
+): NormalizedStoreSourceInput {
+  const trimmed = input.trim();
+  if (!isSupportedGitRepoSource(trimmed)) {
+    throw new Error("INVALID_GIT_REPO_SOURCE");
+  }
+
+  if (isLikelyLocalSource(trimmed)) {
+    return {
+      url: normalizeLocalSourcePath(trimmed),
+      branch: normalizeOptionalBranch(branch),
+      directory: normalizeOptionalDirectory(directory),
+    };
+  }
+
+  const parsedRepo = parseGitRepo(trimmed);
+  if (!parsedRepo) {
+    throw new Error("INVALID_GIT_REPO_SOURCE");
+  }
+
+  const treeLocation = parseGitHubTreeLocation(trimmed);
+  return {
+    url: parsedRepo.repositoryUrl,
+    branch: normalizeOptionalBranch(branch) ?? treeLocation?.branch,
+    directory: normalizeOptionalDirectory(directory) ?? treeLocation?.directory,
+  };
+}
+
 export function validateStoreSourceInput(
   input: string,
   type: CustomStoreSourceType,
@@ -74,14 +124,7 @@ export function validateStoreSourceInput(
   }
 
   if (type === "git-repo") {
-    if (!isSupportedGitRepoSource(trimmed)) {
-      throw new Error("INVALID_GIT_REPO_SOURCE");
-    }
-    if (isLikelyLocalSource(trimmed)) {
-      return normalizeLocalSourcePath(trimmed);
-    }
-
-    return trimmed;
+    return normalizeGitStoreSourceInput(trimmed).url;
   }
 
   let parsedUrl: URL;

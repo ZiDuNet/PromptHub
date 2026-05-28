@@ -205,6 +205,8 @@ export interface SkillStoreSource {
     | "git-repo"
     | "local-dir";
   url: string;
+  branch?: string;
+  directory?: string;
   enabled: boolean;
   order?: number;
   createdAt: number;

@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DatabaseIcon, FolderIcon, GlobeIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import type { SkillStoreSource } from "@prompthub/shared/types";
+import {
+  isLikelyLocalSource,
+  normalizeGitStoreSourceInput,
+} from "../../services/skill-store-source";
+import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 
 type EditableSourceType = Extract<
   SkillStoreSource["type"],
@@ -20,6 +25,40 @@ const TYPE_OPTIONS: Array<{
   { value: "local-dir", icon: <FolderIcon className="w-4 h-4" /> },
 ];
 
+function prioritizeBranchSuggestions(branches: string[], currentBranch: string): string[] {
+  const current = currentBranch.trim().toLowerCase();
+  const priority = new Map<string, number>();
+
+  if (current) {
+    priority.set(current, 0);
+  }
+  if (!priority.has("main")) {
+    priority.set("main", 1);
+  }
+  if (!priority.has("master")) {
+    priority.set("master", 2);
+  }
+
+  return [...branches].sort((left, right) => {
+    const leftPriority = priority.get(left.toLowerCase()) ?? Number.POSITIVE_INFINITY;
+    const rightPriority = priority.get(right.toLowerCase()) ?? Number.POSITIVE_INFINITY;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return left.localeCompare(right);
+  });
+}
+
+function buildBranchSuggestions(branches: string[], currentBranch: string): string[] {
+  const current = currentBranch.trim().toLowerCase();
+
+  return prioritizeBranchSuggestions(branches, currentBranch).filter(
+    (item) => item.toLowerCase() !== current,
+  );
+}
+
 interface SkillStoreSourceEditModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -29,6 +68,8 @@ interface SkillStoreSourceEditModalProps {
     name: string;
     type: EditableSourceType;
     url: string;
+    branch?: string;
+    directory?: string;
   }) => void;
   onToggleEnabled: (sourceId: string) => void;
   onRefresh: (sourceId: string) => void;
@@ -50,6 +91,11 @@ export function SkillStoreSourceEditModal({
   const [name, setName] = useState("");
   const [type, setType] = useState<EditableSourceType>("marketplace-json");
   const [url, setUrl] = useState("");
+  const [branch, setBranch] = useState("");
+  const [directory, setDirectory] = useState("");
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !source) {
@@ -59,7 +105,70 @@ export function SkillStoreSourceEditModal({
     setName(source.name);
     setType(source.type as EditableSourceType);
     setUrl(source.url);
+    setBranch(source.branch ?? "");
+    setDirectory(source.directory ?? "");
   }, [isOpen, source]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    const loadBranches = async () => {
+      if (!isOpen || type !== "git-repo") {
+        setRemoteBranches([]);
+        setBranchError(null);
+        return;
+      }
+
+      const trimmedUrl = url.trim();
+      const parsedRepo = trimmedUrl ? parseGitRepo(trimmedUrl) : null;
+      const shouldLoad =
+        Boolean(parsedRepo) &&
+        !isLikelyLocalSource(trimmedUrl) &&
+        (parsedRepo?.protocol === "ssh" || isGitHubHost(parsedRepo?.host ?? ""));
+
+      if (!shouldLoad) {
+        setRemoteBranches([]);
+        setBranchError(null);
+        return;
+      }
+
+      setIsLoadingBranches(true);
+      setBranchError(null);
+      try {
+        const normalizedSource = normalizeGitStoreSourceInput(trimmedUrl);
+        const branches = await window.api.skill.listRemoteBranches(normalizedSource.url);
+        if (!disposed) {
+          setRemoteBranches(branches);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setRemoteBranches([]);
+          setBranchError(error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        if (!disposed) {
+          setIsLoadingBranches(false);
+        }
+      }
+    };
+
+    void loadBranches();
+
+    return () => {
+      disposed = true;
+    };
+  }, [isOpen, type, url]);
+
+  const filteredBranches = useMemo(() => {
+    const query = branch.trim().toLowerCase();
+    if (!query) {
+      return buildBranchSuggestions(remoteBranches, branch).slice(0, 12);
+    }
+    return buildBranchSuggestions(
+      remoteBranches.filter((item) => item.toLowerCase().includes(query)),
+      branch,
+    ).slice(0, 12);
+  }, [branch, remoteBranches]);
 
   if (!source) {
     return null;
@@ -128,6 +237,64 @@ export function SkillStoreSourceEditModal({
             }
             className="w-full rounded-lg border border-border bg-accent/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
           />
+          {type === "git-repo" && (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={branch}
+                  onChange={(event) => setBranch(event.target.value)}
+                  placeholder={t(
+                    "skill.storeBranchPlaceholder",
+                    "Branch (optional, default branch if empty)",
+                  )}
+                  className="w-full rounded-lg border border-border bg-accent/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+                />
+                {isLoadingBranches ? (
+                  <div className="text-[11px] text-muted-foreground">
+                    {t("skill.loadingBranches", "Loading branches...")}
+                  </div>
+                ) : null}
+                {!isLoadingBranches && filteredBranches.length > 0 ? (
+                  <div className="space-y-2 rounded-lg border border-border bg-background/90 p-2">
+                    <div className="px-1 text-[11px] font-medium text-muted-foreground">
+                      {t("skill.branchSuggestions", "Suggested branches")}
+                    </div>
+                    <div className="max-h-40 overflow-y-auto">
+                    {filteredBranches.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => setBranch(item)}
+                        className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                      >
+                        <span>{item}</span>
+                      </button>
+                    ))}
+                    </div>
+                  </div>
+                ) : null}
+                {!isLoadingBranches && branchError ? (
+                  <div className="text-[11px] text-muted-foreground">
+                    {t(
+                      "skill.branchListFallbackHint",
+                      "Could not load remote branches. You can still type one manually.",
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <input
+                type="text"
+                value={directory}
+                onChange={(event) => setDirectory(event.target.value)}
+                placeholder={t(
+                  "skill.storeDirectoryPlaceholder",
+                  "Directory (optional, e.g. skills/.curated)",
+                )}
+                className="w-full rounded-lg border border-border bg-accent/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2">
@@ -174,7 +341,16 @@ export function SkillStoreSourceEditModal({
             type="button"
             variant="primary"
             size="md"
-            onClick={() => onSave({ id: source.id, name, type, url })}
+            onClick={() =>
+              onSave({
+                id: source.id,
+                name,
+                type,
+                url,
+                branch: branch.trim() || undefined,
+                directory: directory.trim() || undefined,
+              })
+            }
           >
             {t("common.save", "Save")}
           </Button>

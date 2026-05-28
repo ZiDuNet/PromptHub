@@ -7,6 +7,11 @@ export interface ParsedGitRepo {
   protocol: "https" | "ssh";
 }
 
+export interface ParsedGitHubTreeLocation {
+  branch: string;
+  directory?: string;
+}
+
 function isLikelyRepoOwner(value: string): boolean {
   return /^[A-Za-z0-9_.-]+$/.test(value) && /[A-Za-z_-]/.test(value);
 }
@@ -42,6 +47,7 @@ export function parseGitRepo(url: string): ParsedGitRepo | null {
     /^https?:\/\/([^/]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:\/tree\/[^/]+(?:\/.*)?)?\/?$/,
   );
   if (httpsMatch) {
+    const repositoryUrl = `https://${httpsMatch[1]}/${httpsMatch[2]}/${httpsMatch[3]}`;
     if (!isLikelyRepoOwner(httpsMatch[2]) || !isLikelyRepoName(httpsMatch[3])) {
       return null;
     }
@@ -49,8 +55,8 @@ export function parseGitRepo(url: string): ParsedGitRepo | null {
       host: httpsMatch[1].toLowerCase(),
       owner: httpsMatch[2],
       repo: httpsMatch[3],
-      repositoryUrl: `https://${httpsMatch[1]}/${httpsMatch[2]}/${httpsMatch[3]}`,
-      cloneUrl: trimmed,
+      repositoryUrl,
+      cloneUrl: repositoryUrl,
       protocol: "https",
     };
   }
@@ -60,4 +66,30 @@ export function parseGitRepo(url: string): ParsedGitRepo | null {
 
 export function isGitHubHost(host: string): boolean {
   return host.toLowerCase() === "github.com";
+}
+
+export function parseGitHubTreeLocation(
+  url: string,
+): ParsedGitHubTreeLocation | null {
+  try {
+    const parsed = new URL(url.trim());
+    if (!isGitHubHost(parsed.hostname)) {
+      return null;
+    }
+
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts.length < 4 || parts[2] !== "tree") {
+      return null;
+    }
+
+    const branch = parts[3]?.trim();
+    if (!branch) {
+      return null;
+    }
+
+    const directory = parts.slice(4).join("/").trim() || undefined;
+    return { branch, directory };
+  } catch {
+    return null;
+  }
 }

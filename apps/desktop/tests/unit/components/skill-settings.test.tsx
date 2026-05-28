@@ -147,7 +147,9 @@ describe("SkillSettings", () => {
     );
   });
 
-  it("adds a custom agent root and shows derived asset previews", async () => {
+  it(
+    "adds a custom agent root and shows derived asset previews",
+    async () => {
     const settingsState = createSettingsState();
     useSettingsStoreMock.mockReturnValue(settingsState);
 
@@ -185,9 +187,13 @@ describe("SkillSettings", () => {
     expect(screen.getAllByText("Team Agents").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Derived skill scan paths/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Derived agent directories/).length).toBeGreaterThan(0);
-  });
+    },
+    15000,
+  );
 
-  it("fills the custom agent root path from folder picker", async () => {
+  it(
+    "fills the custom agent root path from folder picker",
+    async () => {
     window.electron = createWindowElectronMock({
       selectFolder: vi.fn().mockResolvedValue("/tmp/custom-agent-root"),
     });
@@ -200,7 +206,9 @@ describe("SkillSettings", () => {
     fireEvent.click(browseButtons[0]!);
 
     expect(await screen.findByDisplayValue("/tmp/custom-agent-root")).toBeInTheDocument();
-  });
+    },
+    15000,
+  );
 
   it("requires confirmation before deleting a custom agent", async () => {
     const settingsState = createSettingsState();

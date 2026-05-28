@@ -274,4 +274,14 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
       return SkillInstaller.scanRemoteGithub(repoUrl, registrySkills);
     },
   );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_LIST_REMOTE_BRANCHES,
+    async (_, repoUrl: string) => {
+      if (typeof repoUrl !== "string" || repoUrl.trim().length === 0) {
+        throw new Error("skill:listRemoteBranches requires a non-empty repoUrl");
+      }
+      return SkillInstaller.listRemoteBranches(repoUrl);
+    },
+  );
 }

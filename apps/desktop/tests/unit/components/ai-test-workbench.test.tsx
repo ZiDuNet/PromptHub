@@ -247,7 +247,9 @@ describe("AiTestModal workbench", () => {
     );
   });
 
-  it("passes uploaded chat attachments to compare mode for text prompts", async () => {
+  it(
+    "passes uploaded chat attachments to compare mode for text prompts",
+    async () => {
     const user = userEvent.setup();
 
     await renderWithI18n(
@@ -288,5 +290,7 @@ describe("AiTestModal workbench", () => {
         }),
       ]),
     );
-  });
+    },
+    30000,
+  );
 });

@@ -1,5 +1,47 @@
 ## [Unreleased]
 
+## [0.5.7-beta.2] - 2026-05-28
+
+### 新功能 / Features
+
+- 🌿 **Git 商店源支持 branch / directory**：自定义 Skill 商店源现在可以为 Git 仓库显式配置分支和子目录，支持 GitHub、SSH 仓库和远程分支建议列表
+  - **Git Store Sources Now Support Branch / Directory**: Custom Skill store sources can now target a specific Git branch and subdirectory, with support for GitHub, SSH repositories, and remote branch suggestions
+- 🧩 **Kilo Code 内置平台接入**：Agent 管理和 Skill 一键安装现在内置支持 `Kilo Code`，并移除 `Roo Code`
+  - **Built-in Kilo Code Platform Support**: Agent management and one-click Skill installation now include built-in `Kilo Code` support, replacing `Roo Code`
+
+### 问题修复 / Fixes
+
+- 📁 **项目 Skill 导入流程收口**：`从我的技能导入到项目` 现在支持 `copy / symlink` 高级导入模式，并按项目记住目标目录和导入偏好；`导入到我的技能` 保持单按钮复制导入
+  - **Project Skill Import Flow Refined**: `Import from My Skills` into a project now supports advanced `copy / symlink` modes and remembers per-project targets and import preferences, while `Import to My Skills` remains a single copy action
+- 🌍 **项目导入相关多语言补齐**：补全导入模式、目标目录与高级设置相关文案，修复项目页弹窗回退英文的问题
+  - **Project Import Localization Completed**: Added missing localization for import mode, target folders, and advanced import settings, fixing English fallback in the project import dialog
+
+### 优化 / Improvements
+
+- 🔗 **Git 仓库导入兼容性增强**：Git Skill 仓库导入与自定义源现在统一支持 GitHub、Gitea、自部署 Git，以及 HTTPS / SSH 仓库地址
+  - **Broader Git Repository Compatibility**: Git Skill repo import and custom sources now consistently support GitHub, Gitea, self-hosted Git servers, and both HTTPS / SSH repository URLs
+
+## [0.5.7-beta.1] - 2026-05-26
+
+### 新功能 / Features
+
+- 🤖 **统一 Agent 配置模型**：built-in 与 custom agents 现在共用完整配置心智，`Skill Settings` 支持覆盖 `root / skills / rules / agents / commands / config` 路径，并新增 `Cline`、`Trae CN` 内置预设
+  - **Unified Agent Configuration Model**: Built-in and custom agents now share the same full configuration model. `Skill Settings` can override `root / skills / rules / agents / commands / config` paths, and PromptHub adds built-in `Cline` and `Trae CN` presets
+- 📁 **项目级 Skill 目录部署**：全局 Skill 和项目内 Skill 现在都可以直接分发到项目本地 agent 目录，支持多目标选择，并默认提供 `.agents/skills`
+  - **Project-Local Skill Deployment**: Library Skills and project-scoped Skills can now deploy directly into project-local agent directories, support multi-target selection, and default to `.agents/skills`
+
+### 问题修复 / Fixes
+
+- ✍️ **Prompt 详情内联编辑收口**：双击标题 / system prompt / user prompt 时会准确进入对应字段；编辑态尽量保持原页面结构，只禁用 Markdown 与多模型对比操作
+  - **Prompt Detail Inline Edit Refinement**: Double-clicking the title / system prompt / user prompt now opens the correct field, while the edit state stays visually close to the normal detail layout and only disables Markdown / comparison actions
+- ⚠️ **平台分发回退提示明确化**：当 symlink 安装因权限或文件系统限制回退到 copy 时，渲染层会收到结构化结果并向用户显示 warning，而不再伪装成普通成功
+  - **Explicit Install Fallback Feedback**: When symlink installs fall back to copy because of permissions or filesystem limits, the renderer now receives structured results and shows a warning instead of treating it as a plain success
+
+### 优化 / Improvements
+
+- 🔄 **Rules 与 Agent 设置同步更即时**：修改 custom agent、built-in agent override、平台启用状态或规则跟踪状态后，Rules 工作区会立即强制刷新，避免残留旧配置
+  - **Faster Rules and Agent Settings Sync**: Changing custom agents, built-in overrides, platform visibility, or rule tracking now forces an immediate Rules workspace refresh so stale configurations do not linger
+
 ## [0.5.6] - 2026-05-12
 
 ### 新功能 / Features

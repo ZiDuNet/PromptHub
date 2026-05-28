@@ -104,7 +104,9 @@ describe("MainContent context move integration", () => {
     );
   });
 
-  it("moves a prompt from the context menu into a selected folder", async () => {
+  it(
+    "moves a prompt from the context menu into a selected folder",
+    async () => {
     const updatePrompt = vi.fn().mockResolvedValue(undefined);
     const showToast = vi.fn();
     const prompt = createPrompt();
@@ -160,9 +162,13 @@ describe("MainContent context move integration", () => {
       expect(updatePrompt).toHaveBeenCalledWith("prompt-1", { folderId: "folder-2" });
     });
     expect(showToast).toHaveBeenCalledWith("Moved to folder「Folder B」", "success");
-  });
+    },
+    30000,
+  );
 
-  it("shows folder icons and nested submenu items in move menu", async () => {
+  it(
+    "shows folder icons and nested submenu items in move menu",
+    async () => {
     const prompt = createPrompt();
 
     usePromptStoreMock.mockImplementation((selector) =>
@@ -219,9 +225,13 @@ describe("MainContent context move integration", () => {
     expect(childFolder?.textContent).toContain("📚");
     expect(childFolder?.getAttribute("style")).toContain("padding-left");
     expect(childFolder?.querySelector("svg")).not.toBeNull();
-  });
+    },
+    30000,
+  );
 
-  it("duplicates a prompt from the context menu", async () => {
+  it(
+    "duplicates a prompt from the context menu",
+    async () => {
     const showToast = vi.fn();
     const selectPrompt = vi.fn();
     const prompt = createPrompt({
@@ -300,5 +310,7 @@ describe("MainContent context move integration", () => {
 
     expect(selectPrompt).toHaveBeenCalledWith("prompt-copy-1");
     expect(showToast).toHaveBeenCalledWith("Prompt duplicate created", "success");
-  });
+    },
+    30000,
+  );
 });

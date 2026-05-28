@@ -1,7 +1,8 @@
-import { spawn } from "child_process";
+import * as childProcess from "child_process";
 import * as os from "os";
 import * as path from "path";
 import { initDatabase } from "../database";
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import type { MCPServerConfig } from "@prompthub/shared/types/skill";
 import {
   getPlatformById,
@@ -90,6 +91,23 @@ export function validateMCPConfig(config: unknown, name: string): void {
 }
 
 const GIT_CLONE_TIMEOUT_MS = 60_000; // 60 seconds
+const GIT_REMOTE_TIMEOUT_MS = 30_000; // 30 seconds
+
+function normalizeRemoteGitUrl(url: string): string {
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsedUrl = new URL(trimmed);
+      if (parsedUrl.protocol !== "https:") {
+        return trimmed;
+      }
+    } catch {
+      return trimmed;
+    }
+  }
+  const parsedRepo = parseGitRepo(trimmed);
+  return parsedRepo?.cloneUrl ?? trimmed;
+}
 
 export function gitClone(url: string, destDir: string): Promise<void> {
   if (!url.trim()) {
@@ -99,19 +117,21 @@ export function gitClone(url: string, destDir: string): Promise<void> {
     throw new Error("Git clone URL cannot start with '-'");
   }
 
+  const normalizedUrl = normalizeRemoteGitUrl(url);
+
   const isSshGitUrl = /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
-    url,
+    normalizedUrl,
   );
 
   if (!isSshGitUrl) {
-    const parsedUrl = new URL(url);
+    const parsedUrl = new URL(normalizedUrl);
     if (parsedUrl.protocol !== "https:") {
       throw new Error("Only HTTPS or git@<host> SSH clone URLs are allowed");
     }
   }
 
   return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["clone", "--depth", "1", "--", url, destDir], {
+    const proc = childProcess.spawn("git", ["clone", "--depth", "1", "--", normalizedUrl, destDir], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -150,6 +170,89 @@ export function gitClone(url: string, destDir: string): Promise<void> {
       settled = true;
       clearTimeout(timeout);
       reject(new Error(`Git clone error: ${error.message}`));
+    });
+  });
+}
+
+export function gitListRemoteBranches(url: string): Promise<string[]> {
+  if (!url.trim()) {
+    throw new Error("Git remote URL cannot be empty");
+  }
+  if (url.startsWith("-")) {
+    throw new Error("Git remote URL cannot start with '-'");
+  }
+
+  const normalizedUrl = normalizeRemoteGitUrl(url);
+
+  const isSshGitUrl = /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
+    normalizedUrl,
+  );
+
+  if (!isSshGitUrl) {
+    const parsedUrl = new URL(normalizedUrl);
+    if (parsedUrl.protocol !== "https:") {
+      throw new Error("Only HTTPS or git@<host> SSH remote URLs are allowed");
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const proc = childProcess.spawn(
+      "git",
+      ["ls-remote", "--heads", "--", normalizedUrl],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        proc.kill("SIGKILL");
+        reject(
+          new Error(
+            `Git remote branch listing timed out after ${GIT_REMOTE_TIMEOUT_MS / 1000}s for URL: ${url}`,
+          ),
+        );
+      }
+    }, GIT_REMOTE_TIMEOUT_MS);
+
+    proc.stdout?.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code !== 0) {
+        reject(new Error(`Git remote branch listing failed with code ${code}: ${stderr}`));
+        return;
+      }
+
+      const branches = stdout
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.split(/\s+/u)[1] ?? "")
+        .filter((ref) => ref.startsWith("refs/heads/"))
+        .map((ref) => ref.replace(/^refs\/heads\//u, ""))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+
+      resolve(branches);
+    });
+
+    proc.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(new Error(`Git remote branch listing error: ${error.message}`));
     });
   });
 }

@@ -5,7 +5,10 @@ import type {
   RegistrySkill,
   SkillCategory,
 } from "@prompthub/shared/types";
-import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import {
+  parseGitHubTreeLocation,
+  parseGitRepo,
+} from "@prompthub/shared/utils/git-repo";
 
 function stripQuotes(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, "");
@@ -196,6 +199,8 @@ function isRootReadmePath(filePath: string): boolean {
 export async function loadGitHubSkillRepo(
   repoUrl: string,
   options: {
+    branch?: string;
+    directory?: string;
     fetchRemoteContent: (url: string) => Promise<string>;
     registrySkills: RegistrySkill[];
     rateLimitMessage: string;
@@ -221,12 +226,21 @@ export async function loadGitHubSkillRepo(
     });
   }
   const repoMeta = parseJson<GitHubRepoMetadata>(repoMetaRaw || "{}", {});
-  const defaultBranch = repoMeta.default_branch || "main";
+  const treeLocation = parseGitHubTreeLocation(repoUrl);
+  const resolvedBranch =
+    options.branch?.trim() ||
+    treeLocation?.branch ||
+    repoMeta.default_branch ||
+    "main";
+  const resolvedDirectory =
+    options.directory?.trim().replace(/^\/+|\/+$/g, "") ||
+    treeLocation?.directory ||
+    "";
 
   let treeRaw: string;
   try {
     treeRaw = await options.fetchRemoteContent(
-      `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/git/trees/${defaultBranch}?recursive=1`,
+      `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/git/trees/${resolvedBranch}?recursive=1`,
     );
   } catch (error) {
     throw mapGitHubStoreError(error, {
@@ -239,8 +253,12 @@ export async function loadGitHubSkillRepo(
   const treeEntries = Array.isArray(treeData.tree)
     ? treeData.tree.filter(isGitHubTreeEntry)
     : [];
+  const directoryPrefix = resolvedDirectory ? `${resolvedDirectory}/` : "";
   const skillFiles = treeEntries.filter(
-    (item) => item.type === "blob" && isSkillMarkdownPath(item.path),
+    (item) =>
+      item.type === "blob" &&
+      isSkillMarkdownPath(item.path) &&
+      (!directoryPrefix || item.path.startsWith(directoryPrefix)),
   );
 
   const builtinBySlug = new Map(
@@ -256,12 +274,12 @@ export async function loadGitHubSkillRepo(
       const rawUrl = buildRawUrl(
         parsedRepo.owner,
         parsedRepo.repo,
-        defaultBranch,
+        resolvedBranch,
         path,
       );
       const sourceRepoUrl = directoryPath
-        ? `${parsedRepo.repositoryUrl}/tree/${defaultBranch}/${directoryPath}`
-        : `${parsedRepo.repositoryUrl}/tree/${defaultBranch}`;
+        ? `${parsedRepo.repositoryUrl}/tree/${resolvedBranch}/${directoryPath}`
+        : `${parsedRepo.repositoryUrl}/tree/${resolvedBranch}`;
 
       let content: string;
       try {
@@ -319,11 +337,11 @@ export async function loadGitHubSkillRepo(
   }
 
   const rawUrl = buildRawUrl(
-    parsedRepo.owner,
-    parsedRepo.repo,
-    defaultBranch,
-    readmeEntry.path,
-  );
+      parsedRepo.owner,
+      parsedRepo.repo,
+      resolvedBranch,
+      readmeEntry.path,
+    );
   let content: string;
   try {
     content = await options.fetchRemoteContent(rawUrl);
@@ -354,7 +372,9 @@ export async function loadGitHubSkillRepo(
         builtin?.author ||
         repoMeta?.owner?.login ||
         (parsedRepo.owner === "anthropics" ? "Anthropic" : parsedRepo.owner),
-      source_url: `${parsedRepo.repositoryUrl}/tree/${defaultBranch}`,
+      source_url: resolvedDirectory
+        ? `${parsedRepo.repositoryUrl}/tree/${resolvedBranch}/${resolvedDirectory}`
+        : `${parsedRepo.repositoryUrl}/tree/${resolvedBranch}`,
       tags: builtin?.tags?.length
         ? builtin.tags
         : parsed.tags.length

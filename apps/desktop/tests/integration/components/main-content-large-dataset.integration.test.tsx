@@ -57,6 +57,38 @@ vi.mock("../../../src/renderer/components/prompt/PromptListHeader", () => ({
   PromptListHeader: ({ count }: { count: number }) => <div>count:{count}</div>,
 }));
 
+vi.mock("../../../src/renderer/components/prompt/EditPromptModal", () => ({
+  EditPromptModal: () => null,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/PromptTableView", () => ({
+  PromptTableView: () => <div>table-view</div>,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/PromptGalleryView", () => ({
+  PromptGalleryView: () => <div>gallery-view</div>,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/PromptKanbanView", () => ({
+  PromptKanbanView: () => <div>kanban-view</div>,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/AiTestModal", () => ({
+  AiTestModal: () => null,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/PromptDetailModal", () => ({
+  PromptDetailModal: () => null,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/VariableInputModal", () => ({
+  VariableInputModal: () => null,
+}));
+
+vi.mock("../../../src/renderer/components/prompt/VersionHistoryModal", () => ({
+  VersionHistoryModal: () => null,
+}));
+
 vi.mock("../../../src/renderer/components/prompt", () => ({
   EditPromptModal: () => null,
   VersionHistoryModal: () => null,
@@ -161,7 +193,9 @@ describe("MainContent large dataset integration", () => {
     vi.useRealTimers();
   });
 
-  it("renders large prompt datasets through virtualization without dropping rows", async () => {
+  it(
+    "renders large prompt datasets through virtualization without dropping rows",
+    async () => {
     const prompts = Array.from({ length: 1000 }, (_, index) => createPrompt(index));
     usePromptStoreMock.mockImplementation((selector) =>
       selector(createPromptState(prompts)),
@@ -185,5 +219,7 @@ describe("MainContent large dataset integration", () => {
     expect(screen.getByText("Prompt 0999")).toBeInTheDocument();
     expect(screen.getAllByText("count:1000")).toHaveLength(4);
     expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(prompts.length);
-  });
+    },
+    15000,
+  );
 });

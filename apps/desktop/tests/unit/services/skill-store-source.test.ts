@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isLikelyLocalSource,
   isSupportedGitRepoSource,
+  normalizeGitStoreSourceInput,
   normalizeLocalSourcePath,
   validateStoreSourceInput,
 } from "../../../src/renderer/services/skill-store-source";
@@ -36,5 +37,31 @@ describe("skill-store-source", () => {
     expect(isSupportedGitRepoSource("~/Projects/my-skill-repo")).toBe(true);
     expect(isLikelyLocalSource("file:///Users/demo/skills")).toBe(true);
     expect(isSupportedGitRepoSource("https://gitlab.com/demo/skills")).toBe(true);
+  });
+
+  it("normalizes github tree urls into structured git source fields", () => {
+    expect(
+      normalizeGitStoreSourceInput(
+        "https://github.com/openai/skills/tree/main/skills/.curated",
+      ),
+    ).toEqual({
+      url: "https://github.com/openai/skills",
+      branch: "main",
+      directory: "skills/.curated",
+    });
+  });
+
+  it("lets explicit branch and directory override parsed tree url values", () => {
+    expect(
+      normalizeGitStoreSourceInput(
+        "https://github.com/openai/skills/tree/main/skills/.curated",
+        "release",
+        "skills/custom",
+      ),
+    ).toEqual({
+      url: "https://github.com/openai/skills",
+      branch: "release",
+      directory: "skills/custom",
+    });
   });
 });

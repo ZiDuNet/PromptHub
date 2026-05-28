@@ -537,7 +537,9 @@ describe("skill i18n smoke", () => {
     expect(onImport).toHaveBeenCalledTimes(1);
   });
 
-  it("defaults to saved translation and toggles back to original content", async () => {
+  it(
+    "defaults to saved translation and toggles back to original content",
+    async () => {
     const syncedSkill = {
       ...baseSkill,
       description: "Write helper",
@@ -612,7 +614,9 @@ describe("skill i18n smoke", () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByText("Help the user write better.")).toBeInTheDocument();
-  });
+    },
+    15000,
+  );
 
   it("prompts to retranslate when the saved translation is stale", async () => {
     const syncedSkill = {

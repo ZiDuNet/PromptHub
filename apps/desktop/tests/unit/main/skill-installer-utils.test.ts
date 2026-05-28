@@ -1,5 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as childProcess from "child_process";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("child_process", async () => {
+  const actual = await vi.importActual<typeof import("child_process")>(
+    "child_process",
+  );
+
+  return {
+    ...actual,
+    spawn: vi.fn(actual.spawn),
+  };
+});
 
 vi.mock("../../../src/main/database", () => ({
   initDatabase: vi.fn(),
@@ -14,6 +25,7 @@ import {
   validateMCPConfig,
   resolvePlatformPath,
   gitClone,
+  gitListRemoteBranches,
   invalidateCustomPathsCache,
 } from "../../../src/main/services/skill-installer-utils";
 
@@ -266,6 +278,38 @@ describe("skill-installer-utils", () => {
       );
       const skillsDir = getPlatformSkillsDir(platform!);
       expect(skillsDir.startsWith("C:\\Users\\TestUser\\.config\\opencode")).toBe(true);
+      expect(skillsDir.endsWith("skills")).toBe(true);
+
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      process.env.HOME = originalHome;
+      process.env.USERPROFILE = originalUserProfile;
+      invalidateCustomPathsCache();
+    });
+
+    it("uses %USERPROFILE%\\.kilo as the default Kilo Code root on Windows", () => {
+      const originalPlatform = process.platform;
+      const originalHome = process.env.HOME;
+      const originalUserProfile = process.env.USERPROFILE;
+
+      Object.defineProperty(process, "platform", {
+        value: "win32",
+        configurable: true,
+      });
+      process.env.HOME = "C:\\Users\\TestUser";
+      process.env.USERPROFILE = "C:\\Users\\TestUser";
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      invalidateCustomPathsCache();
+
+      const platform = getPlatformById("kilo");
+      expect(platform).toBeDefined();
+      expect(getPlatformRootDir(platform!)).toBe("C:\\Users\\TestUser\\.kilo");
+      const skillsDir = getPlatformSkillsDir(platform!);
+      expect(skillsDir.startsWith("C:\\Users\\TestUser\\.kilo")).toBe(true);
       expect(skillsDir.endsWith("skills")).toBe(true);
 
       Object.defineProperty(process, "platform", {
@@ -535,16 +579,92 @@ describe("skill-installer-utils", () => {
       );
     });
 
-    it("does not reject SSH-style GitHub clone URLs during upfront validation", () => {
-      expect(() => {
-        void gitClone("git@github.com:user/repo.git", "/tmp/dest");
-      }).not.toThrow(/Only HTTPS or git@<host> SSH clone URLs are allowed/);
+    it("does not reject SSH-style GitHub clone URLs during upfront validation", async () => {
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitClone("git@github.com:user/repo.git", "/tmp/dest");
+      closeHandlers[0]?.(0);
+
+      await expect(promise).resolves.toBeUndefined();
     });
 
-    it("does not reject SSH-style self-hosted git clone URLs during upfront validation", () => {
-      expect(() => {
-        void gitClone("git@gitea.example.com:icelemon/skills.git", "/tmp/dest");
-      }).not.toThrow(/Only HTTPS or git@<host> SSH clone URLs are allowed/);
+    it("does not reject SSH-style self-hosted git clone URLs during upfront validation", async () => {
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitClone("git@gitea.example.com:icelemon/skills.git", "/tmp/dest");
+      closeHandlers[0]?.(0);
+
+      await expect(promise).resolves.toBeUndefined();
+    });
+  });
+
+  describe("gitListRemoteBranches", () => {
+    it("rejects empty URL", () => {
+      expect(() => gitListRemoteBranches("" as string)).toThrow(/cannot be empty/);
+    });
+
+    it("parses remote branch names from git ls-remote output", async () => {
+      const stdoutHandlers: Array<(chunk: Buffer) => void> = [];
+      const stderrHandlers: Array<(chunk: Buffer) => void> = [];
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)) },
+        stderr: { on: vi.fn((event, cb) => event === "data" && stderrHandlers.push(cb)) },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitListRemoteBranches("git@github.com:demo/skills.git");
+      stdoutHandlers[0]?.(
+        Buffer.from(
+          "abc123\trefs/heads/main\ndef456\trefs/heads/release\n",
+        ),
+      );
+      closeHandlers[0]?.(0);
+
+      await expect(promise).resolves.toEqual(["main", "release"]);
+    });
+
+    it("normalizes GitHub tree URLs before listing remote branches", async () => {
+      const stdoutHandlers: Array<(chunk: Buffer) => void> = [];
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)) },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitListRemoteBranches(
+        "https://github.com/anthropics/skills/tree/main/skills/.curated",
+      );
+
+      expect(childProcess.spawn).toHaveBeenCalledWith(
+        "git",
+        ["ls-remote", "--heads", "--", "https://github.com/anthropics/skills"],
+        { stdio: ["ignore", "pipe", "pipe"] },
+      );
+
+      stdoutHandlers[0]?.(Buffer.from("abc123\trefs/heads/main\n"));
+      closeHandlers[0]?.(0);
+
+      await expect(promise).resolves.toEqual(["main"]);
     });
   });
 });

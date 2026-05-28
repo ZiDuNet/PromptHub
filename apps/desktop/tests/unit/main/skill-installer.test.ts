@@ -296,6 +296,23 @@ describe("SkillInstaller.getSupportedPlatforms", () => {
     const ids = SkillInstaller.getSupportedPlatforms().map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  it("includes Kilo Code instead of Roo Code", () => {
+    const platforms = SkillInstaller.getSupportedPlatforms();
+    expect(platforms.some((platform) => platform.id === "kilo")).toBe(true);
+    expect(platforms.some((platform) => platform.id === "roo")).toBe(false);
+
+    const kilo = platforms.find((platform) => platform.id === "kilo");
+    expect(kilo).toMatchObject({
+      name: "Kilo Code",
+      rootDir: {
+        darwin: "~/.kilo",
+        win32: "%USERPROFILE%\\.kilo",
+        linux: "~/.kilo",
+      },
+      skillsRelativePath: "skills",
+    });
+  });
 });
 
 describe("SkillInstaller.copyRepoByPathToDirectory", () => {

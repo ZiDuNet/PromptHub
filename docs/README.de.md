@@ -76,7 +76,7 @@ Aktuelle Stable: **v0.5.6**. Pro Plattform gibt es zwei Wege:
 | Windows   | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.6-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.6-arm64.exe) | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.6-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.6-arm64.exe) |
 | macOS     | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-x64.dmg) | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-x64.dmg) |
 | Linux     | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-amd64.deb) | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.6-amd64.deb) |
-| Vorschau  | [![Preview v0.5.7-beta.1](https://img.shields.io/badge/Preview-v0.5.7--beta.1-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.7-beta.1) | Aktuelle Vorschau: `v0.5.7-beta.1`. Alternativ den Vorschau-Kanal unter *Einstellungen → Über* aktivieren, damit die App automatisch prüft und aktualisiert. |
+| Vorschau  | [![Preview v0.5.7-beta.2](https://img.shields.io/badge/Preview-v0.5.7--beta.2-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.7-beta.2) | Aktuelle Vorschau: `v0.5.7-beta.2`. Alternativ den Vorschau-Kanal unter *Einstellungen → Über* aktivieren, damit die App automatisch prüft und aktualisiert. |
 
 > **Apple Silicon oder Intel?** M1/M2/M3/M4 → `arm64`. Intel-Macs → `x64`.
 > **Windows arch?** Die meisten Geräte → `x64`. Nur ARM-Geräte der Klasse Surface Pro X → `arm64`.
@@ -151,7 +151,7 @@ Nächste Entwicklungs-Vorschau testen? *Einstellungen → Über* öffnen und den
 ### 🧩 Skill Store und Ein-Klick-Verteilung
 
 - **Skill Store** mit 20+ kuratierten Skills (Anthropic, OpenAI usw.) plus stapelbaren benutzerdefinierten Quellen (GitHub-Repo / skills.sh / lokaler Ordner)
-- **Ein-Klick-Installation** für Claude Code, Cursor, Windsurf, Codex, Kiro, Gemini CLI, Qoder, QoderWork, CodeBuddy, Trae, OpenCode, Roo Code und 15+ weitere
+- **Ein-Klick-Installation** für Claude Code, Cursor, Windsurf, Codex, Kiro, Kilo Code, Gemini CLI, Qoder, QoderWork, CodeBuddy, Trae, OpenCode und 15+ weitere
 - **Lokaler Scan** erkennt vorhandene SKILL.md-Dateien, sodass du nicht mehr zwischen Werkzeugverzeichnissen kopieren musst
 - **Symlink- / Copy-Modi** — Symlink für gemeinsame Bearbeitung, Copy für unabhängige Plattformkopien
 - **Plattformbezogenes Skill-Verzeichnis-Override** hält Scan und Installation auf demselben Pfad
@@ -298,6 +298,12 @@ Häufige globale Flags:
 
 Vollständiges Changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
+### v0.5.7-beta.2 (2026-05-28, Vorschau)
+
+- Git-Store-Quellen unterstützen jetzt `branch / directory`, Remote-Branch-Vorschläge sowie GitHub / SSH / selbst gehostete Git-Repositories
+- Der Import von Projekt-Skills unterstützt jetzt erweiterte `copy / symlink`-Modi mit projektbezogener Präferenzspeicherung
+- Agent-Verwaltung und Skill-Plattform-Installation bringen jetzt eingebaute `Kilo Code`-Unterstützung statt `Roo Code`
+
 ### v0.5.7-beta.1 (2026-05-26, Vorschau)
 
 - Vereinheitlichtes vollständiges Agent-Konfigurationsmodell für built-in und custom agents mit direkten Overrides für `root / skills / rules / agents / commands / config`
@@ -335,11 +341,11 @@ Vollständiges Changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
 ## Roadmap
 
-### v0.5.7-beta.1 ← aktuelle Vorschau
+### v0.5.7-beta.2 ← aktuelle Vorschau
 
-- Vereinheitlichtes Agent-Konfigurationsmodell mit vollständigen built-in Pfad-Overrides
-- Direkte projektlokale Skill-Verteilung in Agent-Ordner
-- Verfeinertes Inline-Editing im Prompt-Detail
+- Git-Store-Quellen mit `branch / directory` und Remote-Branch-Vorschlägen
+- Projekt-Skill-Import mit erweiterten `copy / symlink`-Modi und projektbezogener Präferenzspeicherung
+- Eingebaute `Kilo Code`-Unterstützung ersetzt `Roo Code`
 
 ### v0.5.6 ← aktuelle Stable
 

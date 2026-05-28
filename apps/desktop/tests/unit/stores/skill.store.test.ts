@@ -137,6 +137,28 @@ describe("skill store", () => {
     expect(fetchRemoteContent).not.toHaveBeenCalled();
   });
 
+  it("stores branch and directory when adding a git repo custom source", () => {
+    useSkillStore.getState().addCustomStoreSource(
+      "Release Store",
+      "https://github.com/openai/skills/tree/main/skills/.curated",
+      "git-repo",
+      {
+        branch: "release",
+        directory: "skills/release",
+      },
+    );
+
+    const source = useSkillStore.getState().customStoreSources[0];
+    expect(source).toEqual(
+      expect.objectContaining({
+        name: "Release Store",
+        url: "https://github.com/openai/skills",
+        branch: "release",
+        directory: "skills/release",
+      }),
+    );
+  });
+
   it("stores project scan errors and rethrows them to the caller", async () => {
     const scanLocalPreview = vi.fn().mockRejectedValue(
       new Error("Project scan failed"),

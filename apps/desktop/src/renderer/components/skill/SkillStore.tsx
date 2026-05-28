@@ -43,6 +43,7 @@ import {
 import { findInstalledRegistrySkill } from "../../services/skill-store-update";
 import { filterRegistrySkills } from "../../services/skill-store-search";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
+import { normalizeGitStoreSourceInput } from "../../services/skill-store-source";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   all: <LayoutGridIcon className="w-3.5 h-3.5" />,
@@ -80,6 +81,17 @@ const CUSTOM_SOURCE_TYPE_OPTIONS: Array<{
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatStoreSourceHint(source: SkillStoreSource): string {
+  const parts = [source.url];
+  if (source.branch) {
+    parts.push(`branch: ${source.branch}`);
+  }
+  if (source.directory) {
+    parts.push(`dir: ${source.directory}`);
+  }
+  return parts.join(" | ");
 }
 
 export function SkillStore() {
@@ -134,6 +146,8 @@ export function SkillStore() {
     >("marketplace-json");
   const [sourceName, setSourceName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceBranch, setSourceBranch] = useState("");
+  const [sourceDirectory, setSourceDirectory] = useState("");
   const { showToast } = useToast();
   const autoScanBeforeInstall = useSettingsStore(
     (state) => state.autoScanStoreSkillsBeforeInstall,
@@ -237,9 +251,19 @@ export function SkillStore() {
       name: string;
       type: Extract<SkillStoreSource["type"], "marketplace-json" | "git-repo" | "local-dir">;
       url: string;
+      branch?: string;
+      directory?: string;
     }) => {
       const trimmedName = payload.name.trim();
-      const trimmedUrl = payload.url.trim();
+      const normalizedGitSource =
+        payload.type === "git-repo"
+          ? normalizeGitStoreSourceInput(
+              payload.url.trim(),
+              payload.branch,
+              payload.directory,
+            )
+          : null;
+      const trimmedUrl = normalizedGitSource?.url ?? payload.url.trim();
       if (!trimmedName || !trimmedUrl) {
         return;
       }
@@ -252,6 +276,8 @@ export function SkillStore() {
                 name: trimmedName,
                 type: payload.type,
                 url: trimmedUrl,
+                branch: normalizedGitSource?.branch,
+                directory: normalizedGitSource?.directory,
               }
             : source,
         ),
@@ -341,10 +367,19 @@ export function SkillStore() {
     }
 
     try {
-      addCustomStoreSource(sourceName, sourceUrl, sourceType);
+      if (sourceType === "git-repo") {
+        addCustomStoreSource(sourceName, sourceUrl, sourceType, {
+          branch: sourceBranch,
+          directory: sourceDirectory,
+        });
+      } else {
+        addCustomStoreSource(sourceName, sourceUrl, sourceType);
+      }
       const createdId = useSkillStore.getState().selectedStoreSourceId;
       setSourceName("");
       setSourceUrl("");
+      setSourceBranch("");
+      setSourceDirectory("");
       setSourceType("marketplace-json");
       showToast(t("skill.storeSourceAdded"), "success");
       if (createdId) {
@@ -424,7 +459,7 @@ export function SkillStore() {
     if (selectedCustomSource) {
       return {
         title: selectedCustomSource.name,
-        hint: selectedCustomSource.url,
+        hint: formatStoreSourceHint(selectedCustomSource),
         count: sourceRegistrySkills.length,
         showCatalog: false,
         canRefresh: true,
@@ -528,7 +563,11 @@ export function SkillStore() {
 
         {selectedStoreSourceId === "new-custom" && (
           <SkillStoreSourceForm
+            branch={sourceBranch}
+            directory={sourceDirectory}
             handleAddSource={handleAddSource}
+            setBranch={setSourceBranch}
+            setDirectory={setSourceDirectory}
             setSourceName={setSourceName}
             setSourceType={setSourceType}
             setSourceUrl={setSourceUrl}

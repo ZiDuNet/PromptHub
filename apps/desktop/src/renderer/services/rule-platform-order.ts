@@ -1,4 +1,5 @@
 import { RULE_PLATFORM_ORDER } from "@prompthub/shared/constants/rules";
+import { isRulePlatformId } from "@prompthub/shared/types";
 import type { RuleFileDescriptor } from "@prompthub/shared/types";
 
 export function getOrderedGlobalRuleFiles(
@@ -13,7 +14,7 @@ export function getOrderedGlobalRuleFiles(
   const ordered: RuleFileDescriptor[] = [];
 
   const pushPlatform = (platformId: string) => {
-    if (!platformId || seenPlatformIds.has(platformId)) {
+    if (!platformId || seenPlatformIds.has(platformId) || !isRulePlatformId(platformId)) {
       return;
     }
     seenPlatformIds.add(platformId);

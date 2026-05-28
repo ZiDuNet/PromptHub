@@ -24,7 +24,8 @@ import clineIcon from "../../assets/platforms/cline.svg";
 import traeIcon from "../../assets/platforms/trae.png";
 import opencodeIcon from "../../assets/platforms/opencode.png";
 import codexIcon from "../../assets/platforms/codex.png";
-import rooIcon from "../../assets/platforms/roo.png";
+import kiloLightIcon from "../../assets/platforms/kilo-light.svg";
+import kiloDarkIcon from "../../assets/platforms/kilo-dark.svg";
 import ampIcon from "../../assets/platforms/amp.png";
 import openclawIcon from "../../assets/platforms/openclaw.png";
 import qoderIcon from "../../assets/platforms/qoder.png";
@@ -50,7 +51,10 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   "trae-cn": traeIcon,
   opencode: opencodeIcon,
   codex: codexIcon,
-  roo: rooIcon,
+  kilo: {
+    light: kiloLightIcon,
+    dark: kiloDarkIcon,
+  },
   amp: ampIcon,
   openclaw: openclawIcon,
   qoder: qoderIcon,
@@ -77,7 +81,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   opencode: <TerminalIcon />,
   cline: <TerminalIcon />,
   codex: <TerminalIcon />,
-  roo: <BotIcon />,
+  kilo: <BotIcon />,
   amp: <ZapIcon />,
   openclaw: <BugIcon />,
   qoder: <BotIcon />,

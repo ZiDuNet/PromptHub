@@ -740,6 +740,7 @@ interface SettingsState {
         CustomAgentConfig,
         | "name"
         | "rootPath"
+        | "enabled"
         | "skillsRelativePath"
         | "rulesRelativePath"
         | "agentsRelativePath"
@@ -858,16 +859,18 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   const normalizedBuiltinAgentOverrides = normalizeBuiltinAgentOverrides(
     settings.builtinAgentOverrides ?? state.builtinAgentOverrides,
   );
+  const legacyBuiltinAgentOverrides = Object.entries(
+    settings.customPlatformRootPaths ?? {},
+  ).reduce<Record<string, BuiltinAgentOverrideConfig>>((acc, [platformId, rootPath]) => {
+    if (typeof rootPath === "string") {
+      acc[platformId] = { rootPath };
+    }
+    return acc;
+  }, {});
   const fallbackBuiltinAgentOverrides =
     Object.keys(normalizedBuiltinAgentOverrides).length > 0
       ? normalizedBuiltinAgentOverrides
-      : normalizeBuiltinAgentOverrides(
-          Object.fromEntries(
-            Object.entries(settings.customPlatformRootPaths ?? {}).map(
-              ([platformId, rootPath]) => [platformId, { rootPath }],
-            ),
-          ),
-        );
+      : normalizeBuiltinAgentOverrides(legacyBuiltinAgentOverrides);
   const fallbackCustomAgentRootPaths = normalizeAgentRootPaths(
     normalizedCustomAgents.length > 0
       ? normalizedCustomAgents.map((agent) => agent.rootPath)
@@ -1998,6 +2001,8 @@ export const useSettingsStore = create<SettingsState>()(
           ...(persistedState as Partial<SettingsState>),
         };
 
+        migrateTraeCnPlatformState(next);
+
         next.syncProvider = clampSyncProvider(
           normalizeSyncProvider(next.syncProvider),
           {
@@ -2121,9 +2126,11 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.customPlatformRootPaths = {};
         }
-        const legacyDisabledPlatformIds = (
-          next as Partial<SettingsState> & { trackedRulePlatformIds?: unknown }
-        ).trackedRulePlatformIds;
+        const legacyPersistedState = next as Partial<SettingsState> & {
+          trackedRulePlatformIds?: unknown;
+          rulePlatformTrackingInitialized?: unknown;
+        };
+        const legacyDisabledPlatformIds = legacyPersistedState.trackedRulePlatformIds;
         if (
           !Array.isArray(next.disabledPlatformIds) ||
           next.disabledPlatformIds.some(
@@ -2136,9 +2143,8 @@ export const useSettingsStore = create<SettingsState>()(
               )
             : [];
         }
-        delete (next as Partial<SettingsState>).rulePlatformTrackingInitialized;
-        delete (next as Partial<SettingsState> & { trackedRulePlatformIds?: unknown })
-          .trackedRulePlatformIds;
+        delete legacyPersistedState.rulePlatformTrackingInitialized;
+        delete legacyPersistedState.trackedRulePlatformIds;
         if (
           !next.customSkillPlatformPaths ||
           typeof next.customSkillPlatformPaths !== "object" ||

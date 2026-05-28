@@ -574,6 +574,87 @@ describe("SkillStore remote loading", () => {
     );
   });
 
+  it("loads git-repo sources from an explicit branch and directory", async () => {
+    const fetchRemoteContent = vi.fn(async (url: string) => {
+      if (url === "https://api.github.com/repos/demo/skills") {
+        return JSON.stringify({ default_branch: "main", owner: { login: "demo" } });
+      }
+
+      if (
+        url ===
+        "https://api.github.com/repos/demo/skills/git/trees/release?recursive=1"
+      ) {
+        return JSON.stringify({
+          tree: [{ path: "skills/.curated/release-skill/SKILL.md", type: "blob" }],
+        });
+      }
+
+      if (
+        url ===
+        "https://raw.githubusercontent.com/demo/skills/release/skills/.curated/release-skill/SKILL.md"
+      ) {
+        return "---\nname: release-skill\ndescription: Release skill\n---\n\n# Release";
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      customStoreSources: [
+        {
+          id: "release-repo",
+          name: "Release Repo",
+          type: "git-repo",
+          url: "https://github.com/demo/skills",
+          branch: "release",
+          directory: "skills/.curated",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "release-repo",
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["release-repo"]?.skills,
+      ).toHaveLength(1);
+    });
+
+    expect(
+      useSkillStore.getState().remoteStoreEntries["release-repo"]?.skills[0],
+    ).toEqual(
+      expect.objectContaining({
+        source_url:
+          "https://github.com/demo/skills/tree/release/skills/.curated/release-skill",
+        content_url:
+          "https://raw.githubusercontent.com/demo/skills/release/skills/.curated/release-skill/SKILL.md",
+      }),
+    );
+  });
+
   it("loads git-repo store sources through SSH scan when given git@github.com URLs", async () => {
     const fetchRemoteContent = vi.fn();
     const scanRemoteGithub = vi.fn().mockResolvedValue([

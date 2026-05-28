@@ -31,6 +31,7 @@ import { sanitizeImportedSkillDraft } from "./skill-import-sanitize";
 import {
   getPlatformSkillsDir,
   gitClone,
+  gitListRemoteBranches,
   resolvePlatformPath,
 } from "./skill-installer-utils";
 import {
@@ -122,6 +123,7 @@ export class SkillInstaller {
   // ---- Remote / SSRF (re-exported for tests & callers) ----
   static fetchRemoteText = fetchRemoteText;
   static fetchRemoteBytes = fetchRemoteBytes;
+  static listRemoteBranches = gitListRemoteBranches;
 
   // ---- Repo CRUD (delegated) ----
   static isManagedRepoPath = isManagedRepoPath;

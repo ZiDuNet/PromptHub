@@ -32,6 +32,8 @@ export const BUILTIN_REMOTE_STORES: Record<
     id: string;
     type: "git-repo" | "skills-sh";
     url: string;
+    branch?: string;
+    directory?: string;
   }
 > = {
   "claude-code": {
@@ -42,7 +44,9 @@ export const BUILTIN_REMOTE_STORES: Record<
   "openai-codex": {
     id: "openai-codex",
     type: "git-repo",
-    url: "https://github.com/openai/skills/tree/main/skills/.curated",
+    url: "https://github.com/openai/skills",
+    branch: "main",
+    directory: "skills/.curated",
   },
   community: {
     id: "community",
@@ -220,8 +224,9 @@ export function useSkillStoreRemoteSync(
   }, [loadRegistry]);
 
   const loadGitHubRepoSkills = useCallback(
-    async (repoUrl: string): Promise<RegistrySkill[]> => {
+    async (source: Pick<SkillStoreSource, "url" | "branch" | "directory">): Promise<RegistrySkill[]> => {
       try {
+        const repoUrl = source.url;
         const parsedRepo = parseGitRepo(repoUrl);
         if (!parsedRepo) {
           throw new Error("Invalid git repository URL");
@@ -232,6 +237,8 @@ export function useSkillStoreRemoteSync(
         }
 
         return await loadGitHubSkillRepo(repoUrl, {
+          branch: source.branch,
+          directory: source.directory,
           fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
           registrySkills,
           rateLimitMessage: t(
@@ -479,7 +486,7 @@ export function useSkillStoreRemoteSync(
           if (source.type === "git-repo") {
             skillsForSource = isLikelyLocalSource(source.url)
               ? await loadLocalDirectoryStore(source.url)
-              : await loadGitHubRepoSkills(source.url);
+              : await loadGitHubRepoSkills(source);
           } else if (source.type === "skills-sh") {
             skillsForSource = await loadSkillsShStore();
           } else if (source.type === "marketplace-json") {
