@@ -16,6 +16,7 @@ const windsurfPlatform = requirePlatform("windsurf");
 const openclawPlatform = requirePlatform("openclaw");
 const hermesPlatform = requirePlatform("hermes");
 const ampPlatform = requirePlatform("amp");
+const kiloPlatform = requirePlatform("kilo");
 
 export const RULE_FILE_GROUPS = ["workspace", "assistant", "tooling"] as const;
 
@@ -28,6 +29,7 @@ export const RULE_PLATFORM_ORDER = [
   "openclaw",
   "hermes",
   "amp",
+  "kilo",
 ] as const;
 
 export const KNOWN_RULE_FILE_TEMPLATES = {
@@ -121,6 +123,18 @@ export const KNOWN_RULE_FILE_TEMPLATES = {
     name: "AGENTS.md",
     description:
       "Global Amp rules loaded from the local Amp configuration. Amp also checks $HOME/.config/AGENTS.md as a fallback.",
+    group: "tooling",
+  },
+  "kilo-global": {
+    id: "kilo-global",
+    platformId: "kilo",
+    platformName: kiloPlatform.name,
+    platformIcon: kiloPlatform.icon,
+    platformDescription:
+      "Global Kilo Code rules stored in the local Kilo Code rules directory.",
+    name: "global.md",
+    description:
+      "Global Kilo Code rules loaded from the local Kilo Code configuration. Kilo Code reads all .md files in ~/.kilo/rules/.",
     group: "tooling",
   },
 } as const;

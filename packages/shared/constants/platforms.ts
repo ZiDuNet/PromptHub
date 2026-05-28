@@ -271,6 +271,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.kilo",
     },
     skillsRelativePath: "skills",
+    globalRuleFile: "rules/global.md",
   },
   {
     id: "amp",
