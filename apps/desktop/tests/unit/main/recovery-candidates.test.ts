@@ -154,4 +154,38 @@ describe("recovery-candidates", () => {
     expect(preview.items.some((item) => item.kind === "prompt")).toBe(true);
     expect(preview.items[0]?.title).toContain("Prompt");
   });
+
+  it("previews prompt data from a unified data directory candidate", async () => {
+    const userDataPath = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-recovery-candidate-"),
+    );
+    tempDirs.push(userDataPath);
+
+    fs.mkdirSync(path.join(userDataPath, "data"), { recursive: true });
+    createTestDatabase(path.join(userDataPath, "data", "prompthub.db"), {
+      prompts: 1,
+      folders: 1,
+      skills: 0,
+    });
+
+    const preview = await previewRecoveryCandidate({
+      id: "dir-candidate",
+      sourceType: "directory",
+      sourcePath: userDataPath,
+      displayPath: userDataPath,
+      promptCount: 1,
+      folderCount: 1,
+      skillCount: 0,
+      dbSizeBytes: fs.statSync(path.join(userDataPath, "data", "prompthub.db")).size,
+      hasDatabaseFile: true,
+      hasWorkspaceData: false,
+      hasBrowserStorage: false,
+      title: "Unified data",
+      description: "Unified data dir",
+      previewAvailable: true,
+    });
+
+    expect(preview.previewAvailable).toBe(true);
+    expect(preview.items.some((item) => item.kind === "prompt")).toBe(true);
+  });
 });

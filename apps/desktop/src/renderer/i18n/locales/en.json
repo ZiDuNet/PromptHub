@@ -255,6 +255,8 @@
     "pageSize": "Per page",
     "movedToFolder": "Moved to folder",
     "dataPathChanged": "Data path changed",
+    "databaseFile": "Primary Database",
+    "promptsData": "Prompt Files",
     "batchFavorited": "Batch favorited",
     "batchMoved": "Batch moved",
     "batchDeleted": "Batch deleted",

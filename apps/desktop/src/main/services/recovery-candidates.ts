@@ -598,7 +598,9 @@ export async function previewRecoveryCandidate(
     return previewFromSqlite(candidate.sourcePath);
   }
 
-  const sqlitePath = path.join(candidate.sourcePath, "prompthub.db");
+  const sqlitePath = fs.existsSync(path.join(candidate.sourcePath, "data", "prompthub.db"))
+    ? path.join(candidate.sourcePath, "data", "prompthub.db")
+    : path.join(candidate.sourcePath, "prompthub.db");
   if (fs.existsSync(sqlitePath)) {
     return previewFromSqlite(sqlitePath);
   }

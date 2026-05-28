@@ -254,6 +254,8 @@
     "pageSize": "Pro Seite",
     "movedToFolder": "In Ordner verschoben",
     "dataPathChanged": "Datenpfad geändert",
+    "databaseFile": "Hauptdatenbank",
+    "promptsData": "Prompt-Dateien",
     "batchFavorited": "Zu Favoriten hinzugefügt",
     "batchMoved": "Stapelweise verschoben",
     "batchDeleted": "Stapelweise gelöscht",

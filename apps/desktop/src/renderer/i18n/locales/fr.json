@@ -254,6 +254,8 @@
     "pageSize": "Par page",
     "movedToFolder": "Déplacé vers le dossier",
     "dataPathChanged": "Chemin des données modifié",
+    "databaseFile": "Base de données principale",
+    "promptsData": "Fichiers de prompt",
     "batchFavorited": "Ajoutés aux favoris",
     "batchMoved": "Déplacés en lot",
     "batchDeleted": "Supprimés en lot",

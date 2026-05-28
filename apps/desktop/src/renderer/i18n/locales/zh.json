@@ -256,6 +256,8 @@
     "pageSize": "每页",
     "movedToFolder": "已移动到文件夹",
     "dataPathChanged": "数据路径已更改",
+    "databaseFile": "主数据库",
+    "promptsData": "Prompt 文件",
     "batchFavorited": "已批量收藏",
     "batchMoved": "已批量移动",
     "batchDeleted": "已批量删除",

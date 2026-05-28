@@ -17,6 +17,7 @@ const LAYOUT_MIGRATION_MARKER = ".data-layout-v0.5.5.json";
  */
 const ROOT_TO_DATA_DIRS = ["workspace", "skills", "images", "videos"] as const;
 const ROOT_TO_CONFIG_FILES = ["shortcuts.json", "shortcut-mode.json"] as const;
+const ROOT_TO_DATA_FILES = ["prompthub.db"] as const;
 
 export type DataLayoutMigrationStatus =
   | "already-migrated"
@@ -38,6 +39,7 @@ interface LayoutMarkerRecord {
   movedEntries: string[];
   failedEntries?: string[];
   backupId?: string;
+  dbLayoutVersion?: string;
 }
 
 function getMarkerPath(userDataPath: string): string {
@@ -106,6 +108,19 @@ function ensureSameFileContents(sourcePath: string, targetPath: string): void {
       `[data-layout-migration] File verification failed for "${sourcePath}": ` +
         `target "${targetPath}" exists but content differs.`,
     );
+  }
+}
+
+function areFilesByteIdentical(sourcePath: string, targetPath: string): boolean {
+  if (!fs.existsSync(sourcePath) || !fs.existsSync(targetPath)) {
+    return false;
+  }
+
+  try {
+    ensureSameFileContents(sourcePath, targetPath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -228,7 +243,38 @@ function moveFile(sourcePath: string, targetPath: string): void {
   fs.rmSync(sourcePath, { force: true });
 }
 
+function moveDatabaseFile(sourcePath: string, targetPath: string): void {
+  if (!fs.existsSync(sourcePath)) {
+    return;
+  }
+
+  ensureDir(path.dirname(targetPath));
+
+  if (!fs.existsSync(targetPath)) {
+    try {
+      fs.renameSync(sourcePath, targetPath);
+      return;
+    } catch {
+      // Fall through to copy/verify.
+    }
+  }
+
+  // A pre-existing target DB is only safe when it is byte-identical to the
+  // source DB we are migrating from. Otherwise keep the source in place and
+  // surface a conflict so startup continues to read the legacy root DB.
+  if (!areFilesByteIdentical(sourcePath, targetPath)) {
+    throw new Error(
+      `[data-layout-migration] Refusing to migrate database: target "${targetPath}" already exists with different content.`,
+    );
+  }
+
+  fs.rmSync(sourcePath, { force: true });
+}
+
 function getTargetPath(userDataPath: string, entryName: string): string {
+  if (entryName === "prompthub.db") {
+    return path.join(userDataPath, "data", "prompthub.db");
+  }
   if (entryName === "workspace") {
     return path.join(userDataPath, "data");
   }
@@ -263,6 +309,12 @@ function detectLegacyEntries(userDataPath: string): string[] {
     }
   }
 
+  for (const fileName of ROOT_TO_DATA_FILES) {
+    if (hasDataEntries(path.join(userDataPath, fileName))) {
+      entries.push(fileName);
+    }
+  }
+
   for (const fileName of ROOT_TO_CONFIG_FILES) {
     if (hasDataEntries(path.join(userDataPath, fileName))) {
       entries.push(fileName);
@@ -278,11 +330,16 @@ function writeMarker(
   failedEntries: string[],
   backupId: string | null,
 ): string {
+  const dbLayoutVersion =
+    movedEntries.includes("prompthub.db") && !failedEntries.includes("prompthub.db")
+      ? "0.5.7"
+      : undefined;
   const markerPath = getMarkerPath(userDataPath);
   const payload: LayoutMarkerRecord = {
     version: "0.5.5",
     migratedAt: new Date().toISOString(),
     movedEntries,
+    ...(dbLayoutVersion ? { dbLayoutVersion } : {}),
     ...(failedEntries.length > 0 ? { failedEntries } : {}),
     ...(backupId ? { backupId } : {}),
   };
@@ -324,6 +381,9 @@ export function isDataLayoutFullyMigrated(userDataPath: string): boolean {
       fs.readFileSync(markerPath, "utf8"),
     ) as Partial<LayoutMarkerRecord>;
     const failed = record.failedEntries ?? [];
+    if (record.dbLayoutVersion !== "0.5.7") {
+      return false;
+    }
     return failed.every(
       (entry) => !hasDataEntries(path.join(path.resolve(userDataPath), entry)),
     );
@@ -350,6 +410,12 @@ export function detectResidualLegacyEntries(userDataPath: string): string[] {
     }
   }
 
+  for (const fileName of ROOT_TO_DATA_FILES) {
+    if (hasDataEntries(path.join(resolved, fileName))) {
+      residual.push(fileName);
+    }
+  }
+
   for (const fileName of ROOT_TO_CONFIG_FILES) {
     if (hasDataEntries(path.join(resolved, fileName))) {
       residual.push(fileName);
@@ -370,8 +436,9 @@ export async function migrateLegacyDataLayout(
   const residualEntries = detectResidualLegacyEntries(resolvedUserDataPath);
   const legacyEntries =
     previousMarker !== null ? residualEntries : detectLegacyEntries(resolvedUserDataPath);
+  const previousDbMigrationComplete = previousMarker?.dbLayoutVersion === "0.5.7";
 
-  if (previousMarker !== null && legacyEntries.length === 0) {
+  if (previousMarker !== null && legacyEntries.length === 0 && previousDbMigrationComplete) {
     return {
       status: "already-migrated",
       backupId: null,
@@ -382,6 +449,22 @@ export async function migrateLegacyDataLayout(
   }
 
   if (legacyEntries.length === 0) {
+    if (previousMarker !== null && !previousDbMigrationComplete) {
+      const writtenMarkerPath = writeMarker(
+        resolvedUserDataPath,
+        previousMarker.movedEntries ?? [],
+        previousMarker.failedEntries ?? [],
+        previousMarker.backupId ?? null,
+      );
+      return {
+        status: "already-migrated",
+        backupId: previousMarker.backupId ?? null,
+        movedEntries: previousMarker.movedEntries ?? [],
+        failedEntries: previousMarker.failedEntries ?? [],
+        markerPath: writtenMarkerPath,
+      };
+    }
+
     return {
       status: "no-legacy-data",
       backupId: null,
@@ -409,6 +492,8 @@ export async function migrateLegacyDataLayout(
       const stat = fs.statSync(sourcePath);
       if (stat.isDirectory()) {
         moveDirectory(sourcePath, targetPath);
+      } else if (entryName === "prompthub.db") {
+        moveDatabaseFile(sourcePath, targetPath);
       } else {
         moveFile(sourcePath, targetPath);
       }

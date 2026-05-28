@@ -203,6 +203,49 @@ Check deployment health for {{service}}.
     expect(versions[0].id).toBe("version_1");
   });
 
+  it("imports nested folders even when child metadata is encountered before parent", () => {
+    const promptsDir = getPromptsWorkspaceDir();
+    fs.mkdirSync(path.join(promptsDir, "parent", "child"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(promptsDir, "parent", "child", FOLDER_METADATA_FILE_NAME),
+      JSON.stringify(
+        {
+          id: "folder_child",
+          name: "Child",
+          parentId: "folder_parent",
+          order: 1,
+          createdAt: "2026-04-13T00:00:00.000Z",
+          updatedAt: "2026-04-13T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(promptsDir, "parent", FOLDER_METADATA_FILE_NAME),
+      JSON.stringify(
+        {
+          id: "folder_parent",
+          name: "Parent",
+          order: 0,
+          createdAt: "2026-04-13T00:00:00.000Z",
+          updatedAt: "2026-04-13T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const imported = importPromptWorkspaceIntoDatabase(promptDb, folderDb);
+
+    expect(imported.folderCount).toBe(2);
+    const childFolder = folderDb.getById("folder_child");
+    expect(childFolder?.parentId).toBe("folder_parent");
+  });
+
   it("bootstraps from workspace when database is empty (Q3: workspace-only)", () => {
     writeLegacyFolderList(getWorkspaceDir(), []);
     writeLegacyPromptDir(

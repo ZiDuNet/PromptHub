@@ -254,6 +254,8 @@
     "pageSize": "ページあたり",
     "movedToFolder": "フォルダに移動しました",
     "dataPathChanged": "データパスが変更されました",
+    "databaseFile": "メインデータベース",
+    "promptsData": "Prompt ファイル",
     "batchFavorited": "一括お気に入り登録しました",
     "batchMoved": "一括移動しました",
     "batchDeleted": "一括削除しました",

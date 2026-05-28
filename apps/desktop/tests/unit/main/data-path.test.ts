@@ -236,6 +236,29 @@ describe("data path bootstrap", () => {
     );
   });
 
+  it("prefers unified database markers inside data directory", () => {
+    const userDataDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "prompthub-unified-target-"),
+    );
+    tempDirs.push(userDataDir);
+
+    fs.mkdirSync(path.join(userDataDir, "data"), { recursive: true });
+    fs.writeFileSync(
+      path.join(userDataDir, "data", "prompthub.db"),
+      "db",
+      "utf8",
+    );
+
+    const inspection = inspectDataPath(userDataDir);
+
+    expect(inspection.markers.map((marker) => marker.name)).toEqual(
+      expect.arrayContaining(["data", "data/prompthub.db"]),
+    );
+    expect(inspection.markers.map((marker) => marker.name)).not.toContain(
+      "prompthub.db",
+    );
+  });
+
   it("does not report data markers for a missing target directory", () => {
     const userDataDir = path.join(
       os.tmpdir(),

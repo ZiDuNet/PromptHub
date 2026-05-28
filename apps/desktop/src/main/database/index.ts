@@ -18,6 +18,7 @@ import {
 import type { InitDatabaseHooks } from "@prompthub/db";
 import {
   getLegacyPromptsWorkspaceDir,
+  getDatabasePath,
   getLegacyWorkspaceDir,
   getSkillsDir,
   getUserDataPath,
@@ -64,11 +65,6 @@ const BROWSER_STORAGE_DIRS = [
 const FILE_STORAGE_DIRS = ["workspace", "data"];
 
 // ── Path resolution ──────────────────────────────────────────────────────────
-
-function getDbPath(): string {
-  const userDataPath = getUserDataPath();
-  return path.join(userDataPath, "prompthub.db");
-}
 
 // ── Skill repo path resolution hook ──────────────────────────────────────────
 
@@ -162,7 +158,7 @@ function ensurePreUpgradeBackup(dbPath: string): void {
  * Initialize database with desktop-specific path resolution and hooks.
  */
 export function initDatabase(): DatabaseAdapter.Database {
-  const dbPath = getDbPath();
+  const dbPath = getDatabasePath();
   ensurePreUpgradeBackup(dbPath);
   const hooks: InitDatabaseHooks = {
     resolveSkillRepoPath,
@@ -188,7 +184,7 @@ export function detectRecoverableDatabases(
       continue;
     }
 
-    const dbFile = path.join(candidate, "prompthub.db");
+    const dbFile = getCanonicalDbPath(candidate);
     const browserStorageBytes = getBrowserStorageBytes(candidate);
     const fileStorageBytes = getFileStorageBytes(candidate);
     const workspaceStats = getWorkspaceRecoveryStats(candidate);
@@ -286,7 +282,7 @@ export function detectRecoverableDatabaseFiles(
 ): RecoverableDatabase[] {
   const results: RecoverableDatabase[] = [];
   const normalizedCurrentDb = path
-    .resolve(path.join(currentDataPath, "prompthub.db"))
+    .resolve(getDatabasePath())
     .toLowerCase();
 
   for (const candidateFile of candidateFiles) {
@@ -381,8 +377,8 @@ export function performDatabaseRecovery(
   const sourceStat = sourceExists ? fs.statSync(sourcePath) : null;
   const sourceIsDbFile =
     sourceStat?.isFile() === true && path.extname(sourcePath).toLowerCase() === ".db";
-  const sourceDb = sourceIsDbFile ? sourcePath : path.join(sourcePath, "prompthub.db");
-  const targetDb = path.join(currentDataPath, "prompthub.db");
+  const sourceDb = sourceIsDbFile ? sourcePath : getCanonicalDbPath(sourcePath);
+  const targetDb = getCanonicalDbPath(currentDataPath);
 
   if (
     !fs.existsSync(sourceDb) &&
@@ -409,6 +405,7 @@ export function performDatabaseRecovery(
 
     // 2. Copy source database over current
     if (fs.existsSync(sourceDb)) {
+      fs.mkdirSync(path.dirname(targetDb), { recursive: true });
       fs.copyFileSync(sourceDb, targetDb);
       console.log(`[Recovery] Copied database from ${sourceDb} to ${targetDb}`);
     }
@@ -423,7 +420,9 @@ export function performDatabaseRecovery(
         ...BROWSER_STORAGE_DIRS,
       ];
       for (const dir of assetDirs) {
-        const sourceDir = path.join(sourcePath, dir);
+        const sourceDir = fs.existsSync(path.join(sourcePath, "data", dir))
+          ? path.join(sourcePath, "data", dir)
+          : path.join(sourcePath, dir);
         const targetDir = path.join(currentDataPath, dir);
         if (fs.existsSync(sourceDir) && fs.statSync(sourceDir).isDirectory()) {
           copyDirMerge(sourceDir, targetDir);
@@ -572,6 +571,18 @@ function getFileStorageBytes(basePath: string): number {
   return FILE_STORAGE_DIRS.reduce((total, dirName) => {
     return total + getDirectorySize(path.join(basePath, dirName));
   }, 0);
+}
+
+function getCanonicalDbPath(basePath: string): string {
+  const unifiedDbPath = path.join(basePath, "data", "prompthub.db");
+  const legacyDbPath = path.join(basePath, "prompthub.db");
+  if (fs.existsSync(unifiedDbPath)) {
+    return unifiedDbPath;
+  }
+  if (fs.existsSync(legacyDbPath)) {
+    return legacyDbPath;
+  }
+  return unifiedDbPath;
 }
 
 function getDirectorySize(targetPath: string): number {

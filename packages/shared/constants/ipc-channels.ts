@@ -66,6 +66,7 @@ export const IPC_CHANNELS = {
   APP_RELAUNCH: "app:relaunch",
   APP_GET_CACHE_SIZE: "app:getCacheSize",
   APP_CLEAR_CACHE: "app:clearCache",
+  APP_GET_RUNTIME_PATHS: "app:getRuntimePaths",
 
   // AI transport
   AI_HTTP_REQUEST: "ai:httpRequest",

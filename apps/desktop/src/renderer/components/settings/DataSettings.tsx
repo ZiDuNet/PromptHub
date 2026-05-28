@@ -228,6 +228,16 @@ export function DataSettings({
   const [showRecoveryBrowser, setShowRecoveryBrowser] = useState(false);
   const [pendingDataPathChange, setPendingDataPathChange] =
     useState<DataPathChangePreview | null>(null);
+  const [runtimePaths, setRuntimePaths] = useState<null | {
+    userDataPath: string;
+    dataDir: string;
+    databasePath: string;
+    promptsDir: string;
+    rulesDir: string;
+    skillsDir: string;
+    backupsDir: string;
+    logsDir: string;
+  }>(null);
   const [dataPathActionLoading, setDataPathActionLoading] = useState(false);
   const [cacheSize, setCacheSize] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
@@ -239,6 +249,18 @@ export function DataSettings({
   useEffect(() => {
     void window.electron?.getCacheSize?.().then((res) => setCacheSize(res.size));
   }, []);
+
+  useEffect(() => {
+    if (webRuntime) {
+      return;
+    }
+
+    void window.electron?.getRuntimePaths?.().then((paths) => {
+      if (paths) {
+        setRuntimePaths(paths);
+      }
+    });
+  }, [webRuntime]);
 
   const restartApp = async () => {
     if (window.electron?.relaunchApp) {
@@ -2423,27 +2445,37 @@ export function DataSettings({
                   {[
                     {
                       label: t("settings.applicationData", "应用数据"),
-                      path: normalizedDataPath,
+                      path: runtimePaths?.userDataPath ?? normalizedDataPath,
+                      actionLabel: t("settings.openFolder"),
+                    },
+                    {
+                      label: t("settings.databaseFile", "主数据库"),
+                      path: runtimePaths?.databasePath ?? `${normalizedDataPath}/data/prompthub.db`,
+                      actionLabel: t("settings.openFolder"),
+                    },
+                    {
+                      label: t("settings.promptsData", "Prompt 文件"),
+                      path: runtimePaths?.promptsDir ?? `${normalizedDataPath}/data/prompts`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.applicationLogs", "应用日志"),
-                      path: `${normalizedDataPath}/logs`,
+                      path: runtimePaths?.logsDir ?? `${normalizedDataPath}/logs`,
                       actionLabel: t("settings.openLogs", "打开日志"),
                     },
                     {
                       label: t("settings.rulesData", "规则文件"),
-                      path: `${normalizedDataPath}/rules`,
+                      path: runtimePaths?.rulesDir ?? `${normalizedDataPath}/data/rules`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.skillsData", "Skills 目录"),
-                      path: `${normalizedDataPath}/data`,
+                      path: runtimePaths?.skillsDir ?? `${normalizedDataPath}/data/skills`,
                       actionLabel: t("settings.openFolder"),
                     },
                     {
                       label: t("settings.backupsData", "备份目录"),
-                      path: `${normalizedDataPath}/backups`,
+                      path: runtimePaths?.backupsDir ?? `${normalizedDataPath}/backups`,
                       actionLabel: t("settings.openFolder"),
                     },
                   ].map((item) => (

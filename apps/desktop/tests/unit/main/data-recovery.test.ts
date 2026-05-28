@@ -66,6 +66,19 @@ function createTestDatabase(
   db.close();
 }
 
+function createUnifiedTestDatabase(
+  dirPath: string,
+  options: {
+    prompts?: number;
+    folders?: number;
+    skills?: number;
+  } = {},
+): void {
+  const dataDir = path.join(dirPath, "data");
+  fs.mkdirSync(dataDir, { recursive: true });
+  createTestDatabase(dataDir, options);
+}
+
 function createRendererStorage(
   dirPath: string,
   fileName = "IndexedDB/file__0.indexeddb.leveldb/LOG",
@@ -169,6 +182,23 @@ describe("Data Recovery", () => {
       expect(results[0].folderCount).toBe(2);
       expect(results[0].skillCount).toBe(3);
       expect(results[0].dbSizeBytes).toBeGreaterThan(0);
+    });
+
+    it("detects a recoverable unified-layout database under data/prompthub.db", () => {
+      const currentDir = path.join(tmpBase, "current");
+      fs.mkdirSync(currentDir);
+      createTestDatabase(currentDir);
+
+      const candidateDir = path.join(tmpBase, "candidate-unified");
+      fs.mkdirSync(candidateDir);
+      createUnifiedTestDatabase(candidateDir, { prompts: 4, folders: 2, skills: 1 });
+
+      const results = detectRecoverableDatabases(currentDir, [candidateDir]);
+      expect(results).toHaveLength(1);
+      expect(results[0].sourcePath).toBe(candidateDir);
+      expect(results[0].promptCount).toBe(4);
+      expect(results[0].folderCount).toBe(2);
+      expect(results[0].skillCount).toBe(1);
     });
 
     it("skips candidates with zero prompts", () => {
@@ -618,7 +648,7 @@ describe("Data Recovery", () => {
 
       // Verify the data was copied
       const recoveredDb = new DatabaseAdapter(
-        path.join(targetDir, "prompthub.db"),
+        path.join(targetDir, "data", "prompthub.db"),
         { readonly: true },
       );
       const row = recoveredDb

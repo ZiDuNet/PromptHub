@@ -353,6 +353,29 @@ function readFoldersFile(workspaceDir: string, promptsDir: string): Folder[] {
   return [...merged.values()];
 }
 
+function canImportFolder(
+  folder: Folder,
+  insertedFolderIds: Set<string>,
+  pendingFolderIds: Set<string>,
+): boolean {
+  if (!folder.parentId) {
+    return true;
+  }
+
+  if (insertedFolderIds.has(folder.parentId)) {
+    return true;
+  }
+
+  // Parent still pending in this batch, so defer until a later pass.
+  if (pendingFolderIds.has(folder.parentId)) {
+    return false;
+  }
+
+  // Parent is not pending and not already in DB; allow the insert attempt so
+  // the caller can log the FK failure as a real missing-parent issue.
+  return true;
+}
+
 function getFolderMetadataPath(folderDir: string): string {
   return path.join(folderDir, FOLDER_METADATA_FILE_NAME);
 }
@@ -1046,34 +1069,73 @@ export function importPromptWorkspaceIntoDatabase(
   const existingFolders = options.onlyIfNewer
     ? new Map(folderDb.getAll().map((folder) => [folder.id, folder] as const))
     : null;
+  const insertedFolderIds = new Set(folderDb.getAll().map((folder) => folder.id));
   let importedFolders = 0;
   let skippedFolders = 0;
-  for (const folder of folders) {
-    if (existingFolders) {
-      const existing = existingFolders.get(folder.id);
-      if (
-        existing &&
-        toEpochMs(existing.updatedAt) >= toEpochMs(folder.updatedAt)
-      ) {
+  const pendingFolders = [...folders];
+  while (pendingFolders.length > 0) {
+    const pendingFolderIds = new Set(pendingFolders.map((folder) => folder.id));
+    let progressMade = false;
+
+    for (let index = 0; index < pendingFolders.length; ) {
+      const folder = pendingFolders[index];
+      if (!canImportFolder(folder, insertedFolderIds, pendingFolderIds)) {
+        index += 1;
         continue;
       }
+
+      if (existingFolders) {
+        const existing = existingFolders.get(folder.id);
+        if (
+          existing &&
+          toEpochMs(existing.updatedAt) >= toEpochMs(folder.updatedAt)
+        ) {
+          insertedFolderIds.add(folder.id);
+          pendingFolders.splice(index, 1);
+          progressMade = true;
+          continue;
+        }
+      }
+
+      // v0.5.3: per-item try/catch — a single malformed folder (e.g. unknown
+      // columns from a newer/older schema, FK violation on parent_id) must not
+      // abort the entire bootstrap. Skip and log; the Release Notes instructs
+      // users to share startup.log if data is missing.
+      // v0.5.3: 单条 try/catch —— 单个畸形 folder（比如 schema 版本不匹配、父 id
+      // 外键冲突）不得中断整个 bootstrap。跳过并记录日志；若数据缺失，
+      // 用户可在 Release Notes 指引下提供 startup.log。
+      try {
+        folderDb.insertFolderDirect(folder);
+        insertedFolderIds.add(folder.id);
+        importedFolders++;
+      } catch (error) {
+        skippedFolders++;
+        console.error(
+          `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
+          error,
+        );
+      }
+
+      pendingFolders.splice(index, 1);
+      progressMade = true;
     }
-    // v0.5.3: per-item try/catch — a single malformed folder (e.g. unknown
-    // columns from a newer/older schema, FK violation on parent_id) must not
-    // abort the entire bootstrap. Skip and log; the Release Notes instructs
-    // users to share startup.log if data is missing.
-    // v0.5.3: 单条 try/catch —— 单个畸形 folder（比如 schema 版本不匹配、父 id
-    // 外键冲突）不得中断整个 bootstrap。跳过并记录日志；若数据缺失，
-    // 用户可在 Release Notes 指引下提供 startup.log。
-    try {
-      folderDb.insertFolderDirect(folder);
-      importedFolders++;
-    } catch (error) {
-      skippedFolders++;
-      console.error(
-        `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
-        error,
-      );
+
+    if (!progressMade) {
+      // Remaining folders are stuck behind cycles or missing parents; attempt
+      // them once each so we surface the concrete FK errors in the log.
+      for (const folder of pendingFolders.splice(0)) {
+        try {
+          folderDb.insertFolderDirect(folder);
+          insertedFolderIds.add(folder.id);
+          importedFolders++;
+        } catch (error) {
+          skippedFolders++;
+          console.error(
+            `[prompt-workspace] failed to import folder ${folder.id} (${folder.name}):`,
+            error,
+          );
+        }
+      }
     }
   }
 

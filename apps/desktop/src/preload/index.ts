@@ -165,6 +165,17 @@ contextBridge.exposeInMainWorld("electron", {
   relaunchApp: () => ipcRenderer.invoke(IPC_CHANNELS.APP_RELAUNCH),
   getCacheSize: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_CACHE_SIZE) as Promise<{ size: number }>,
   clearCache: () => ipcRenderer.invoke(IPC_CHANNELS.APP_CLEAR_CACHE) as Promise<{ success: boolean }>,
+  getRuntimePaths: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.APP_GET_RUNTIME_PATHS) as Promise<{
+      userDataPath: string;
+      dataDir: string;
+      databasePath: string;
+      promptsDir: string;
+      rulesDir: string;
+      skillsDir: string;
+      backupsDir: string;
+      logsDir: string;
+    }>,
   setDebugMode: (enabled: boolean) =>
     ipcRenderer.send("app:setDebugMode", enabled),
   toggleDevTools: () => ipcRenderer.send("window:toggleDevTools"),
@@ -437,6 +448,16 @@ declare global {
       relaunchApp?: () => Promise<{ success: boolean }>;
       getCacheSize?: () => Promise<{ size: number }>;
       clearCache?: () => Promise<{ success: boolean }>;
+      getRuntimePaths?: () => Promise<{
+        userDataPath: string;
+        dataDir: string;
+        databasePath: string;
+        promptsDir: string;
+        rulesDir: string;
+        skillsDir: string;
+        backupsDir: string;
+        logsDir: string;
+      }>;
       setDebugMode?: (enabled: boolean) => void;
       toggleDevTools?: () => void;
       setMinimizeToTray?: (enabled: boolean) => void;

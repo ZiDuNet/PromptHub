@@ -6,7 +6,6 @@ const CONFIG_FILE_NAME = "data-path.json";
 export const LEGACY_PRODUCT_NAME = "PromptHub";
 
 export const DATA_MARKERS = [
-  "prompthub.db",
   "data",
   "config",
   "backups",
@@ -181,6 +180,22 @@ export function inspectDataPath(targetPath: string): DataPathInspection {
       ];
     }
   });
+
+  const legacyDbPath = path.join(resolvedTargetPath, "prompthub.db");
+  const unifiedDbPath = path.join(resolvedTargetPath, "data", "prompthub.db");
+  if (fs.existsSync(unifiedDbPath)) {
+    markers.push({
+      name: "data/prompthub.db",
+      path: unifiedDbPath,
+      type: "file",
+    });
+  } else if (fs.existsSync(legacyDbPath)) {
+    markers.push({
+      name: "prompthub.db",
+      path: legacyDbPath,
+      type: "file",
+    });
+  }
 
   return {
     targetPath: resolvedTargetPath,

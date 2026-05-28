@@ -32,6 +32,21 @@ function getRestoreCandidates(currentDataPath: string, backupPath: string): stri
   );
 }
 
+function ensureLegacyDbCompatibility(currentDataPath: string): void {
+  const legacyDbPath = path.join(currentDataPath, "prompthub.db");
+  const unifiedDbPath = path.join(currentDataPath, "data", "prompthub.db");
+
+  if (fs.existsSync(unifiedDbPath) && fs.existsSync(legacyDbPath)) {
+    fs.rmSync(legacyDbPath, { force: true });
+    return;
+  }
+
+  if (fs.existsSync(legacyDbPath) && !fs.existsSync(unifiedDbPath)) {
+    fs.mkdirSync(path.dirname(unifiedDbPath), { recursive: true });
+    fs.renameSync(legacyDbPath, unifiedDbPath);
+  }
+}
+
 function removePathIfExists(targetPath: string): void {
   if (!fs.existsSync(targetPath)) {
     return;
@@ -65,6 +80,8 @@ function restoreSnapshotIntoCurrentData(
     removePathIfExists(targetPath);
     restoreEntry(sourcePath, targetPath);
   }
+
+  ensureLegacyDbCompatibility(currentDataPath);
 }
 
 export async function restoreFromUpgradeBackupAsync(

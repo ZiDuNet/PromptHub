@@ -52,7 +52,7 @@ describe("upgrade-backup-restore", () => {
     expect(result.needsRestart).toBe(true);
     expect(result.currentStateBackupPath).toBeTruthy();
 
-    expect(fs.readFileSync(path.join(userDataPath, "prompthub.db"), "utf8")).toBe(
+    expect(fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8")).toBe(
       "old-db",
     );
     expect(
@@ -110,6 +110,30 @@ describe("upgrade-backup-restore", () => {
     ).toBe("live-cache");
   });
 
+  it("moves a legacy root database into data/prompthub.db during restore", async () => {
+    const userDataPath = path.join(tmpBase, "PromptHub");
+    fs.mkdirSync(userDataPath, { recursive: true });
+    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "old-db");
+
+    const snapshot = await createUpgradeDataSnapshot(userDataPath, {
+      fromVersion: "0.5.6",
+      toVersion: "0.5.7",
+    });
+
+    fs.writeFileSync(path.join(userDataPath, "prompthub.db"), "new-db");
+
+    const result = await restoreFromUpgradeBackupAsync(
+      userDataPath,
+      snapshot.backupId,
+    );
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(path.join(userDataPath, "prompthub.db"))).toBe(false);
+    expect(
+      fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8"),
+    ).toBe("old-db");
+  });
+
   it("rolls back to the insurance snapshot when restore fails mid-flight", async () => {
     const userDataPath = path.join(tmpBase, "PromptHub");
     fs.mkdirSync(userDataPath, { recursive: true });
@@ -151,7 +175,7 @@ describe("upgrade-backup-restore", () => {
       needsRestart: false,
       error: "simulated restore failure",
     });
-    expect(fs.readFileSync(path.join(userDataPath, "prompthub.db"), "utf8")).toBe(
+    expect(fs.readFileSync(path.join(userDataPath, "data", "prompthub.db"), "utf8")).toBe(
       "new-db",
     );
     expect(

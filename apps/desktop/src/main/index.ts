@@ -50,6 +50,8 @@ import {
 } from "./data-path";
 import {
   configureRuntimePaths,
+  getDataDir,
+  getDatabasePath,
   getImagesDir,
   getRulesDir,
   getVideosDir,
@@ -504,6 +506,17 @@ ipcMain.on("app:setMinimizeToTray", (_event, enabled: boolean) => {
     destroyTray();
   }
 });
+
+ipcMain.handle(IPC_CHANNELS.APP_GET_RUNTIME_PATHS, async () => ({
+  userDataPath: app.getPath("userData"),
+  dataDir: getDataDir(),
+  databasePath: getDatabasePath(),
+  promptsDir: getPromptsWorkspaceDir(),
+  rulesDir: getRulesDir(),
+  skillsDir: getSkillsDir(),
+  backupsDir: path.join(app.getPath("userData"), "backups"),
+  logsDir: path.join(app.getPath("userData"), "logs"),
+}));
 
 // Set close action (Windows)
 // 设置关闭行为 (Windows)
