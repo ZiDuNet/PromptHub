@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants";
 import type {
+  RegistrySkill,
   SkillSafetyScanInput,
   SkillSafetyReport,
 } from "@prompthub/shared/types";
@@ -258,6 +259,19 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         );
       }
       return await SkillInstaller.fetchRemoteContentBytes(url);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_SCAN_REMOTE_GITHUB,
+    async (_, repoUrl: string, registrySkills: RegistrySkill[]) => {
+      if (typeof repoUrl !== "string" || repoUrl.trim().length === 0) {
+        throw new Error("skill:scanRemoteGithub requires a non-empty repoUrl");
+      }
+      if (!Array.isArray(registrySkills)) {
+        throw new Error("skill:scanRemoteGithub requires registrySkills to be an array");
+      }
+      return SkillInstaller.scanRemoteGithub(repoUrl, registrySkills);
     },
   );
 }

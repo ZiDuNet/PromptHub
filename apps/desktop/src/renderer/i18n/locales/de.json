@@ -1500,7 +1500,7 @@
     "namePlaceholder": "my-skill",
     "githubUrl": "GitHub-Repository-URL",
     "githubUrlHint": "Verwenden Sie die Root-URL des Repositories. PromptHub klont das Repo und bevorzugt SKILL.md, andernfalls README.md.",
-    "githubConstraintHint": "Aktuell werden nur Root-URLs von Repositories unterstützt, z. B. https://github.com/owner/repo",
+    "githubConstraintHint": "Aktuell werden nur Root-URLs von Repositories unterstützt, z. B. https://github.com/owner/repo oder git@github.com:owner/repo.git",
     "githubFallbackHint": "Falls SKILL.md fehlt, versucht PromptHub README.md zu verwenden. Für eine Neuinstallation muss die alte Kopie derzeit zuerst gelöscht werden.",
     "enterGithubUrl": "Bitte geben Sie eine GitHub-URL ein",
     "invalidGithubUrl": "Ungültiges GitHub-URL-Format",

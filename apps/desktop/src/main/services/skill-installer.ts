@@ -15,11 +15,13 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type {
+  RegistrySkill,
   SafetyScanAIConfig,
   ScannedSkill,
   ScanLocalResult,
   SkillManifest,
 } from "@prompthub/shared/types";
+import { parseGithubRepo } from "@prompthub/shared/utils/github-repo";
 import { installSkillFromSource } from "../../../../../packages/core/src/skills/install-flow";
 import { initDatabase } from "@/main/database";
 import { SkillDB } from "@/main/database/skill";
@@ -242,17 +244,14 @@ export class SkillInstaller {
   static async installFromGithub(url: string, db: SkillDB): Promise<string> {
     await this.init();
 
-    // Validate and extract owner/repo from GitHub URL
-    const matches = url.match(
-      /^https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/,
-    );
-    if (!matches) {
+    const parsedRepo = parseGithubRepo(url);
+    if (!parsedRepo) {
       throw new Error(
-        "Invalid GitHub URL: must be https://github.com/{owner}/{repo}",
+        "Invalid GitHub URL: must be https://github.com/{owner}/{repo} or git@github.com:{owner}/{repo}.git",
       );
     }
-    const userDir = matches[1];
-    const repoName = matches[2];
+    const userDir = parsedRepo.owner;
+    const repoName = parsedRepo.repo;
     const installDir = path.join(this.skillsDir, `${userDir}-${repoName}`);
 
     // Validate installDir is inside skillsDir before writing to DB
@@ -290,8 +289,8 @@ export class SkillInstaller {
     }
 
     try {
-      console.log(`Cloning ${url} to ${installDir}`);
-      await gitClone(url, installDir);
+      console.log(`Cloning ${parsedRepo.cloneUrl} to ${installDir}`);
+      await gitClone(parsedRepo.cloneUrl, installDir);
       const skillDir = await this.resolveSingleSkillDirFromRepo(installDir);
 
       // Parse metadata
@@ -579,6 +578,56 @@ export class SkillInstaller {
     }
 
     return skillDirs[0];
+  }
+
+  static async scanRemoteGithub(
+    repoUrl: string,
+    registrySkills: RegistrySkill[],
+  ): Promise<RegistrySkill[]> {
+    await this.init();
+
+    const parsedRepo = parseGithubRepo(repoUrl);
+    if (!parsedRepo) {
+      throw new Error(
+        "Invalid GitHub URL: must be https://github.com/{owner}/{repo} or git@github.com:{owner}/{repo}.git",
+      );
+    }
+
+    if (parsedRepo.protocol !== "ssh") {
+      throw new Error("scanRemoteGithub only supports SSH repository URLs");
+    }
+
+    const tempRoot = await fs.mkdtemp(path.join(this.skillsDir, ".remote-scan-"));
+    const repoDir = path.join(tempRoot, `${parsedRepo.owner}-${parsedRepo.repo}`);
+
+    try {
+      await gitClone(parsedRepo.cloneUrl, repoDir);
+      const scannedSkills = await this.scanLocalPreview([repoDir]);
+
+      return scannedSkills.map((skill) => {
+        const builtin = registrySkills.find((item) => item.slug === skill.name.toLowerCase());
+        return {
+          slug: skill.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+          name: builtin?.name || skill.name,
+          install_name: skill.name,
+          description: builtin?.description || skill.description || `${skill.name} skill`,
+          category: builtin?.category || "general",
+          icon_url: builtin?.icon_url,
+          icon_background: builtin?.icon_background,
+          icon_emoji: builtin?.icon_emoji,
+          author: builtin?.author || skill.author || parsedRepo.owner,
+          source_url: skill.localPath,
+          tags: builtin?.tags?.length ? builtin.tags : skill.tags,
+          version: builtin?.version || skill.version || "1.0.0",
+          content: skill.instructions,
+          content_url: skill.localPath,
+          prerequisites: builtin?.prerequisites,
+          compatibility: builtin?.compatibility || ["claude", "cursor"],
+        } satisfies RegistrySkill;
+      });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   static async scanLocal(db: SkillDB): Promise<ScanLocalResult> {

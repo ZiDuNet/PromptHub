@@ -465,6 +465,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     try {
       const match = githubUrl
         .trim()
+        .replace(/^git@github\.com:/, "https://github.com/")
         .match(
           /^https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/,
         );
@@ -474,22 +475,27 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
         );
       }
 
-      const scannedSkills = await loadGitHubSkillRepo(githubUrl.trim(), {
-        fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
-        registrySkills: BUILTIN_SKILL_REGISTRY,
-        rateLimitMessage: t(
-          "skill.remoteStoreRateLimitHint",
-          "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
-        ),
-        networkMessage: t(
-          "skill.remoteStoreNetworkHint",
-          "Failed to reach GitHub. Check your network connection or switch to another network and retry.",
-        ),
-        invalidRepoMessage: t(
-          "skill.remoteStoreInvalidRepoHint",
-          "Repository not found or URL is invalid. Check the GitHub repository address and try again.",
-        ),
-      });
+      const scannedSkills = /^git@github\.com:/i.test(githubUrl.trim())
+        ? await window.api.skill.scanRemoteGithub(
+            githubUrl.trim(),
+            BUILTIN_SKILL_REGISTRY,
+          )
+        : await loadGitHubSkillRepo(githubUrl.trim(), {
+            fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
+            registrySkills: BUILTIN_SKILL_REGISTRY,
+            rateLimitMessage: t(
+              "skill.remoteStoreRateLimitHint",
+              "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
+            ),
+            networkMessage: t(
+              "skill.remoteStoreNetworkHint",
+              "Failed to reach GitHub. Check your network connection or switch to another network and retry.",
+            ),
+            invalidRepoMessage: t(
+              "skill.remoteStoreInvalidRepoHint",
+              "Repository not found or URL is invalid. Check the GitHub repository address and try again.",
+            ),
+          });
 
       if (scannedSkills.length === 0) {
         throw new Error(
@@ -1109,7 +1115,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                     <p>
                       {t(
                       "skill.githubConstraintHint",
-                      "Only repository root URLs are supported, such as https://github.com/owner/repo",
+                      "Only repository root URLs are supported, such as https://github.com/owner/repo or git@github.com:owner/repo.git",
                     )}
                   </p>
                     <p>

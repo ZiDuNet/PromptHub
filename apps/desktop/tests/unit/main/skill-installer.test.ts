@@ -24,6 +24,7 @@ import { readGithubTokenSetting } from "@/main/settings/settings-readers";
 import { invalidateCustomPathsCache } from "../../../src/main/services/skill-installer-utils";
 import { SKILL_PLATFORMS } from "@prompthub/shared/constants/platforms";
 import * as remoteInstaller from "../../../src/main/services/skill-installer-remote";
+import * as skillInstallerUtils from "../../../src/main/services/skill-installer-utils";
 // Direct imports for real DB tests (these are NOT mocked)
 import Database from "../../../src/main/database/sqlite";
 import {
@@ -1848,6 +1849,39 @@ describe("SkillInstaller.installFromGithub", () => {
         mockDb,
       ),
     ).rejects.toThrow(/already exists in the library/);
+  });
+
+  it("accepts SSH GitHub URLs and clones using the original SSH address", async () => {
+    await SkillInstaller.init();
+
+    const mockDb = {
+      getByName: vi.fn().mockReturnValue(null),
+      create: vi.fn().mockReturnValue({ id: "skill-1" }),
+    } as unknown as SkillDB;
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockResolvedValue(undefined);
+    vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockResolvedValue(
+      path.join(managedSkillsDir(), "owner-repo"),
+    );
+    vi.spyOn(SkillInstaller, "readManifest").mockResolvedValue({
+      name: "repo",
+      description: "SSH repo",
+      version: "1.0.0",
+      author: "owner",
+      tags: ["github"],
+      instructions: "# SSH repo",
+    });
+
+    const skillId = await SkillInstaller.installFromGithub(
+      "git@github.com:owner/repo.git",
+      mockDb,
+    );
+
+    expect(skillId).toBe("skill-1");
+    expect(skillInstallerUtils.gitClone).toHaveBeenCalledWith(
+      "git@github.com:owner/repo.git",
+      path.join(managedSkillsDir(), "owner-repo"),
+    );
   });
 
 });

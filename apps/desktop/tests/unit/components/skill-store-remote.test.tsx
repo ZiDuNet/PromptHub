@@ -574,6 +574,75 @@ describe("SkillStore remote loading", () => {
     );
   });
 
+  it("loads git-repo store sources through SSH scan when given git@github.com URLs", async () => {
+    const fetchRemoteContent = vi.fn();
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "superpowers",
+        name: "superpowers",
+        install_name: "superpowers",
+        description: "SSH scanned store skill",
+        category: "dev",
+        author: "obra",
+        source_url: "/tmp/ssh-store/superpowers",
+        content_url: "/tmp/ssh-store/superpowers",
+        tags: ["dev"],
+        version: "1.0.0",
+        content: "# superpowers",
+        compatibility: ["claude", "cursor"],
+      },
+    ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent,
+          scanRemoteGithub,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      customStoreSources: [
+        {
+          id: "ssh-repo",
+          name: "SSH Repo",
+          type: "git-repo",
+          url: "git@github.com:obra/superpowers.git",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "ssh-repo",
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["ssh-repo"]?.skills,
+      ).toHaveLength(1);
+    });
+
+    expect(scanRemoteGithub).toHaveBeenCalledWith(
+      "git@github.com:obra/superpowers.git",
+      expect.any(Array),
+    );
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
+  });
+
   it("binds the catalog search box to storeSearchQuery", async () => {
     installWindowMocks({
       api: {

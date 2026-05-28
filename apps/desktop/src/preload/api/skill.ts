@@ -101,6 +101,8 @@ export const skillApi = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT, url),
   fetchRemoteContentBytes: (url: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT_BYTES, url),
+  scanRemoteGithub: (repoUrl: string, registrySkills: unknown[]) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_SCAN_REMOTE_GITHUB, repoUrl, registrySkills),
   saveToRepo: (skillName: string, sourceDir: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE_TO_REPO, skillName, sourceDir),
   listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>

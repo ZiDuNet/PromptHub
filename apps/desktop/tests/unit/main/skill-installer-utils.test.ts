@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as childProcess from "child_process";
 
 vi.mock("../../../src/main/database", () => ({
   initDatabase: vi.fn(),
@@ -500,11 +501,10 @@ describe("skill-installer-utils", () => {
       );
     });
 
-    it("rejects SSH-style URLs (no protocol)", () => {
-      // URL constructor will throw for 'git@github.com:user/repo.git'
-      expect(() =>
-        gitClone("git@github.com:user/repo.git", "/tmp/dest"),
-      ).toThrow();
+    it("does not reject SSH-style GitHub clone URLs during upfront validation", () => {
+      expect(() => {
+        void gitClone("git@github.com:user/repo.git", "/tmp/dest");
+      }).not.toThrow(/Only HTTPS or git@github.com SSH clone URLs are allowed/);
     });
   });
 });

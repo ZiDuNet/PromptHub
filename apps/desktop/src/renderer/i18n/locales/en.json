@@ -1513,7 +1513,7 @@
     "namePlaceholder": "my-skill",
     "githubUrl": "GitHub Repository URL",
     "githubUrlHint": "Use the repository root URL. PromptHub will scan the repo for importable SKILL.md entries before you choose what to import.",
-    "githubConstraintHint": "Only repository root URLs are supported, such as https://github.com/owner/repo",
+    "githubConstraintHint": "Only repository root URLs are supported, such as https://github.com/owner/repo or git@github.com:owner/repo.git",
     "githubFallbackHint": "If no SKILL.md files are found, PromptHub will fall back to the root README.md as a single import option.",
     "enterGithubUrl": "Please enter a GitHub URL",
     "invalidGithubUrl": "Invalid GitHub URL format",

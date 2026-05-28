@@ -5,6 +5,7 @@ import type {
   RegistrySkill,
   SkillCategory,
 } from "@prompthub/shared/types";
+import { parseGithubRepo } from "@prompthub/shared/utils/github-repo";
 
 function stripQuotes(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, "");
@@ -190,24 +191,6 @@ function isSkillMarkdownPath(filePath: string): boolean {
 
 function isRootReadmePath(filePath: string): boolean {
   return /^[^/]+$/u.test(filePath) && /^readme\.md$/i.test(filePath);
-}
-
-export function parseGithubRepo(
-  url: string,
-): { owner: string; repo: string; repositoryUrl: string } | null {
-  const normalized = url
-    .trim()
-    .replace(/^git@github\.com:/, "https://github.com/")
-    .replace(/\.git$/, "");
-  const match = normalized.match(/github\.com\/([^/]+)\/([^/]+)/i);
-  if (!match) {
-    return null;
-  }
-  return {
-    owner: match[1],
-    repo: match[2],
-    repositoryUrl: `https://github.com/${match[1]}/${match[2]}`,
-  };
 }
 
 export async function loadGitHubSkillRepo(

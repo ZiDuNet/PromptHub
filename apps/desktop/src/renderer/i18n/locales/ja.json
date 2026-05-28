@@ -1501,7 +1501,7 @@
     "namePlaceholder": "my-skill",
     "githubUrl": "GitHub リポジトリ URL",
     "githubUrlHint": "リポジトリのルート URL を入力してください。PromptHub はリポジトリを clone し、まず SKILL.md、なければ README.md を読みます。",
-    "githubConstraintHint": "現在は https://github.com/owner/repo のようなリポジトリのルート URL のみ対応しています",
+    "githubConstraintHint": "現在は https://github.com/owner/repo や git@github.com:owner/repo.git のようなリポジトリのルート URL のみ対応しています",
     "githubFallbackHint": "SKILL.md がない場合、PromptHub は README.md を試します。再インストールするには今は先に古いコピーを削除する必要があります。",
     "enterGithubUrl": "GitHub URL を入力してください",
     "invalidGithubUrl": "無効な GitHub URL 形式",

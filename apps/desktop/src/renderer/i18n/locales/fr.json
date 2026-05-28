@@ -1501,7 +1501,7 @@
     "namePlaceholder": "my-skill",
     "githubUrl": "URL du dépôt GitHub",
     "githubUrlHint": "Utilisez l'URL racine du dépôt. PromptHub clonera le dépôt et privilégiera SKILL.md, sinon README.md.",
-    "githubConstraintHint": "Seules les URL racine de dépôt sont prises en charge pour le moment, par exemple https://github.com/owner/repo",
+    "githubConstraintHint": "Seules les URL racine de dépôt sont prises en charge pour le moment, par exemple https://github.com/owner/repo ou git@github.com:owner/repo.git",
     "githubFallbackHint": "Si SKILL.md est absent, PromptHub essaiera README.md. Pour réinstaller, il faut actuellement supprimer l'ancienne copie d'abord.",
     "enterGithubUrl": "Veuillez saisir une URL GitHub",
     "invalidGithubUrl": "Format d'URL GitHub invalide",

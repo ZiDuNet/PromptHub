@@ -108,6 +108,7 @@ export function createWindowApiMock(overrides?: DeepPartial<MockRecord>) {
         installMdSymlink: vi.fn().mockResolvedValue(undefined),
         fetchRemoteContent: vi.fn(),
         fetchRemoteContentBytes: vi.fn(),
+        scanRemoteGithub: vi.fn().mockResolvedValue([]),
         saveToRepo: vi.fn(),
         listLocalFiles: vi.fn().mockResolvedValue([]),
         readLocalFile: vi.fn().mockResolvedValue(null),

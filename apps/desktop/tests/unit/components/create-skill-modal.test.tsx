@@ -278,4 +278,60 @@ describe("CreateSkillModal GitHub import", () => {
       ).toBeTruthy();
     });
   });
+
+  it("uses SSH remote scan for git@github.com repository URLs", async () => {
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "superpowers",
+        name: "superpowers",
+        install_name: "superpowers",
+        description: "SSH scanned skill",
+        category: "dev",
+        author: "obra",
+        source_url: "/tmp/ssh-scan/superpowers",
+        content_url: "/tmp/ssh-scan/superpowers",
+        tags: ["dev"],
+        version: "1.0.0",
+        content: "# superpowers",
+        compatibility: ["claude", "cursor"],
+      },
+    ]);
+
+    const fetchRemoteContent = vi.fn();
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent,
+          scanRemoteGithub,
+        },
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Install from GitHub"));
+    });
+
+    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
+      target: { value: "git@github.com:obra/superpowers.git" },
+    });
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Repository"));
+    });
+
+    await waitFor(() => {
+      expect(scanRemoteGithub).toHaveBeenCalledWith(
+        "git@github.com:obra/superpowers.git",
+        expect.any(Array),
+      );
+      expect(fetchRemoteContent).not.toHaveBeenCalled();
+      expect(view.getByText("Found 1 import option(s)")).toBeTruthy();
+    });
+  });
 });

@@ -221,6 +221,10 @@ export function useSkillStoreRemoteSync(
   const loadGitHubRepoSkills = useCallback(
     async (repoUrl: string): Promise<RegistrySkill[]> => {
       try {
+        if (/^git@github\.com:/i.test(repoUrl.trim())) {
+          return await window.api.skill.scanRemoteGithub(repoUrl, registrySkills);
+        }
+
         return await loadGitHubSkillRepo(repoUrl, {
           fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
           registrySkills,

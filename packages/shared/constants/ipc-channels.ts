@@ -113,6 +113,7 @@ export const IPC_CHANNELS = {
   SKILL_INSTALL_MD_SYMLINK: "skill:installMdSymlink",
   SKILL_FETCH_REMOTE_CONTENT: "skill:fetchRemoteContent",
   SKILL_FETCH_REMOTE_CONTENT_BYTES: "skill:fetchRemoteContentBytes",
+  SKILL_SCAN_REMOTE_GITHUB: "skill:scanRemoteGithub",
 
   // Skill Local Repo Storage
   SKILL_LIST_LOCAL_FILES: "skill:listLocalFiles",

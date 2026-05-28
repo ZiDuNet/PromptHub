@@ -1501,7 +1501,7 @@
     "namePlaceholder": "my-skill",
     "githubUrl": "GitHub 倉庫地址",
     "githubUrlHint": "請輸入倉庫根目錄網址。PromptHub 會先掃描倉庫中的可匯入 SKILL.md，再讓你選擇要匯入的內容。",
-    "githubConstraintHint": "目前只支援倉庫根地址，例如 https://github.com/owner/repo",
+    "githubConstraintHint": "目前只支援倉庫根地址，例如 https://github.com/owner/repo 或 git@github.com:owner/repo.git",
     "githubFallbackHint": "如果沒有找到 SKILL.md，PromptHub 會回退到倉庫根目錄的 README.md，並把它當成單一匯入候選。",
     "enterGithubUrl": "請輸入 GitHub 地址",
     "invalidGithubUrl": "無效的 GitHub 地址格式",
