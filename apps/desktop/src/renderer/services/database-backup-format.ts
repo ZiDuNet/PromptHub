@@ -361,14 +361,39 @@ export function sanitizeImportedBackup(
 ): ParsedBackup {
   const skipped = createEmptySkippedStats();
 
-  const originalPromptsLen = raw.prompts.length;
-  const validPrompts = raw.prompts.filter(hasPromptShape);
-  skipped.prompts = originalPromptsLen - validPrompts.length;
-  const validPromptIds = new Set(validPrompts.map((p) => p.id));
-
   const originalFoldersLen = raw.folders.length;
-  const validFolders = raw.folders.filter(hasFolderShape);
-  skipped.folders = originalFoldersLen - validFolders.length;
+  const structurallyValidFolders = raw.folders.filter(hasFolderShape);
+  skipped.folders = originalFoldersLen - structurallyValidFolders.length;
+  const validFolderIds = new Set(structurallyValidFolders.map((folder) => folder.id));
+  const validFolders = structurallyValidFolders.map((folder) => {
+    if (folder.parentId && !validFolderIds.has(folder.parentId)) {
+      skipped.folders += 1;
+      return {
+        ...folder,
+        parentId: null,
+      };
+    }
+
+    return folder;
+  });
+  const normalizedFolderIds = new Set(validFolders.map((folder) => folder.id));
+
+  const originalPromptsLen = raw.prompts.length;
+  const validPrompts = raw.prompts
+    .filter(hasPromptShape)
+    .map((prompt) => {
+      if (prompt.folderId && !normalizedFolderIds.has(prompt.folderId)) {
+        skipped.prompts += 1;
+        return {
+          ...prompt,
+          folderId: null,
+        };
+      }
+
+      return prompt;
+    });
+  skipped.prompts += originalPromptsLen - validPrompts.length;
+  const validPromptIds = new Set(validPrompts.map((p) => p.id));
 
   const originalVersionsLen = raw.versions.length;
   const structurallyValidVersions = raw.versions.filter(hasPromptVersionShape);

@@ -218,4 +218,66 @@ describe("database-backup-format", () => {
     expect(skipped.skillVersions).toBe(0);
     expect(skipped.skillFiles).toBe(0);
   });
+
+  it("lenient parser clears invalid folder parent references instead of keeping broken links", () => {
+    const { backup, skipped } = parsePromptHubBackupFile(
+      JSON.stringify({
+        kind: "prompthub-backup",
+        exportedAt: "2026-04-07T00:00:00.000Z",
+        payload: {
+          exportedAt: "2026-04-07T00:00:00.000Z",
+          version: 1,
+          prompts: [],
+          folders: [
+            {
+              id: "child-folder",
+              name: "Child",
+              parentId: "missing-parent",
+              createdAt: "2026-04-07T00:00:00.000Z",
+              updatedAt: "2026-04-07T00:00:00.000Z",
+            },
+          ],
+          versions: [],
+        },
+      }),
+    );
+
+    expect(backup.folders[0]?.parentId).toBeNull();
+    expect(skipped.folders).toBe(1);
+  });
+
+  it("lenient parser clears prompt folder references that point to missing folders", () => {
+    const { backup, skipped } = parsePromptHubBackupFile(
+      JSON.stringify({
+        kind: "prompthub-backup",
+        exportedAt: "2026-04-07T00:00:00.000Z",
+        payload: {
+          exportedAt: "2026-04-07T00:00:00.000Z",
+          version: 1,
+          prompts: [
+            {
+              id: "prompt-1",
+              title: "Imported",
+              userPrompt: "User",
+              variables: [],
+              tags: [],
+              folderId: "missing-folder",
+              isFavorite: false,
+              isPinned: false,
+              version: 1,
+              currentVersion: 1,
+              usageCount: 0,
+              createdAt: "2026-04-07T00:00:00.000Z",
+              updatedAt: "2026-04-07T00:00:00.000Z",
+            },
+          ],
+          folders: [],
+          versions: [],
+        },
+      }),
+    );
+
+    expect(backup.prompts[0]?.folderId).toBeNull();
+    expect(skipped.prompts).toBe(1);
+  });
 });

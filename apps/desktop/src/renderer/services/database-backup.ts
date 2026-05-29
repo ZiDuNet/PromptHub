@@ -445,6 +445,32 @@ async function getAllPromptVersions(): Promise<PromptVersion[]> {
   });
 }
 
+function sortFoldersForRestore(folders: DatabaseBackup["folders"]): DatabaseBackup["folders"] {
+  const remaining = new Map(folders.map((folder) => [folder.id, folder]));
+  const restored = new Set<string>();
+  const ordered: DatabaseBackup["folders"] = [];
+
+  while (remaining.size > 0) {
+    let progressed = false;
+
+    for (const [id, folder] of remaining) {
+      if (!folder.parentId || restored.has(folder.parentId) || !remaining.has(folder.parentId)) {
+        ordered.push(folder);
+        restored.add(id);
+        remaining.delete(id);
+        progressed = true;
+      }
+    }
+
+    if (!progressed) {
+      ordered.push(...remaining.values());
+      break;
+    }
+  }
+
+  return ordered;
+}
+
 async function importDatabaseViaMainProcess(
   normalizedBackup: DatabaseBackup,
 ): Promise<boolean> {
@@ -470,7 +496,7 @@ async function importDatabaseViaMainProcess(
     await window.api.folder.delete(folder.id);
   }
 
-  for (const folder of normalizedBackup.folders) {
+  for (const folder of sortFoldersForRestore(normalizedBackup.folders)) {
     await window.api.folder.insertDirect(folder);
   }
 
@@ -586,7 +612,7 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
       promptStore.add(prompt);
     }
 
-    for (const folder of normalizedBackup.folders) {
+    for (const folder of sortFoldersForRestore(normalizedBackup.folders)) {
       folderStore.add(folder);
     }
 
@@ -892,4 +918,36 @@ export async function restoreFromFile(file: File): Promise<ImportSkippedStats> {
 export async function restoreFromBackup(backup: DatabaseBackup): Promise<ImportSkippedStats> {
   await importDatabase(backup);
   return createEmptySkippedStats();
+}
+
+export function formatBackupImportError(error: unknown): string {
+  const message =
+    error instanceof Error && error.message
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("unsupported file format")) {
+    return "不是 PromptHub 可识别的备份文件，请选择 PromptHub 导出的 JSON、PHUB 或 ZIP 文件。";
+  }
+
+  if (normalizedMessage.includes("imported backup is empty")) {
+    return "该备份内容为空。为避免覆盖当前数据，PromptHub 已阻止这次导入。";
+  }
+
+  if (normalizedMessage.includes("payload is malformed")) {
+    return "备份文件结构不完整或部分字段缺失，PromptHub 无法安全恢复。";
+  }
+
+  if (normalizedMessage.includes("foreign key constraint failed")) {
+    return "备份中的文件夹或 Prompt 引用关系不完整，PromptHub 无法安全导入。建议重新导出一份新备份后再试。";
+  }
+
+  if (normalizedMessage.includes("file errors:")) {
+    return `导入部分完成，但有附件或技能文件恢复失败。${message}`;
+  }
+
+  return message || "导入失败，请检查备份文件是否完整后重试。";
 }

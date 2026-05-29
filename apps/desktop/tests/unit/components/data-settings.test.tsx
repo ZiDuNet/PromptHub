@@ -47,6 +47,13 @@ vi.mock("../../../src/renderer/services/database-backup", () => ({
   downloadBackup: vi.fn(),
   downloadCompressedBackup: vi.fn(),
   downloadSelectiveExport: vi.fn(),
+  formatBackupImportError: (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("FOREIGN KEY constraint failed")) {
+      return "备份中的文件夹或 Prompt 引用关系不完整，PromptHub 无法安全导入。建议重新导出一份新备份后再试。";
+    }
+    return message;
+  },
   pickSupportedBackupFile: vi.fn((files: FileList | File[]) =>
     Array.from(files)[0] ?? null,
   ),
@@ -629,15 +636,19 @@ describe("DataSettings", { timeout: 15_000 }, () => {
     expect(showToast).toHaveBeenCalledWith("数据导出成功", "success");
   });
 
-  it("shows the actual restore error message when import fails", async () => {
+  it("shows a friendly restore error message when import fails", async () => {
     const showToast = vi.fn();
     vi.spyOn(console, "error").mockImplementation(() => {});
     useToastMock.mockReturnValue({ showToast });
     vi.mocked(previewImportFile).mockRejectedValue(
-      new Error("Selective export file is corrupted"),
+      new Error(
+        "Error invoking remote method 'folder:insertDirect': SQLite3Error: FOREIGN KEY constraint failed",
+      ),
     );
     vi.mocked(restoreFromFile).mockRejectedValue(
-      new Error("Selective export file is corrupted"),
+      new Error(
+        "Error invoking remote method 'folder:insertDirect': SQLite3Error: FOREIGN KEY constraint failed",
+      ),
     );
 
     const input = {
@@ -672,7 +683,7 @@ describe("DataSettings", { timeout: 15_000 }, () => {
     });
 
     expect(showToast).toHaveBeenCalledWith(
-      "Import failed: Selective export file is corrupted",
+      "Import failed: 备份中的文件夹或 Prompt 引用关系不完整，PromptHub 无法安全导入。建议重新导出一份新备份后再试。",
       "error",
     );
   });

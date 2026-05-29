@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useToast } from "../components/ui/Toast";
 import {
   BACKUP_IMPORT_ACCEPT,
+  formatBackupImportError,
   pickSupportedBackupFile,
   previewImportFile,
   restoreFromFile,
@@ -16,18 +17,6 @@ import { isWebRuntime } from "../runtime";
 export interface BackupImportPreviewState {
   file: File;
   summary: ImportPreviewSummary;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim()) {
-    return error;
-  }
-
-  return "Unknown error";
 }
 
 export function formatImportSkippedDetails(
@@ -60,10 +49,7 @@ export function useBackupImportController() {
         setImportPreview({ file, summary: preview.summary });
       } catch (error) {
         console.error("Import failed:", error);
-        showToast(
-          `${t("toast.importFailed")}: ${getErrorMessage(error)}`,
-          "error",
-        );
+        showToast(`${t("toast.importFailed")}: ${formatBackupImportError(error)}`, "error");
       }
     },
     [showToast, t],
@@ -122,10 +108,7 @@ export function useBackupImportController() {
       setTimeout(() => window.location.reload(), 1000);
     } catch (error) {
       console.error("Import failed:", error);
-      showToast(
-        `${t("toast.importFailed")}: ${getErrorMessage(error)}`,
-        "error",
-      );
+      showToast(`${t("toast.importFailed")}: ${formatBackupImportError(error)}`, "error");
     } finally {
       setConfirmingImport(false);
     }

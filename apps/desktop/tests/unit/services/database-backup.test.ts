@@ -718,6 +718,57 @@ describe("database-backup restore", () => {
     );
   });
 
+  it("restores folders in parent-first order even when backup payload is unsorted", async () => {
+    const parentFolder = {
+      id: "folder-parent",
+      name: "Parent",
+      createdAt: "2026-04-07T00:00:00.000Z",
+      updatedAt: "2026-04-07T00:00:00.000Z",
+      order: 0,
+    };
+    const childFolder = {
+      id: "folder-child",
+      name: "Child",
+      parentId: "folder-parent",
+      createdAt: "2026-04-07T00:00:01.000Z",
+      updatedAt: "2026-04-07T00:00:01.000Z",
+      order: 0,
+    };
+
+    installWindowMocks({
+      api: {
+        prompt: {
+          getAll: vi.fn().mockResolvedValue([]),
+          delete: vi.fn().mockResolvedValue(true),
+          insertDirect: vi.fn().mockResolvedValue(undefined),
+          syncWorkspace: vi.fn().mockResolvedValue(undefined),
+        },
+        folder: {
+          getAll: vi.fn().mockResolvedValue([]),
+          delete: vi.fn().mockResolvedValue(true),
+          insertDirect: vi.fn().mockResolvedValue(undefined),
+        },
+        version: {
+          insertDirect: vi.fn().mockResolvedValue(undefined),
+        },
+        skill: {
+          deleteAll: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+
+    await restoreFromBackup({
+      version: 1,
+      exportedAt: "2026-04-07T00:00:00.000Z",
+      prompts: [],
+      folders: [childFolder, parentFolder],
+      versions: [],
+    });
+
+    expect(window.api.folder.insertDirect).toHaveBeenNthCalledWith(1, parentFolder);
+    expect(window.api.folder.insertDirect).toHaveBeenNthCalledWith(2, childFolder);
+  });
+
   it("restores a selective export file through the normal restore entry", async () => {
     const file = {
       name: "prompthub-export.json",
