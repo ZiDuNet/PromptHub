@@ -19,11 +19,13 @@
 
 在 PromptHub 中，**Skill** 是一个可移植的、自包含的能力包，它赋予 AI Agent 特定的专业能力。它填补了静态 _System Prompts_ 和动态 _MCP Tools_ 之间的空白。
 
+Skill 的边界是一个目录级 package。`SKILL.md` 是 package 内的必需入口文件，不是 Skill 的完整边界。导入、安装、同步、导出和分发流程必须保留目录树，除非文件命中明确的忽略规则。
+
 **一个 Skill 包含三个核心要素：**
 
 1.  **程序性知识 (Procedural Knowledge)**: 即 System Prompt，指导 AI _如何_ 执行任务（例如：“如何撰写高转化率的营销邮件”）。
 2.  **工具定义 (MCP Config)**: 引用需要的 MCP 服务器配置（例如：“需要挂载 `filesystem-server` 和 `postgres-server`”）。
-3.  **本地资源 (Local Resources)**: (可选) 供 AI 调用的脚本、文档模板或知识库文件。
+3.  **本地资源 (Local Resources)**: (可选) 供 AI 调用的脚本、资产、示例、文档模板或知识库文件。
 
 ### 类比理解
 
@@ -70,6 +72,13 @@ my-data-skill/
 ├── SKILL.md           # 核心指令 (System Prompt)
 ├── scripts/           # (可选) 包含的可执行脚本
 └── docs/              # (可选) 供 AI 参考的知识库文档
+```
+
+只有一个 `SKILL.md` 的 Skill 也是合法 package，但仍然以目录形式表示：
+
+```text
+simple-skill/
+└── SKILL.md
 ```
 
 ---

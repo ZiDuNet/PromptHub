@@ -33,6 +33,49 @@ describe("CreateSkillModal GitHub import", () => {
     useSettingsStore.setState({ aiModels: [] } as never);
   });
 
+  it("creates a starter package SKILL.md when manual instructions are blank", async () => {
+    const createSkill = vi.fn().mockResolvedValue({
+      id: "skill-starter",
+      name: "starter-skill",
+    });
+    useSkillStore.setState({ createSkill } as never);
+    installWindowMocks();
+
+    const onClose = vi.fn();
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={onClose} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Create Manually"));
+    });
+
+    fireEvent.change(view.getByPlaceholderText("my-skill-name"), {
+      target: { value: "starter skill" },
+    });
+    fireEvent.change(view.getAllByRole("textbox")[1], {
+      target: { value: "Use when drafting starter skills." },
+    });
+
+    await act(async () => {
+      fireEvent.click(view.getByRole("button", { name: "Create Skill" }));
+    });
+
+    await waitFor(() => {
+      expect(createSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "starterskill",
+          instructions: expect.stringContaining("## Package notes"),
+          content: expect.stringContaining("references/"),
+        }),
+      );
+    });
+    expect(createSkill.mock.calls[0][0].instructions).toContain(
+      "name: starterskill",
+    );
+  });
+
   it("scans a GitHub repo and lets users import multiple discovered skills", async () => {
     const installRegistrySkill = vi
       .fn()
@@ -43,7 +86,10 @@ describe("CreateSkillModal GitHub import", () => {
 
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/anthropics/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "anthropics" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "anthropics" },
+        });
       }
 
       if (
@@ -109,9 +155,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "https://github.com/anthropics/skills" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "https://github.com/anthropics/skills" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("Scan Repository"));
@@ -150,7 +199,8 @@ describe("CreateSkillModal GitHub import", () => {
       2,
       expect.objectContaining({
         slug: "docx",
-        source_url: "https://github.com/anthropics/skills/tree/main/skills/docx",
+        source_url:
+          "https://github.com/anthropics/skills/tree/main/skills/docx",
       }),
     );
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -158,12 +208,17 @@ describe("CreateSkillModal GitHub import", () => {
 
   it("keeps a fixed footer and scrollable results area after GitHub scan", async () => {
     useSkillStore.setState({
-      installRegistrySkill: vi.fn().mockResolvedValue({ id: "skill-1", name: "alpha" }),
+      installRegistrySkill: vi
+        .fn()
+        .mockResolvedValue({ id: "skill-1", name: "alpha" }),
     } as never);
 
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/anthropics/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "anthropics" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "anthropics" },
+        });
       }
 
       if (
@@ -215,9 +270,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "https://github.com/anthropics/skills" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "https://github.com/anthropics/skills" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("Scan Repository"));
@@ -264,9 +322,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("从 Git 仓库安装"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "https://github.com/demo/missing-repo" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "https://github.com/demo/missing-repo" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("扫描仓库"));
@@ -274,7 +335,9 @@ describe("CreateSkillModal GitHub import", () => {
 
     await waitFor(() => {
       expect(
-        view.getByText("仓库不存在，或仓库地址无效，请检查 GitHub 仓库地址后重试。"),
+        view.getByText(
+          "仓库不存在，或仓库地址无效，请检查 GitHub 仓库地址后重试。",
+        ),
       ).toBeTruthy();
     });
   });
@@ -317,9 +380,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "git@github.com:obra/superpowers.git" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "git@github.com:obra/superpowers.git" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("Scan Repository"));
@@ -353,7 +419,8 @@ describe("CreateSkillModal GitHub import", () => {
         description: "Stable writer",
         category: "dev",
         author: "demo",
-        source_url: "https://gitea.example.com/demo/skills/tree/main/skills/stable/writer",
+        source_url:
+          "https://gitea.example.com/demo/skills/tree/main/skills/stable/writer",
         tags: ["writer"],
         version: "1.0.0",
         content: "# writer stable",
@@ -370,7 +437,8 @@ describe("CreateSkillModal GitHub import", () => {
         description: "Dev writer",
         category: "dev",
         author: "demo",
-        source_url: "https://gitea.example.com/demo/skills/tree/main/skills/dev/writer",
+        source_url:
+          "https://gitea.example.com/demo/skills/tree/main/skills/dev/writer",
         tags: ["writer"],
         version: "1.0.0",
         content: "# writer dev",
@@ -396,9 +464,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "https://gitea.example.com/demo/skills" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "https://gitea.example.com/demo/skills" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("Scan Repository"));
@@ -471,9 +542,12 @@ describe("CreateSkillModal GitHub import", () => {
       fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
-    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
-      target: { value: "https://gitea.example.com/icelemon/skills" },
-    });
+    fireEvent.change(
+      view.getByPlaceholderText("https://github.com/owner/skill-repo"),
+      {
+        target: { value: "https://gitea.example.com/icelemon/skills" },
+      },
+    );
 
     await act(async () => {
       fireEvent.click(view.getByText("Scan Repository"));

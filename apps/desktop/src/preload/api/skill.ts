@@ -116,12 +116,26 @@ export const skillApi = {
     ),
   listRemoteBranches: (repoUrl: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST_REMOTE_BRANCHES, repoUrl),
-  saveToRepo: (
+  saveToRepo: (skillId: string, sourceDir: string, mode?: "copy" | "symlink") =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_SAVE_TO_REPO,
+      skillId,
+      sourceDir,
+      mode,
+    ),
+  saveRemoteGitToRepo: (
     skillId: string,
-    sourceDir: string,
-    mode?: "copy" | "symlink",
+    options: {
+      repoUrl: string;
+      branch?: string;
+      directory?: string;
+    },
   ) =>
-    ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE_TO_REPO, skillId, sourceDir, mode),
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_SAVE_REMOTE_GIT_TO_REPO,
+      skillId,
+      options,
+    ),
   listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST_LOCAL_FILES, skillId),
   readLocalFile: (

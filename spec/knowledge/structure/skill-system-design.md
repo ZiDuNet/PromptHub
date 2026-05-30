@@ -8,11 +8,13 @@ This document outlines the architecture and design for the "Agent Skills" system
 
 In PromptHub, a **Skill** is a portable, self-contained package that gives the AI agent specific capabilities. It bridges the gap between static _System Prompts_ and dynamic _MCP Tools_.
 
+The package boundary is the Skill directory. `SKILL.md` is the required entrypoint file inside that directory, not the entire Skill. Import, install, sync, export, and distribution flows must preserve the directory tree unless a file is excluded by an explicit ignore rule.
+
 **A Skill consists of:**
 
 1.  **Procedural Knowledge (System Prompt)**: Instructions on _how_ to perform a task (e.g., "How to write a high-converting email").
 2.  **Tool Definitions (MCP Config)**: References to required tools or full MCP server configurations (e.g., "Requires `gmail-mcp-server`").
-3.  **Local Resources (Optional)**: Scripts or reference documents that the agent can read.
+3.  **Local Resources (Optional)**: Scripts, assets, examples, or reference documents that the agent can read.
 
 ### Analogy
 
@@ -56,6 +58,13 @@ my-data-skill/
 ├── manifest.json      # Metadata (Name, Version, MCP config)
 ├── SKILL.md           # The core system prompt/instructions
 └── scripts/           # (Optional) Helper scripts
+```
+
+A Skill with only `SKILL.md` is still represented as a directory:
+
+```text
+simple-skill/
+└── SKILL.md
 ```
 
 ---

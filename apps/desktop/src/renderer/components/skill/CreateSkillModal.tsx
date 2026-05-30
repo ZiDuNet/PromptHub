@@ -38,7 +38,10 @@ import { BUILTIN_SKILL_REGISTRY } from "@prompthub/shared/constants/skill-regist
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { SkillIconPicker } from "./SkillIconPicker";
 import { getExistingSkillTags } from "./skill-modal-utils";
-import type { RegistrySkill, ScannedSkill } from "@prompthub/shared/types/skill";
+import type {
+  RegistrySkill,
+  ScannedSkill,
+} from "@prompthub/shared/types/skill";
 import { getRuntimeCapabilities } from "../../runtime";
 
 interface CreateSkillModalProps {
@@ -52,7 +55,9 @@ function sanitizeSkillName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
-function getRegistrySelectionKey(skill: Pick<RegistrySkill, "source_id" | "source_url" | "slug">): string {
+function getRegistrySelectionKey(
+  skill: Pick<RegistrySkill, "source_id" | "source_url" | "slug">,
+): string {
   return skill.source_id || skill.source_url || skill.slug;
 }
 
@@ -62,9 +67,44 @@ function isRegistrySkillInstalled(
 ): boolean {
   return Boolean(
     (skill.source_id && installedKeys.has(skill.source_id)) ||
-      (skill.source_url && installedKeys.has(skill.source_url)) ||
-      installedKeys.has(getRegistrySelectionKey(skill)),
+    (skill.source_url && installedKeys.has(skill.source_url)) ||
+    installedKeys.has(getRegistrySelectionKey(skill)),
   );
+}
+
+function yamlQuote(value: string): string {
+  return JSON.stringify(value);
+}
+
+function buildStarterSkillContent(name: string, description: string): string {
+  const safeDescription =
+    description.trim() || `Use when the user asks for the ${name} workflow.`;
+  return [
+    "---",
+    `name: ${name}`,
+    `description: ${yamlQuote(safeDescription)}`,
+    "---",
+    "",
+    `# ${name}`,
+    "",
+    "## When to use",
+    "",
+    `Use this skill when ${safeDescription}`,
+    "",
+    "## Workflow",
+    "",
+    "1. Confirm the user's goal, inputs, constraints, and expected output.",
+    "2. Inspect any relevant files, references, or existing project rules before acting.",
+    "3. Execute the smallest reliable workflow that satisfies the request.",
+    "4. Verify the result with a concrete command, file check, or observable output.",
+    "",
+    "## Package notes",
+    "",
+    "- Keep SKILL.md focused on the core workflow.",
+    "- Put detailed reference material in references/ when it grows beyond the immediate workflow.",
+    "- Put deterministic helper code in scripts/ when repeated execution matters.",
+    "- Put templates or reusable output files in assets/.",
+  ].join("\n");
 }
 
 export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
@@ -91,12 +131,16 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
 
   // GitHub mode
   const [githubUrl, setGithubUrl] = useState("");
-  const [githubScanResults, setGithubScanResults] = useState<RegistrySkill[]>([]);
+  const [githubScanResults, setGithubScanResults] = useState<RegistrySkill[]>(
+    [],
+  );
   const [selectedGitHubSkills, setSelectedGitHubSkills] = useState<Set<string>>(
     new Set(),
   );
   const [githubScanDone, setGithubScanDone] = useState(false);
-  const [githubImportNotice, setGithubImportNotice] = useState<string | null>(null);
+  const [githubImportNotice, setGithubImportNotice] = useState<string | null>(
+    null,
+  );
 
   // Manual mode
   const [name, setName] = useState("");
@@ -486,29 +530,31 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
         );
       }
 
-      const scannedSkills = !isGitHubHost(parsedRepo.host) || parsedRepo.protocol === "ssh"
-        ? await window.api.skill.scanRemoteGithub(
-            githubUrl.trim(),
-            BUILTIN_SKILL_REGISTRY,
-          )
-        : await loadGitHubSkillRepo(githubUrl.trim(), {
-            branch: undefined,
-            directory: undefined,
-            fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
-            registrySkills: BUILTIN_SKILL_REGISTRY,
-            rateLimitMessage: t(
-              "skill.remoteStoreRateLimitHint",
-              "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
-            ),
-            networkMessage: t(
-              "skill.remoteStoreNetworkHint",
-              "Failed to reach GitHub. Check your network connection or switch to another network and retry.",
-            ),
-            invalidRepoMessage: t(
-              "skill.remoteStoreInvalidRepoHint",
-              "Repository not found or URL is invalid. Check the GitHub repository address and try again.",
-            ),
-          });
+      const scannedSkills =
+        !isGitHubHost(parsedRepo.host) || parsedRepo.protocol === "ssh"
+          ? await window.api.skill.scanRemoteGithub(
+              githubUrl.trim(),
+              BUILTIN_SKILL_REGISTRY,
+            )
+          : await loadGitHubSkillRepo(githubUrl.trim(), {
+              branch: undefined,
+              directory: undefined,
+              fetchRemoteContent: (url) =>
+                window.api.skill.fetchRemoteContent(url),
+              registrySkills: BUILTIN_SKILL_REGISTRY,
+              rateLimitMessage: t(
+                "skill.remoteStoreRateLimitHint",
+                "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
+              ),
+              networkMessage: t(
+                "skill.remoteStoreNetworkHint",
+                "Failed to reach GitHub. Check your network connection or switch to another network and retry.",
+              ),
+              invalidRepoMessage: t(
+                "skill.remoteStoreInvalidRepoHint",
+                "Repository not found or URL is invalid. Check the GitHub repository address and try again.",
+              ),
+            });
 
       if (scannedSkills.length === 0) {
         throw new Error(
@@ -523,7 +569,10 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
       setSelectedGitHubSkills(
         new Set(
           scannedSkills
-            .filter((skill) => !isRegistrySkillInstalled(skill, installedGitHubSources))
+            .filter(
+              (skill) =>
+                !isRegistrySkillInstalled(skill, installedGitHubSources),
+            )
             .map((skill) => getRegistrySelectionKey(skill)),
         ),
       );
@@ -554,7 +603,9 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
 
   const handleImportSelectedGitHubSkills = async () => {
     const targets = annotatedGitHubResults.filter(
-      (skill) => !skill.isImported && selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
+      (skill) =>
+        !skill.isImported &&
+        selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
     );
     if (targets.length === 0) {
       return;
@@ -619,11 +670,14 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setError(null);
 
     try {
+      const skillInstructions = instructions.trim()
+        ? instructions
+        : buildStarterSkillContent(normalizedName, description);
       const createdSkill = await createSkill({
         name: normalizedName,
         description,
-        instructions,
-        content: instructions,
+        instructions: skillInstructions,
+        content: skillInstructions,
         protocol_type: "skill",
         is_favorite: false,
         tags,
@@ -952,8 +1006,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
             : isGitHubMode
               ? "w-full max-w-4xl max-h-[90vh]"
               : isScanMode && hasScanResults
-              ? "w-[min(92vw,1100px)] max-h-[92vh]"
-              : "w-full max-w-lg max-h-[90vh]"
+                ? "w-[min(92vw,1100px)] max-h-[92vh]"
+                : "w-full max-w-lg max-h-[90vh]"
         } min-h-0`}
       >
         {/* Header */}
@@ -1058,10 +1112,16 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                 </div>
                 <div>
                   <h3 className="font-medium text-foreground">
-                    {t("skill.installFromGithub", "Install from Git Repository")}
+                    {t(
+                      "skill.installFromGithub",
+                      "Install from Git Repository",
+                    )}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {t("skill.githubDesc", "Paste a GitHub, Gitea, or self-hosted Git repository URL")}
+                    {t(
+                      "skill.githubDesc",
+                      "Paste a GitHub, Gitea, or self-hosted Git repository URL",
+                    )}
                   </p>
                 </div>
               </button>
@@ -1097,7 +1157,10 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                       {t("skill.scanLocal", "Scan Local")}
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      {t("skill.scanLocalDesc", "Detect existing SKILL.md files")}
+                      {t(
+                        "skill.scanLocalDesc",
+                        "Detect existing SKILL.md files",
+                      )}
                     </p>
                   </div>
                 </button>
@@ -1124,153 +1187,162 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                     "Use the repository root URL. PromptHub supports GitHub, Gitea, and other self-hosted Git repositories over HTTPS or SSH, then scans the repo for importable SKILL.md entries before you choose what to import.",
                   )}
                 </p>
-                  <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1.5">
-                    <p>
-                      {t(
+                <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1.5">
+                  <p>
+                    {t(
                       "skill.githubConstraintHint",
                       "Only repository root URLs are supported, such as https://github.com/owner/repo, https://gitea.example.com/owner/repo, or git@host:owner/repo.git",
                     )}
                   </p>
-                    <p>
-                      {t(
-                        "skill.githubFallbackHint",
-                        "PromptHub will scan the repository for multiple SKILL.md entries. If none exist, it will fall back to the root README.md as a single import option.",
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                {hasGitHubResults && (
-                  <div className="flex min-h-0 flex-1 flex-col space-y-3 rounded-xl border border-border bg-background/60 p-4">
-                    {githubImportNotice && (
-                      <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
-                        {githubImportNotice}
-                      </div>
+                  <p>
+                    {t(
+                      "skill.githubFallbackHint",
+                      "PromptHub will scan the repository for multiple SKILL.md entries. If none exist, it will fall back to the root README.md as a single import option.",
                     )}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-foreground">
-                          {t(
-                            "skill.githubScanFound",
-                            "Found {{count}} import option(s)",
-                          ).replace(
-                            "{{count}}",
-                            String(annotatedGitHubResults.length),
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {t(
-                            "skill.githubScanHint",
-                            "Select one or more skills from this repository before importing.",
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const allSelected = selectableGitHubResults.every((skill) =>
-                            selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
-                          );
-                          setSelectedGitHubSkills(
-                            allSelected
-                              ? new Set()
-                              : new Set(
-                                  selectableGitHubResults.map((skill) => getRegistrySelectionKey(skill)),
-                                ),
-                          );
-                        }}
-                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                      >
-                        {selectableGitHubResults.every((skill) =>
-                          selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
-                        ) ? (
-                          <>
-                            <CheckSquareIcon className="w-3.5 h-3.5" />
-                            {t("skill.deselectAll", "Deselect All")}
-                          </>
-                        ) : (
-                          <>
-                            <SquareIcon className="w-3.5 h-3.5" />
-                            {t("skill.selectAll", "Select All")}
-                          </>
-                        )}
-                      </button>
-                    </div>
+                  </p>
+                </div>
+              </div>
 
-                    <div
-                      data-testid="github-results-scroll-area"
-                      className="min-h-0 flex-1 overflow-y-auto pr-1"
+              {hasGitHubResults && (
+                <div className="flex min-h-0 flex-1 flex-col space-y-3 rounded-xl border border-border bg-background/60 p-4">
+                  {githubImportNotice && (
+                    <div className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
+                      {githubImportNotice}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-foreground">
+                        {t(
+                          "skill.githubScanFound",
+                          "Found {{count}} import option(s)",
+                        ).replace(
+                          "{{count}}",
+                          String(annotatedGitHubResults.length),
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {t(
+                          "skill.githubScanHint",
+                          "Select one or more skills from this repository before importing.",
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allSelected = selectableGitHubResults.every(
+                          (skill) =>
+                            selectedGitHubSkills.has(
+                              getRegistrySelectionKey(skill),
+                            ),
+                        );
+                        setSelectedGitHubSkills(
+                          allSelected
+                            ? new Set()
+                            : new Set(
+                                selectableGitHubResults.map((skill) =>
+                                  getRegistrySelectionKey(skill),
+                                ),
+                              ),
+                        );
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
                     >
-                      <div className="grid grid-cols-1 gap-3">
-                        {annotatedGitHubResults.map((skill) => {
-                          const selectionKey = getRegistrySelectionKey(skill);
-                          const isSelected = selectedGitHubSkills.has(selectionKey);
-                          return (
-                            <button
-                              key={selectionKey}
-                              type="button"
-                              onClick={() =>
-                                !skill.isImported && toggleGitHubSkill(selectionKey)
-                              }
-                              disabled={skill.isImported}
-                              className={`w-full rounded-2xl border p-4 text-left transition-all shadow-sm ${
-                                skill.isImported
-                                  ? "border-border bg-muted/30 opacity-70 cursor-not-allowed"
-                                  : isSelected
-                                    ? "border-primary/40 bg-primary/5 shadow-primary/10"
-                                    : "border-border app-wallpaper-surface hover:border-primary/30 hover:shadow-md"
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <div
-                                  className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${
-                                    skill.isImported
-                                      ? "bg-accent text-muted-foreground"
-                                      : "bg-primary/10 text-primary"
-                                  }`}
-                                >
-                                  <FileTextIcon className="w-5 h-5" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <h4 className="font-semibold text-sm truncate">
-                                          {skill.name}
-                                        </h4>
-                                        {skill.isImported && (
-                                          <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
-                                            {t(
-                                              "skill.importedBadge",
-                                              "Already Imported",
-                                            )}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <p className="mt-1 text-[11px] text-muted-foreground break-all">
-                                        {skill.source_url}
-                                      </p>
-                                    </div>
-                                    <div className="shrink-0 pt-0.5">
-                                      {skill.isImported || isSelected ? (
-                                        <CheckSquareIcon className="w-4 h-4 text-primary" />
-                                      ) : (
-                                        <SquareIcon className="w-4 h-4 text-muted-foreground" />
+                      {selectableGitHubResults.every((skill) =>
+                        selectedGitHubSkills.has(
+                          getRegistrySelectionKey(skill),
+                        ),
+                      ) ? (
+                        <>
+                          <CheckSquareIcon className="w-3.5 h-3.5" />
+                          {t("skill.deselectAll", "Deselect All")}
+                        </>
+                      ) : (
+                        <>
+                          <SquareIcon className="w-3.5 h-3.5" />
+                          {t("skill.selectAll", "Select All")}
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div
+                    data-testid="github-results-scroll-area"
+                    className="min-h-0 flex-1 overflow-y-auto pr-1"
+                  >
+                    <div className="grid grid-cols-1 gap-3">
+                      {annotatedGitHubResults.map((skill) => {
+                        const selectionKey = getRegistrySelectionKey(skill);
+                        const isSelected =
+                          selectedGitHubSkills.has(selectionKey);
+                        return (
+                          <button
+                            key={selectionKey}
+                            type="button"
+                            onClick={() =>
+                              !skill.isImported &&
+                              toggleGitHubSkill(selectionKey)
+                            }
+                            disabled={skill.isImported}
+                            className={`w-full rounded-2xl border p-4 text-left transition-all shadow-sm ${
+                              skill.isImported
+                                ? "border-border bg-muted/30 opacity-70 cursor-not-allowed"
+                                : isSelected
+                                  ? "border-primary/40 bg-primary/5 shadow-primary/10"
+                                  : "border-border app-wallpaper-surface hover:border-primary/30 hover:shadow-md"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div
+                                className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${
+                                  skill.isImported
+                                    ? "bg-accent text-muted-foreground"
+                                    : "bg-primary/10 text-primary"
+                                }`}
+                              >
+                                <FileTextIcon className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-semibold text-sm truncate">
+                                        {skill.name}
+                                      </h4>
+                                      {skill.isImported && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
+                                          {t(
+                                            "skill.importedBadge",
+                                            "Already Imported",
+                                          )}
+                                        </span>
                                       )}
                                     </div>
+                                    <p className="mt-1 text-[11px] text-muted-foreground break-all">
+                                      {skill.source_url}
+                                    </p>
                                   </div>
-                                  <p className="mt-3 text-xs leading-5 text-muted-foreground line-clamp-3">
-                                    {skill.description}
-                                  </p>
+                                  <div className="shrink-0 pt-0.5">
+                                    {skill.isImported || isSelected ? (
+                                      <CheckSquareIcon className="w-4 h-4 text-primary" />
+                                    ) : (
+                                      <SquareIcon className="w-4 h-4 text-muted-foreground" />
+                                    )}
+                                  </div>
                                 </div>
+                                <p className="mt-3 text-xs leading-5 text-muted-foreground line-clamp-3">
+                                  {skill.description}
+                                </p>
                               </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                )}
+                </div>
+              )}
             </div>
           )}
 
@@ -2063,8 +2135,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                   : handleGitHubInstall
               }
               disabled={
-                isLoading ||
-                (githubScanDone && selectedGitHubSkills.size === 0)
+                isLoading || (githubScanDone && selectedGitHubSkills.size === 0)
               }
               className="flex min-w-[12rem] items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
             >

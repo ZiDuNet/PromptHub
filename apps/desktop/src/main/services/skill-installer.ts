@@ -19,6 +19,7 @@ import type {
   SafetyScanAIConfig,
   ScannedSkill,
   ScanLocalResult,
+  Skill,
   SkillManifest,
 } from "@prompthub/shared/types";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
@@ -359,7 +360,8 @@ export class SkillInstaller {
       // Create Skill in DB first, then move the cloned repo into the managed
       // variant container so all My Skills entries share one disk layout.
       const repoFiles = await this.readLocalRepoFileBuffersByPath(skillDir);
-      const sourceDirectory = path.relative(installDir, skillDir).replace(/\\/g, "/") || undefined;
+      const sourceDirectory =
+        path.relative(installDir, skillDir).replace(/\\/g, "/") || undefined;
       const skill = db.create({
         name: manifest.name || repoName,
         description: manifest.description || `Installed from ${url}`,
@@ -371,7 +373,9 @@ export class SkillInstaller {
         source_url: url,
         source_label: `${userDir}/${repoName}`,
         source_directory: sourceDirectory,
-        canonical_skill_path: sourceDirectory ? `${sourceDirectory}/SKILL.md` : "SKILL.md",
+        canonical_skill_path: sourceDirectory
+          ? `${sourceDirectory}/SKILL.md`
+          : "SKILL.md",
         local_repo_path: installDir,
         directory_fingerprint: computeDirectoryFingerprint(repoFiles),
         is_favorite: false,
@@ -491,9 +495,9 @@ export class SkillInstaller {
       );
     }
 
-      const sanitized = sanitizeImportedSkillDraft(
-        {
-          name: skillName,
+    const sanitized = sanitizeImportedSkillDraft(
+      {
+        name: skillName,
         description: parsed?.frontmatter.description,
         fallbackDescription:
           manifest.description ||
@@ -546,19 +550,87 @@ export class SkillInstaller {
     }
 
     if (localRepoPath && createdSkill.local_repo_path !== localRepoPath) {
-      const repoFiles = await this.readLocalRepoFileBuffersByPath(localRepoPath);
+      const repoFiles =
+        await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
         local_repo_path: localRepoPath,
         directory_fingerprint: computeDirectoryFingerprint(repoFiles),
       });
     } else if (localRepoPath) {
-      const repoFiles = await this.readLocalRepoFileBuffersByPath(localRepoPath);
+      const repoFiles =
+        await this.readLocalRepoFileBuffersByPath(localRepoPath);
       db.update(createdSkill.id, {
         directory_fingerprint: computeDirectoryFingerprint(repoFiles),
       });
     }
 
     return createdSkill.id;
+  }
+
+  static async saveRemoteGitSkillToLocalRepoBySkillId(
+    skill: Pick<
+      Skill,
+      | "id"
+      | "name"
+      | "source_id"
+      | "source_url"
+      | "source_directory"
+      | "directory_fingerprint"
+      | "logical_name"
+      | "variant_key"
+    >,
+    options: {
+      repoUrl: string;
+      branch?: string;
+      directory?: string;
+    },
+  ): Promise<string> {
+    await this.init();
+
+    const parsedRepo = parseGitRepo(options.repoUrl);
+    if (!parsedRepo) {
+      throw new Error(
+        "Invalid git repository URL: must be https://<host>/{owner}/{repo} or git@<host>:{owner}/{repo}.git",
+      );
+    }
+
+    const tempRoot = await fs.mkdtemp(
+      path.join(this.skillsDir, ".remote-import-"),
+    );
+    const repoDir = path.join(
+      tempRoot,
+      `${parsedRepo.owner}-${parsedRepo.repo}`,
+    );
+
+    try {
+      await gitClone(parsedRepo.cloneUrl, repoDir, options.branch);
+
+      const requestedDirectory =
+        options.directory?.trim().replace(/^\/+|\/+$/g, "") ||
+        skill.source_directory?.trim().replace(/^\/+|\/+$/g, "");
+      let skillDir: string;
+
+      if (requestedDirectory) {
+        const candidateDir = path.resolve(repoDir, requestedDirectory);
+        if (!isPathWithin(repoDir, candidateDir)) {
+          throw new Error(
+            "Path traversal detected: skill directory is outside repository",
+          );
+        }
+        if (!(await fileExists(path.join(candidateDir, "SKILL.md")))) {
+          throw new Error(
+            `SKILL.md not found in directory: ${requestedDirectory}`,
+          );
+        }
+        skillDir = candidateDir;
+      } else {
+        skillDir = await this.resolveSingleSkillDirFromRepo(repoDir);
+      }
+
+      return await saveToLocalRepoBySkillId(skill, skillDir, "copy");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+    }
   }
 
   // ---- Scan methods ----
@@ -573,9 +645,7 @@ export class SkillInstaller {
    * Returns an array of directories that contain a SKILL.md file,
    * supporting both flat and one-level nested structures.
    */
-  private static async collectSkillDirs(
-    scanPath: string,
-  ): Promise<string[]> {
+  private static async collectSkillDirs(scanPath: string): Promise<string[]> {
     const result: string[] = [];
 
     if (!(await fileExists(scanPath))) {
@@ -629,7 +699,9 @@ export class SkillInstaller {
     return result;
   }
 
-  private static async resolveSingleSkillDirFromRepo(repoDir: string): Promise<string> {
+  private static async resolveSingleSkillDirFromRepo(
+    repoDir: string,
+  ): Promise<string> {
     const skillDirs = await this.collectSkillDirs(repoDir);
 
     if (skillDirs.length === 0) {
@@ -660,8 +732,13 @@ export class SkillInstaller {
       );
     }
 
-    const tempRoot = await fs.mkdtemp(path.join(this.skillsDir, ".remote-scan-"));
-    const repoDir = path.join(tempRoot, `${parsedRepo.owner}-${parsedRepo.repo}`);
+    const tempRoot = await fs.mkdtemp(
+      path.join(this.skillsDir, ".remote-scan-"),
+    );
+    const repoDir = path.join(
+      tempRoot,
+      `${parsedRepo.owner}-${parsedRepo.repo}`,
+    );
 
     try {
       await gitClone(parsedRepo.cloneUrl, repoDir, branch);
@@ -669,7 +746,9 @@ export class SkillInstaller {
       const scannedSkills = await this.scanLocalPreview([scanRoot]);
 
       return scannedSkills.map((skill) => {
-        const builtin = registrySkills.find((item) => item.slug === skill.name.toLowerCase());
+        const builtin = registrySkills.find(
+          (item) => item.slug === skill.name.toLowerCase(),
+        );
         const normalizedBranch = branch?.trim();
         const normalizedDirectory = directory?.trim().replace(/^\/+|\/+$/g, "");
         const repoRelativeSkillPath = skill.filePath
@@ -713,7 +792,10 @@ export class SkillInstaller {
           skillPath: canonicalSkillPath,
         });
         return {
-          slug: skill.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+          slug: skill.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, ""),
           name: builtin?.name || skill.name,
           install_name: skill.name,
           source_id: sourceId,
@@ -722,7 +804,8 @@ export class SkillInstaller {
           source_directory: sourceDirectory,
           canonical_skill_path: canonicalSkillPath,
           directory_fingerprint: skill.directory_fingerprint,
-          description: builtin?.description || skill.description || `${skill.name} skill`,
+          description:
+            builtin?.description || skill.description || `${skill.name} skill`,
           category: builtin?.category || "general",
           icon_url: builtin?.icon_url,
           icon_background: builtin?.icon_background,
@@ -819,9 +902,14 @@ export class SkillInstaller {
             // can report skipped skills to the user.
             if (msg.includes("Skill already exists")) {
               skipped.push(skillDisplayName);
-              console.log(`Skipped already-installed skill: ${skillDisplayName}`);
+              console.log(
+                `Skipped already-installed skill: ${skillDisplayName}`,
+              );
             } else {
-              console.warn(`Failed to import skill "${skillDisplayName}":`, msg);
+              console.warn(
+                `Failed to import skill "${skillDisplayName}":`,
+                msg,
+              );
             }
           }
         }

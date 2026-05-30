@@ -1,0 +1,20 @@
+# Tasks
+
+- [x] Inspect stable Skill behavior and structure docs.
+- [x] Inspect current Skill import/store implementation paths.
+- [x] Identify the content-only path that caused directory loss.
+- [x] Add active change record for the package boundary.
+- [x] Add failing tests for full-package Gitea/custom Git import.
+- [x] Add failing tests that store installation cannot persist only `SKILL.md` when source metadata represents a package.
+- [x] Add real local Git fixture coverage for clone-backed package import.
+- [x] Add boundary/fuzz tests for path traversal, missing `SKILL.md`, ambiguous multi-skill repos, internal directory filtering, and symlink filtering.
+- [x] Add stress test for large Skill package inventory copy.
+- [x] Add IPC validation and fingerprint persistence tests for `skill:saveRemoteGitToRepo`.
+- [x] Add package install rollback test when remote package persistence fails.
+- [x] Implement package-level install/sync path for custom Git/Gitea sources.
+- [x] Upgrade manual Skill creation so blank instructions produce a package-aware starter `SKILL.md`.
+- [x] Add built-in Skill guidance for authoring good package-style Skills.
+- [x] Add built-in PromptHub CLI operator Skill.
+- [x] Verify safety scan and file browser consume managed package directories after install.
+- [x] Strengthen project TDD and coverage rules to require 100% line/function/branch/condition coverage for new and changed production code.
+- [x] Sync final behavior back to stable docs after implementation.

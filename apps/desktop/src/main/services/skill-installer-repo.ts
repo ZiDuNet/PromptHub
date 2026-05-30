@@ -129,13 +129,17 @@ function normalizeVariantLabel(value?: string | null): string {
   return normalized || "local";
 }
 
-function buildVariantKeyFromSkill(skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">): string {
+function buildVariantKeyFromSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
+): string {
   if (skill.variant_key?.trim()) {
     return skill.variant_key.trim();
   }
 
   const logicalName = normalizeLogicalSkillName(skill.name || skill.id);
-  const stableSuffix = computeStableTextHash(skill.source_id?.trim() || skill.id.trim()).slice(0, 8);
+  const stableSuffix = computeStableTextHash(
+    skill.source_id?.trim() || skill.id.trim(),
+  ).slice(0, 8);
   return `${logicalName}--${stableSuffix}`;
 }
 
@@ -153,15 +157,27 @@ function getLegacyManagedContainerPath(skillId: string): string {
 function getPreferredManagedContainerPath(
   skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
 ): string {
-  return getManagedContainerPathFromInstanceKey(buildVariantKeyFromSkill(skill));
+  return getManagedContainerPathFromInstanceKey(
+    buildVariantKeyFromSkill(skill),
+  );
 }
 
 function buildSkillVariantSourceMetadata(
-  skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+  skill: Pick<
+    Skill,
+    | "id"
+    | "name"
+    | "source_id"
+    | "source_url"
+    | "directory_fingerprint"
+    | "logical_name"
+    | "variant_key"
+  >,
   mode: "copy" | "symlink",
 ): { source: SkillVariantSourceMetadata; variant: SkillVariantMetadata } {
   const logicalName =
-    skill.logical_name?.trim() || normalizeLogicalSkillName(skill.name || skill.id);
+    skill.logical_name?.trim() ||
+    normalizeLogicalSkillName(skill.name || skill.id);
   const variantKey = buildVariantKeyFromSkill(skill);
   const timestamp = Date.now();
   return {
@@ -190,7 +206,10 @@ function getManagedContainerPathFromInstanceKey(instanceKey: string): string {
 
 async function writeVariantSidecarFiles(
   containerDir: string,
-  metadata: { source: SkillVariantSourceMetadata; variant: SkillVariantMetadata },
+  metadata: {
+    source: SkillVariantSourceMetadata;
+    variant: SkillVariantMetadata;
+  },
 ): Promise<void> {
   const internalDir = path.join(containerDir, INTERNAL_METADATA_DIRNAME);
   await fs.mkdir(internalDir, { recursive: true });
@@ -395,14 +414,20 @@ export async function copyRepoByPathToDirectory(
   const resolvedSourceDir = path.resolve(sourceDir);
   const resolvedTargetRootDir = path.resolve(targetRootDir);
 
-  const sourceStat = await fs.stat(resolvedSourceDir).catch((error: unknown) => {
-    if (getErrorCode(error) === "ENOENT") {
-      throw new Error(`Source skill directory does not exist: ${resolvedSourceDir}`);
-    }
-    throw error;
-  });
+  const sourceStat = await fs
+    .stat(resolvedSourceDir)
+    .catch((error: unknown) => {
+      if (getErrorCode(error) === "ENOENT") {
+        throw new Error(
+          `Source skill directory does not exist: ${resolvedSourceDir}`,
+        );
+      }
+      throw error;
+    });
   if (!sourceStat.isDirectory()) {
-    throw new Error(`Source skill directory is not a directory: ${resolvedSourceDir}`);
+    throw new Error(
+      `Source skill directory is not a directory: ${resolvedSourceDir}`,
+    );
   }
 
   const targetDir = path.join(resolvedTargetRootDir, skillName);
@@ -819,7 +844,10 @@ export function getLocalRepoPath(skillName: string): string {
 }
 
 export function getLocalRepoPathForSkillId(skillId: string): string {
-  return path.join(getLegacyManagedContainerPath(skillId), MANAGED_REPO_DIRNAME);
+  return path.join(
+    getLegacyManagedContainerPath(skillId),
+    MANAGED_REPO_DIRNAME,
+  );
 }
 
 export function getLocalRepoContainerPathForSkillId(skillId: string): string {
@@ -835,27 +863,47 @@ export function getPreferredLocalRepoContainerPathForSkill(
 export function getPreferredLocalRepoPathForSkill(
   skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
 ): string {
-  return path.join(getPreferredManagedContainerPath(skill), MANAGED_REPO_DIRNAME);
+  return path.join(
+    getPreferredManagedContainerPath(skill),
+    MANAGED_REPO_DIRNAME,
+  );
 }
 
 export async function ensureManagedVariantContainer(
-  skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+  skill: Pick<
+    Skill,
+    | "id"
+    | "name"
+    | "source_id"
+    | "source_url"
+    | "directory_fingerprint"
+    | "logical_name"
+    | "variant_key"
+  >,
   mode: "copy" | "symlink",
 ): Promise<{ containerDir: string; repoDir: string }> {
   const containerDir = await getManagedContainerPathForSkill(skill);
   const repoDir = path.join(containerDir, MANAGED_REPO_DIRNAME);
   await initSkillsDir();
   await fs.mkdir(containerDir, { recursive: true });
-  await writeVariantSidecarFiles(containerDir, buildSkillVariantSourceMetadata(skill, mode));
+  await writeVariantSidecarFiles(
+    containerDir,
+    buildSkillVariantSourceMetadata(skill, mode),
+  );
   return { containerDir, repoDir };
 }
 
 export async function getManagedContainerPathForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key" | "local_repo_path">,
+  skill: Pick<
+    Skill,
+    "id" | "name" | "source_id" | "variant_key" | "local_repo_path"
+  >,
 ): Promise<string> {
   let existingManagedContainerFromLocalRepoPath: string | null = null;
   if (skill.local_repo_path?.trim()) {
-    const normalizedLocalRepoPath = normalizeRepoBaseDirectory(skill.local_repo_path);
+    const normalizedLocalRepoPath = normalizeRepoBaseDirectory(
+      skill.local_repo_path,
+    );
     const repoBasename = path.basename(normalizedLocalRepoPath);
 
     if (repoBasename === MANAGED_REPO_DIRNAME) {
@@ -863,7 +911,9 @@ export async function getManagedContainerPathForSkill(
       if (await fileExists(candidateContainer)) {
         existingManagedContainerFromLocalRepoPath = candidateContainer;
       }
-    } else if (await fileExists(path.join(normalizedLocalRepoPath, MANAGED_REPO_DIRNAME))) {
+    } else if (
+      await fileExists(path.join(normalizedLocalRepoPath, MANAGED_REPO_DIRNAME))
+    ) {
       existingManagedContainerFromLocalRepoPath = normalizedLocalRepoPath;
     }
   }
@@ -876,8 +926,11 @@ export async function getManagedContainerPathForSkill(
     existingManagedContainerFromLocalRepoPath,
     getPreferredLocalRepoContainerPathForSkill(skill),
     getLegacyManagedContainerPath(skill.id),
-  ].filter((value, index, array): value is string =>
-    typeof value === "string" && value.trim().length > 0 && array.indexOf(value) === index,
+  ].filter(
+    (value, index, array): value is string =>
+      typeof value === "string" &&
+      value.trim().length > 0 &&
+      array.indexOf(value) === index,
   );
 
   for (const candidate of candidateContainers) {
@@ -890,7 +943,10 @@ export async function getManagedContainerPathForSkill(
 }
 
 export async function deleteManagedVariantContainer(
-  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key" | "local_repo_path">,
+  skill: Pick<
+    Skill,
+    "id" | "name" | "source_id" | "variant_key" | "local_repo_path"
+  >,
 ): Promise<void> {
   const containerPath = await getManagedContainerPathForSkill(skill);
   await deleteRepoByPath(containerPath);
@@ -899,7 +955,16 @@ export async function deleteManagedVariantContainer(
 export async function saveToLocalRepoBySkillId(
   skillOrId:
     | string
-    | Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+    | Pick<
+        Skill,
+        | "id"
+        | "name"
+        | "source_id"
+        | "source_url"
+        | "directory_fingerprint"
+        | "logical_name"
+        | "variant_key"
+      >,
   sourceDir: string,
   mode: "copy" | "symlink" = "copy",
 ): Promise<string> {
@@ -907,10 +972,15 @@ export async function saveToLocalRepoBySkillId(
     typeof skillOrId === "string"
       ? ({ id: skillOrId, name: skillOrId } as Pick<Skill, "id" | "name">)
       : skillOrId;
-  const { containerDir, repoDir } = await ensureManagedVariantContainer(skill, mode);
+  const { containerDir, repoDir } = await ensureManagedVariantContainer(
+    skill,
+    mode,
+  );
   const sourceStat = await fs.stat(sourceDir).catch((error: unknown) => {
     if (getErrorCode(error) === "ENOENT") {
-      throw new Error(`Invalid sourceDir: directory does not exist: ${sourceDir}`);
+      throw new Error(
+        `Invalid sourceDir: directory does not exist: ${sourceDir}`,
+      );
     }
     throw error;
   });
@@ -931,6 +1001,10 @@ export async function saveToLocalRepoBySkillId(
   await fs.cp(sourceDir, repoDir, {
     recursive: true,
     filter: async (src: string) => {
+      const relativePath = path.relative(sourceDir, src);
+      if (relativePath && isInternalSkillRepoEntry(relativePath)) {
+        return false;
+      }
       try {
         const stat = await fs.lstat(src);
         return !stat.isSymbolicLink();
@@ -950,14 +1024,26 @@ export async function saveToLocalRepoBySkillId(
 export async function saveContentToLocalRepoBySkillId(
   skillOrId:
     | string
-    | Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+    | Pick<
+        Skill,
+        | "id"
+        | "name"
+        | "source_id"
+        | "source_url"
+        | "directory_fingerprint"
+        | "logical_name"
+        | "variant_key"
+      >,
   content: string,
 ): Promise<string> {
   const skill =
     typeof skillOrId === "string"
       ? ({ id: skillOrId, name: skillOrId } as Pick<Skill, "id" | "name">)
       : skillOrId;
-  const { containerDir, repoDir } = await ensureManagedVariantContainer(skill, "copy");
+  const { containerDir, repoDir } = await ensureManagedVariantContainer(
+    skill,
+    "copy",
+  );
   await fs.mkdir(repoDir, { recursive: true });
   await fs.writeFile(path.join(repoDir, "SKILL.md"), content, "utf-8");
   await writeVariantSidecarFiles(

@@ -138,15 +138,17 @@ describe("skill store", () => {
   });
 
   it("stores branch and directory when adding a git repo custom source", () => {
-    useSkillStore.getState().addCustomStoreSource(
-      "Release Store",
-      "https://github.com/openai/skills/tree/main/skills/.curated",
-      "git-repo",
-      {
-        branch: "release",
-        directory: "skills/release",
-      },
-    );
+    useSkillStore
+      .getState()
+      .addCustomStoreSource(
+        "Release Store",
+        "https://github.com/openai/skills/tree/main/skills/.curated",
+        "git-repo",
+        {
+          branch: "release",
+          directory: "skills/release",
+        },
+      );
 
     const source = useSkillStore.getState().customStoreSources[0];
     expect(source).toEqual(
@@ -160,9 +162,9 @@ describe("skill store", () => {
   });
 
   it("stores project scan errors and rethrows them to the caller", async () => {
-    const scanLocalPreview = vi.fn().mockRejectedValue(
-      new Error("Project scan failed"),
-    );
+    const scanLocalPreview = vi
+      .fn()
+      .mockRejectedValue(new Error("Project scan failed"));
     installWindowMocks({
       api: {
         skill: {
@@ -478,7 +480,9 @@ description: Use this skill for PDF tasks.
       updated_at: 1,
       ...data,
     }));
-    const fetchRemoteContent = vi.fn().mockResolvedValue("# Writer\n\nOriginal\n");
+    const fetchRemoteContent = vi
+      .fn()
+      .mockResolvedValue("# Writer\n\nOriginal\n");
     const writeLocalFile = vi.fn().mockResolvedValue(undefined);
     const getAll = vi.fn().mockResolvedValue([]);
 
@@ -495,7 +499,8 @@ description: Use this skill for PDF tasks.
       category: "general",
       author: "PromptHub",
       source_url: "https://github.com/example/skills/tree/main/writer",
-      content_url: "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+      content_url:
+        "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
       tags: ["writing"],
       version: "1.0.0",
       content: "# Writer\n",
@@ -553,8 +558,9 @@ description: Use this skill for PDF tasks.
       ],
     });
 
-    const { installed, recommended } =
-      useSkillStore.getState().getFilteredRegistrySkills();
+    const { installed, recommended } = useSkillStore
+      .getState()
+      .getFilteredRegistrySkills();
 
     expect(installed.map((skill) => skill.source_id)).toEqual([
       "source-main-writer",
@@ -673,7 +679,8 @@ description: Use this skill for PDF tasks.
           category: "general",
           author: "PromptHub",
           source_url: "https://github.com/example/skills/tree/main/writer",
-          content_url: "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+          content_url:
+            "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
           tags: ["writing"],
           version: "1.1.0",
           content: remoteContent,
@@ -706,7 +713,10 @@ description: Use this skill for PDF tasks.
     const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-remote" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({
-      ...createSkillFixture({ id: "skill-community-writer", name: "community-writer" }),
+      ...createSkillFixture({
+        id: "skill-community-writer",
+        name: "community-writer",
+      }),
       ...data,
       id: "skill-community-writer",
       updated_at: 2,
@@ -746,7 +756,8 @@ description: Use this skill for PDF tasks.
               description: "Write better",
               category: "general",
               author: "Community",
-              source_url: "https://github.com/example/community/tree/main/writer",
+              source_url:
+                "https://github.com/example/community/tree/main/writer",
               content_url:
                 "https://raw.githubusercontent.com/example/community/main/writer/SKILL.md",
               tags: ["writing"],
@@ -793,9 +804,13 @@ description: Use this skill for PDF tasks.
     (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
       content: "# Local Writer\n\nLatest local content\n",
     });
-    (window as any).api.skill.writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.skill.writeLocalFile = vi
+      .fn()
+      .mockResolvedValue(undefined);
     (window as any).api.skill.saveToRepo = vi.fn().mockResolvedValue(undefined);
-    (window as any).api.skill.syncFromRepo = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.skill.syncFromRepo = vi
+      .fn()
+      .mockResolvedValue(undefined);
 
     useSkillStore.setState({
       registrySkills: [],
@@ -845,6 +860,203 @@ description: Use this skill for PDF tasks.
     );
   });
 
+  it("installs a custom Git store skill by cloning the package instead of writing only SKILL.md", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-gitea-writer",
+        name: "writer",
+        source_id: "source-gitea-writer",
+        registry_slug: "writer",
+      }),
+    );
+    const getAll = vi.fn().mockResolvedValue([]);
+    const writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    const saveRemoteGitToRepo = vi
+      .fn()
+      .mockResolvedValue("/managed/writer/repo");
+    const syncFromRepo = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-gitea-writer",
+        name: "writer",
+        local_repo_path: "/managed/writer/repo",
+      }),
+    );
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.getAll = getAll;
+    (window as any).api.skill.writeLocalFile = writeLocalFile;
+    (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
+    (window as any).api.skill.syncFromRepo = syncFromRepo;
+
+    await useSkillStore.getState().installRegistrySkill({
+      slug: "writer",
+      source_id: "source-gitea-writer",
+      name: "Writer",
+      description: "Custom Gitea writer",
+      category: "general",
+      author: "icelemon",
+      source_url: "https://gitea.example.com/team/skills",
+      source_branch: "main",
+      source_directory: "skills/writer",
+      canonical_skill_path: "skills/writer/SKILL.md",
+      directory_fingerprint: "full-tree-fingerprint",
+      tags: ["writing"],
+      version: "1.0.0",
+      content: "# Writer\n\nUse the package resources.\n",
+    });
+
+    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-gitea-writer", {
+      repoUrl: "https://gitea.example.com/team/skills",
+      branch: "main",
+      directory: "skills/writer",
+    });
+    expect(syncFromRepo).toHaveBeenCalledWith("skill-gitea-writer");
+    expect(writeLocalFile).not.toHaveBeenCalledWith(
+      "skill-gitea-writer",
+      "SKILL.md",
+      expect.any(String),
+      expect.anything(),
+    );
+  });
+
+  it("derives the package directory from canonical_skill_path when source_directory is absent", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-canonical-writer",
+        name: "writer",
+        source_id: "source-canonical-writer",
+        registry_slug: "writer",
+      }),
+    );
+    const saveRemoteGitToRepo = vi
+      .fn()
+      .mockResolvedValue("/managed/canonical-writer/repo");
+    const syncFromRepo = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-canonical-writer",
+        name: "writer",
+        local_repo_path: "/managed/canonical-writer/repo",
+      }),
+    );
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.getAll = vi.fn().mockResolvedValue([]);
+    (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
+    (window as any).api.skill.syncFromRepo = syncFromRepo;
+
+    await useSkillStore.getState().installRegistrySkill({
+      slug: "writer",
+      source_id: "source-canonical-writer",
+      name: "Writer",
+      description: "Canonical path writer",
+      category: "general",
+      author: "icelemon",
+      source_url: "https://gitea.example.com/team/skills",
+      source_branch: "stable",
+      canonical_skill_path: "catalog/writer/SKILL.md",
+      tags: ["writing"],
+      version: "1.0.0",
+      content: "# Writer\n\nUse the package resources.\n",
+    });
+
+    expect(saveRemoteGitToRepo).toHaveBeenCalledWith("skill-canonical-writer", {
+      repoUrl: "https://gitea.example.com/team/skills",
+      branch: "stable",
+      directory: "catalog/writer",
+    });
+    expect(syncFromRepo).toHaveBeenCalledWith("skill-canonical-writer");
+  });
+
+  it("uses the content path for GitHub raw registry entries that do not advertise a package", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-github-single",
+        name: "single",
+        source_id: "source-github-single",
+        registry_slug: "single",
+      }),
+    );
+    const writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    const saveRemoteGitToRepo = vi
+      .fn()
+      .mockResolvedValue("/managed/single/repo");
+    const fetchRemoteContent = vi
+      .fn()
+      .mockResolvedValue("# Single\n\nA single-file registry skill.\n");
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.getAll = vi.fn().mockResolvedValue([]);
+    (window as any).api.skill.writeLocalFile = writeLocalFile;
+    (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+
+    await useSkillStore.getState().installRegistrySkill({
+      slug: "single",
+      source_id: "source-github-single",
+      name: "Single",
+      description: "GitHub single file",
+      category: "general",
+      author: "demo",
+      source_url: "https://github.com/team/skills",
+      content_url:
+        "https://raw.githubusercontent.com/team/skills/main/single/SKILL.md",
+      tags: ["single"],
+      version: "1.0.0",
+      content: "# Cached Single\n",
+    });
+
+    expect(writeLocalFile).toHaveBeenCalledWith(
+      "skill-github-single",
+      "SKILL.md",
+      "# Single\n\nA single-file registry skill.\n",
+      { skipVersionSnapshot: true },
+    );
+    expect(saveRemoteGitToRepo).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a created package skill when remote package persistence fails", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-failed-package",
+        name: "failed-package",
+        source_id: "source-failed-package",
+        registry_slug: "failed-package",
+      }),
+    );
+    const deleteSkill = vi.fn().mockResolvedValue(true);
+    const saveRemoteGitToRepo = vi
+      .fn()
+      .mockRejectedValue(new Error("clone failed"));
+    const getAll = vi.fn().mockResolvedValue([]);
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.delete = deleteSkill;
+    (window as any).api.skill.getAll = getAll;
+    (window as any).api.skill.saveRemoteGitToRepo = saveRemoteGitToRepo;
+
+    await expect(
+      useSkillStore.getState().installRegistrySkill({
+        slug: "failed-package",
+        source_id: "source-failed-package",
+        name: "Failed Package",
+        description: "Package install should be atomic",
+        category: "general",
+        author: "icelemon",
+        source_url: "https://gitea.example.com/team/skills",
+        source_branch: "main",
+        source_directory: "skills/failed-package",
+        canonical_skill_path: "skills/failed-package/SKILL.md",
+        directory_fingerprint: "full-tree-fingerprint",
+        tags: ["writing"],
+        version: "1.0.0",
+        content: "# Failed Package\n\nUse the package resources.\n",
+      }),
+    ).rejects.toThrow(/clone failed/);
+
+    expect(deleteSkill).toHaveBeenCalledWith("skill-failed-package");
+    expect(getAll).not.toHaveBeenCalled();
+  });
+
   it("updates a pristine skill from a cached local store source entry using the latest local file", async () => {
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-local" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({
@@ -860,7 +1072,9 @@ description: Use this skill for PDF tasks.
       content: "# Local Writer\n\nLatest local content\n",
     });
     (window as any).api.skill.saveToRepo = vi.fn().mockResolvedValue(undefined);
-    (window as any).api.skill.syncFromRepo = vi.fn().mockResolvedValue(undefined);
+    (window as any).api.skill.syncFromRepo = vi
+      .fn()
+      .mockResolvedValue(undefined);
 
     const originalHash = await useSkillStore
       .getState()
@@ -935,7 +1149,9 @@ description: Use this skill for PDF tasks.
   });
 
   it("updates a local store source even when source_url points at SKILL.md", async () => {
-    const versionCreate = vi.fn().mockResolvedValue({ id: "version-local-file" });
+    const versionCreate = vi
+      .fn()
+      .mockResolvedValue({ id: "version-local-file" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({
       ...createSkillFixture({ id: "skill-local-file", name: "local-writer" }),
       ...data,
@@ -1010,7 +1226,9 @@ description: Use this skill for PDF tasks.
 
   it("refuses registry updates when local content was edited unless overwrite is requested", async () => {
     const remoteContent = "# Writer\n\nRemote update\n";
-    (window as any).api.skill.fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    (window as any).api.skill.fetchRemoteContent = vi
+      .fn()
+      .mockResolvedValue(remoteContent);
     const update = vi.fn();
     (window as any).api.skill.update = update;
 
@@ -1040,7 +1258,8 @@ description: Use this skill for PDF tasks.
           category: "general",
           author: "PromptHub",
           source_url: "https://github.com/example/skills/tree/main/writer",
-          content_url: "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+          content_url:
+            "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
           tags: ["writing"],
           version: "1.1.0",
           content: remoteContent,
