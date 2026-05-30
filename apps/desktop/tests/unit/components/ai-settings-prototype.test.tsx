@@ -257,6 +257,37 @@ describe("AISettingsPrototype", () => {
     });
   });
 
+  it("surfaces a timeout error when model discovery hangs", async () => {
+    const showToast = vi.fn();
+    useToastMock.mockReturnValue({ showToast });
+    useSettingsStoreMock.mockReturnValue(createSettingsState());
+    vi.mocked(fetchAvailableModels).mockResolvedValue({
+      success: false,
+      models: [],
+      reason: "network",
+      error: "Request timeout after 12000ms",
+    });
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+    fireEvent.change(screen.getByLabelText("API URL"), {
+      target: { value: "https://api.legeling.xyz" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
+      target: { value: "test-key" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        "Request timeout after 12000ms",
+        "warning",
+      );
+    });
+  });
+
   it(
     "maps raw network failures to a friendlier connection message",
     async () => {

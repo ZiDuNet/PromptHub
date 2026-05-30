@@ -14,6 +14,7 @@
 - `gemini`: 聊天使用 OpenAI 兼容 `.../v1beta/openai/chat/completions`，模型发现使用原生 `GET .../v1beta/models`，聊天使用 `Authorization: Bearer`，模型发现使用 `x-goog-api-key`。
 - `anthropic`: 聊天使用原生 `POST /v1/messages`，模型发现使用 `GET /v1/models`，使用 `x-api-key` 和 `anthropic-version`。
 - 当聊天模型使用 `anthropic` 协议时，系统不得继续发送 OpenAI 风格流式请求；本次版本必须禁用其流式聊天配置。
+- 桌面端主进程 AI HTTP transport 必须支持请求级超时；AI workbench 的模型发现请求必须在 12 秒内失败并返回可恢复的 network 类错误，而不是无限等待。
 
 ## Removed
 
@@ -28,6 +29,10 @@
 - 系统必须请求 `POST <base>/v1/messages`
 - 请求头必须包含 `x-api-key` 与 `anthropic-version`
 - 若用户此前开启了流式输出，本次请求必须按非流式发送。
+
+- 当 AI workbench 获取模型列表时目标端点长时间无响应：
+- 桌面端请求必须在 12 秒左右终止
+- UI 必须把该结果视为 network 类失败并提示可恢复 warning，而不是一直保持获取中。
 
 - 当旧版本设置被迁移到新版本时：
 - 现有 AI 模型和 legacy root AI 配置必须获得稳定的默认协议值，不得因为缺失 `apiProtocol` 而丢失可用性。

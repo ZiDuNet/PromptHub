@@ -183,6 +183,7 @@ interface ResponseLike {
   headers: Record<string, string>;
   text: () => Promise<string>;
   json: <T = unknown>() => Promise<T>;
+  error?: string;
 }
 
 interface StreamState {
@@ -335,6 +336,7 @@ function createResponseLike(response: AITransportResponse): ResponseLike {
     headers: response.headers,
     text: async () => response.body,
     json: async <T = unknown>() => JSON.parse(response.body) as T,
+    error: response.error,
   };
 }
 
@@ -2329,6 +2331,36 @@ export interface FetchModelsResult {
   status?: number;
 }
 
+interface AnthropicModelsPayload {
+  data?: Array<{
+    id?: string;
+    display_name?: string;
+    created_at?: string;
+  }>;
+}
+
+interface OpenAIModelsPayload {
+  data?: Array<{
+    id?: string;
+    owned_by?: string;
+    created?: number;
+  }>;
+}
+
+interface GeminiModelsPayload {
+  models?: Array<{
+    name?: string;
+    displayName?: string;
+    description?: string;
+  }>;
+}
+
+interface ArrayModelPayloadItem {
+  id?: string;
+  model?: string;
+  name?: string;
+}
+
 /**
  * Calculate Base URL (for display preview)
  * 处理各种用户输入情况，返回标准化的 base URL
@@ -2478,12 +2510,12 @@ export async function fetchAvailableModels(
     const endpoint = buildModelsEndpointFromBase(
       resolveProtocolBase(apiUrl, apiProtocol),
     );
-  const resolvedProtocol = resolveAIProtocol({
-    apiProtocol,
-    provider: "",
-    apiUrl,
-  });
-  const headers = buildHeadersForProtocol(resolvedProtocol, apiKey, {
+    const resolvedProtocol = resolveAIProtocol({
+      apiProtocol,
+      provider: "",
+      apiUrl,
+    });
+    const headers = buildHeadersForProtocol(resolvedProtocol, apiKey, {
       accept: "application/json",
       useNativeGeminiAuth: resolvedProtocol === "gemini",
     });
@@ -2495,18 +2527,23 @@ export async function fetchAvailableModels(
             method: "GET",
             url: endpoint,
             headers,
+            timeoutMs: 12_000,
           }),
         )
-      : await fetch(endpoint, {
-          method: "GET",
-          headers,
-        });
+      : createFetchResponseLike(
+          await fetch(endpoint, {
+            method: "GET",
+            headers,
+          }),
+        );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = response.error ?? (await response.text());
       const reason =
         response.status === 401 || response.status === 403
           ? "auth"
+          : response.status === 0 && /timeout/i.test(errorText)
+            ? "network"
           : response.status === 404 ||
               response.status === 405 ||
               response.status === 501
@@ -2515,7 +2552,10 @@ export async function fetchAvailableModels(
       return {
         success: false,
         models: [],
-        error: `获取模型列表失败: ${response.status} - ${errorText.substring(0, 100)}`,
+        error:
+          response.status === 0
+            ? errorText.substring(0, 120)
+            : `获取模型列表失败: ${response.status} - ${errorText.substring(0, 100)}`,
         reason,
         endpoint,
         status: response.status,
@@ -2523,9 +2563,14 @@ export async function fetchAvailableModels(
       };
     }
 
-    const data = await response.json();
+    const data = await response.json<
+      | AnthropicModelsPayload
+      | OpenAIModelsPayload
+      | GeminiModelsPayload
+      | ArrayModelPayloadItem[]
+    >();
 
-    if (data.data && Array.isArray(data.data) && apiProtocol === "anthropic") {
+    if (apiProtocol === "anthropic" && "data" in data && Array.isArray(data.data)) {
       const models = data.data
         .filter((m: { id?: string }) => typeof m.id === "string")
         .map(
@@ -2543,7 +2588,7 @@ export async function fetchAvailableModels(
 
     // OpenAI 格式的响应
     // OpenAI format response
-    if (data.data && Array.isArray(data.data)) {
+    if ("data" in data && Array.isArray(data.data)) {
       const models = data.data
         .filter((m: { id?: string }) => m.id) // 过滤掉没有 id 的 / Filter out those without id
         .map((m: { id: string; owned_by?: string; created?: number }) => ({
@@ -2558,7 +2603,7 @@ export async function fetchAvailableModels(
     }
 
     // Gemini 格式的响应 / Gemini format response
-    if (data.models && Array.isArray(data.models)) {
+    if ("models" in data && Array.isArray(data.models)) {
       const models = data.models
         .filter((m: { name?: string }) => m.name)
         .map(

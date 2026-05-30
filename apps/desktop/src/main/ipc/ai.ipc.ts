@@ -45,11 +45,25 @@ async function requestToResponse(response: Response): Promise<AITransportRespons
 }
 
 async function performRequest(request: AITransportRequest): Promise<Response> {
-  return fetch(request.url, {
-    method: request.method,
-    headers: normalizeHeaders(request.headers),
-    body: request.body,
-  });
+  const controller = new AbortController();
+  const timeoutMs =
+    typeof request.timeoutMs === "number" && request.timeoutMs > 0
+      ? request.timeoutMs
+      : 30_000;
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Request timeout after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  try {
+    return await fetch(request.url, {
+      method: request.method,
+      headers: normalizeHeaders(request.headers),
+      body: request.body,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export function registerAIIPC(): void {

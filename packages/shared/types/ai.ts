@@ -4,6 +4,7 @@ export interface AITransportRequest {
   url: string;
   headers?: Record<string, string>;
   body?: string;
+  timeoutMs?: number;
 }
 
 export type AIProtocol = "openai" | "gemini" | "anthropic";

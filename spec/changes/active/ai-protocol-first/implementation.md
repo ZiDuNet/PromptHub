@@ -18,11 +18,17 @@
   - `openai` -> `POST /v1/chat/completions` / `GET /v1/models`
   - `gemini` -> `POST /v1beta/openai/chat/completions` / `GET /v1beta/models`
   - `anthropic` -> `POST /v1/messages` / `GET /v1/models`
+- 桌面端 AI HTTP 请求继续统一走主进程 IPC transport；本次额外为 `AITransportRequest` 增加 `timeoutMs`，并在 `main/ipc/ai.ipc.ts` 中用 `AbortController` 实施请求级超时。
+- `fetchAvailableModels()` 现在对模型发现请求显式传入 `timeoutMs: 12_000`，当主进程 transport 返回 `status: 0` 且错误包含 timeout 文案时，结果会被归类为 `reason: "network"`。
+- AI workbench 获取模型列表时，timeout 失败现在会以 warning toast 呈现，避免用户在目标接口长时间挂起时一直看到 loading 状态。
 - main process `ai-client.ts` 已同步按协议分支，确保 Safety Scan 和 rules rewrite 与 renderer 行为一致。
 - `Anthropic` 本次明确限制为非流式聊天：
   - UI 中禁用流式开关
   - renderer/main transport 在 `anthropic` 协议下强制 `stream = false`
 - 已补充并更新协议相关单测断言，覆盖新的 `apiProtocol` 字段传递与 Gemini/Anthropic transport 行为。
+- 已补充模型发现 timeout 回归：
+  - `tests/unit/services/ai-transport.test.ts` 覆盖 `timeoutMs: 12_000` 透传与 timeout -> network 错误映射
+  - `tests/unit/components/ai-settings-prototype.test.tsx` 覆盖 AI workbench 在模型发现超时时展示 warning toast
 - 已修复 AI workbench 协议文案 key 误落在 `skill.*` locale 分组的问题，当前协议下拉与端点卡片改为稳定使用 `settings.protocol*` 翻译。
 - 已把 AI workbench provider 分组从混合语言硬编码改为内部 key（`overseas` / `domestic` / `other`），在表单下拉中统一走 `settings.*` 翻译；模型列表里的 `Other` 分类兜底也改为展示层翻译，避免英文界面残留 `International / 国际`、`Other / 其他`。
 
@@ -36,6 +42,11 @@
 - `pnpm test -- apps/desktop/tests/unit/services/ai-defaults.test.ts --run`
 - `pnpm test -- apps/desktop/tests/unit/services/settings-snapshot.test.ts --run`
 - `pnpm test -- apps/desktop/tests/unit/components/ai-settings-prototype.test.tsx --run`
+- 后续补充验证（本次 timeout 修复）：
+- `pnpm --filter @prompthub/desktop exec eslint src/main/ipc/ai.ipc.ts src/renderer/services/ai.ts tests/unit/services/ai-transport.test.ts tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop build`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/services/ai-url-preview.test.ts tests/unit/services/ai-defaults.test.ts`
 
 - 构建仍保留既有 Vite warning：
 - `EditPromptModal.tsx` 同时动态/静态导入

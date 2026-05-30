@@ -92,6 +92,7 @@ describe("ai transport", () => {
         Accept: "application/json",
         Authorization: "Bearer test-key",
       },
+      timeoutMs: 12_000,
     });
     expect(fetch).not.toHaveBeenCalled();
     expect(result).toEqual({
@@ -285,6 +286,32 @@ describe("ai transport", () => {
         Accept: "application/json",
         "x-goog-api-key": "gemini-key",
       },
+      timeoutMs: 12_000,
+    });
+  });
+
+  it("returns a network error when model discovery times out in the main-process transport", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: false,
+      status: 0,
+      statusText: "",
+      body: "",
+      headers: {},
+      error: "Request timeout after 12000ms",
+    });
+
+    const result = await fetchAvailableModels(
+      "https://api.openai.com",
+      "test-key",
+    );
+
+    expect(result).toEqual({
+      success: false,
+      models: [],
+      error: "Request timeout after 12000ms",
+      reason: "network",
+      endpoint: "https://api.openai.com/v1/models",
+      status: 0,
     });
   });
 
