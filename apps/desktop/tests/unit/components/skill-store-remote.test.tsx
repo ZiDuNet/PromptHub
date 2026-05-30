@@ -768,6 +768,8 @@ describe("SkillStore remote loading", () => {
     expect(screen.getAllByText("Same Name Source").length).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText("Stable")).not.toBeInTheDocument();
     expect(screen.queryByText("Dev")).not.toBeInTheDocument();
+    expect(screen.queryByText("main")).not.toBeInTheDocument();
+    expect(screen.getAllByText("dev").length).toBeGreaterThan(0);
   });
 
   it("opens the store detail when a remote card only has a slug selection id", async () => {
@@ -869,7 +871,8 @@ describe("SkillStore remote loading", () => {
     );
 
     expect(screen.getAllByText("Local").length).toBeGreaterThan(0);
-    expect(screen.getByText("Dev")).toBeInTheDocument();
+    expect(screen.getByText("dev")).toBeInTheDocument();
+    expect(screen.queryByText("Dev")).not.toBeInTheDocument();
   });
 
   it("does not show store versions in store detail", async () => {

@@ -9,6 +9,7 @@ type SkillSourceBadgeInput = Pick<
   | "source_id"
   | "source_label"
   | "source_url"
+  | "source_branch"
   | "registry_slug"
   | "is_builtin"
   | "installed_at"
@@ -115,33 +116,79 @@ function isProjectSkillSourcePath(sourceUrl?: string): boolean {
   );
 }
 
+function extractBranchFromSourceUrl(sourceUrl?: string): string | null {
+  if (!sourceUrl || isLikelyLocalSource(sourceUrl)) {
+    return null;
+  }
+
+  const treeMatch = sourceUrl.match(/\/tree\/([^/]+)(?:\/|$)/i);
+  const branch = decodeURIComponent(treeMatch?.[1] || "").trim();
+  return branch || null;
+}
+
+function getNonDefaultBranchBadge(
+  skill: SkillSourceBadgeInput,
+): SkillVariantBadge | null {
+  const branch =
+    skill.source_branch?.trim() || extractBranchFromSourceUrl(skill.source_url);
+  if (!branch) {
+    return null;
+  }
+
+  const normalized = branch.toLowerCase();
+  if (normalized === "main" || normalized === "master") {
+    return null;
+  }
+
+  return {
+    key: `source-branch-${branch}`,
+    label: branch,
+    title: branch,
+    tone: "branch",
+  };
+}
+
+function withBranchBadge(
+  badges: SkillVariantBadge[],
+  skill: SkillSourceBadgeInput,
+): SkillVariantBadge[] {
+  const branchBadge = getNonDefaultBranchBadge(skill);
+  return branchBadge ? [...badges, branchBadge] : badges;
+}
+
 export function buildMySkillSourceBadges(
   skill: SkillSourceBadgeInput,
   t: TFunction,
 ): SkillVariantBadge[] {
   const storeBadge = getStoreSourceBadge(skill, t);
   if (storeBadge) {
-    return [storeBadge];
+    return withBranchBadge([storeBadge], skill);
   }
 
   if (isProjectSkillSourcePath(skill.source_url)) {
-    return [
-      {
-        key: "source-project-import",
-        label: t("skill.sourceBadgeProjectImport", "Project Import"),
-        tone: "local",
-      },
-    ];
+    return withBranchBadge(
+      [
+        {
+          key: "source-project-import",
+          label: t("skill.sourceBadgeProjectImport", "Project Import"),
+          tone: "local",
+        },
+      ],
+      skill,
+    );
   }
 
   if (skill.source_url && isLikelyLocalSource(skill.source_url)) {
-    return [
-      {
-        key: "source-local-import",
-        label: t("skill.sourceBadgeLocalImport", "Local Import"),
-        tone: "local",
-      },
-    ];
+    return withBranchBadge(
+      [
+        {
+          key: "source-local-import",
+          label: t("skill.sourceBadgeLocalImport", "Local Import"),
+          tone: "local",
+        },
+      ],
+      skill,
+    );
   }
 
   if (skill.source_url) {
@@ -150,49 +197,64 @@ export function buildMySkillSourceBadges(
       sourceLabel: skill.source_label,
     });
     if (remoteChannel === "github") {
-      return [
-        {
-          key: "source-github-import",
-          label: t("skill.sourceBadgeGithubImport", "GitHub Import"),
-          tone: "git",
-        },
-      ];
+      return withBranchBadge(
+        [
+          {
+            key: "source-github-import",
+            label: t("skill.sourceBadgeGithubImport", "GitHub Import"),
+            tone: "git",
+          },
+        ],
+        skill,
+      );
     }
     if (remoteChannel === "gitee") {
-      return [
-        {
-          key: "source-gitee-import",
-          label: t("skill.sourceBadgeGiteeImport", "Gitee Import"),
-          tone: "git",
-        },
-      ];
+      return withBranchBadge(
+        [
+          {
+            key: "source-gitee-import",
+            label: t("skill.sourceBadgeGiteeImport", "Gitee Import"),
+            tone: "git",
+          },
+        ],
+        skill,
+      );
     }
     if (remoteChannel === "gitea") {
-      return [
-        {
-          key: "source-gitea-import",
-          label: t("skill.sourceBadgeGiteaImport", "Gitea Import"),
-          tone: "git",
-        },
-      ];
+      return withBranchBadge(
+        [
+          {
+            key: "source-gitea-import",
+            label: t("skill.sourceBadgeGiteaImport", "Gitea Import"),
+            tone: "git",
+          },
+        ],
+        skill,
+      );
     }
     if (remoteChannel === "git") {
-      return [
-        {
-          key: "source-git-import",
-          label: t("skill.sourceBadgeGitImport", "Git Import"),
-          tone: "git",
-        },
-      ];
+      return withBranchBadge(
+        [
+          {
+            key: "source-git-import",
+            label: t("skill.sourceBadgeGitImport", "Git Import"),
+            tone: "git",
+          },
+        ],
+        skill,
+      );
     }
 
-    return [
-      {
-        key: "source-remote-link-import",
-        label: t("skill.sourceBadgeRemoteLinkImport", "Remote Link Import"),
-        tone: "git",
-      },
-    ];
+    return withBranchBadge(
+      [
+        {
+          key: "source-remote-link-import",
+          label: t("skill.sourceBadgeRemoteLinkImport", "Remote Link Import"),
+          tone: "git",
+        },
+      ],
+      skill,
+    );
   }
 
   return [

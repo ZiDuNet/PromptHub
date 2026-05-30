@@ -23,7 +23,6 @@ export interface SkillVariantBadge {
     | "stable"
     | "dev"
     | "branch"
-    | "directory"
     | "installed"
     | "update";
 }
@@ -39,12 +38,26 @@ function normalizeBranch(branch?: string): string {
 
 function isStableBranch(branch?: string): boolean {
   const normalized = normalizeBranch(branch);
-  return ["main", "master", "stable", "release"].includes(normalized);
+  return ["stable", "release"].includes(normalized);
+}
+
+function isDefaultBranch(branch?: string): boolean {
+  const normalized = normalizeBranch(branch);
+  return normalized === "main" || normalized === "master";
 }
 
 function isDevBranch(branch?: string): boolean {
   const normalized = normalizeBranch(branch);
-  return ["dev", "develop", "beta", "next", "canary", "nightly", "preview", "alpha"].includes(normalized);
+  return [
+    "dev",
+    "develop",
+    "beta",
+    "next",
+    "canary",
+    "nightly",
+    "preview",
+    "alpha",
+  ].includes(normalized);
 }
 
 function getOfficialRepoLabel(skill: BadgeSource): string | null {
@@ -129,21 +142,12 @@ function extractBranchAndDirectoryFromUrl(
   };
 }
 
-function shortenDirectory(directory: string): string {
-  const normalized = directory.replace(/^\/+|\/+$/g, "");
-  const parts = normalized.split("/").filter(Boolean);
-  if (parts.length <= 2) {
-    return normalized;
-  }
-  return `.../${parts.slice(-2).join("/")}`;
-}
-
-function getBranchBadge(branch: string, t: TFunction): SkillVariantBadge {
+function getBranchBadge(branch: string): SkillVariantBadge {
   if (isStableBranch(branch)) {
     return {
       key: `branch-${branch}`,
       tone: "stable",
-      label: t("skill.variantBadgeStable", "Stable"),
+      label: branch,
       title: branch,
     };
   }
@@ -152,7 +156,7 @@ function getBranchBadge(branch: string, t: TFunction): SkillVariantBadge {
     return {
       key: `branch-${branch}`,
       tone: "dev",
-      label: t("skill.variantBadgeDev", "Dev"),
+      label: branch,
       title: branch,
     };
   }
@@ -165,34 +169,20 @@ function getBranchBadge(branch: string, t: TFunction): SkillVariantBadge {
   };
 }
 
-function getDirectoryBadge(directory: string): SkillVariantBadge {
-  return {
-    key: `directory-${directory}`,
-    tone: "directory",
-    label: shortenDirectory(directory),
-    title: directory,
-  };
-}
-
 export function buildSkillVariantBadges(
   skill: BadgeSource,
   t: TFunction,
   options?: BuildBadgeOptions,
 ): SkillVariantBadge[] {
   const badges: SkillVariantBadge[] = [];
-  const { branch: inferredBranch, directory: inferredDirectory } =
+  const { branch: inferredBranch } =
     extractBranchAndDirectoryFromUrl(skill.source_url);
   const branch = skill.source_branch?.trim() || inferredBranch;
-  const directory = skill.source_directory?.trim() || inferredDirectory;
 
   badges.push(getSourceBadge(skill, t));
 
-  if (branch) {
-    badges.push(getBranchBadge(branch, t));
-  }
-
-  if (directory) {
-    badges.push(getDirectoryBadge(directory));
+  if (branch && !isDefaultBranch(branch)) {
+    badges.push(getBranchBadge(branch));
   }
 
   if (options?.hasUpdate) {

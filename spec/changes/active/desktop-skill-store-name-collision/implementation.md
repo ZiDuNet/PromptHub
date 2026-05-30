@@ -137,6 +137,7 @@
   - 新增 `My Skills` 专用来源标签构建逻辑。
   - 卡片和列表默认只显示单一来源标签：Claude Code Store、OpenAI Codex Store、Community Store、自定义商店名、项目导入、本地导入、GitHub 导入、Gitea 导入、Gitee 导入、Git 导入、远程链接导入或本地创建。
   - 不再复用商店 variant badge 里的 `Stable` / `Dev` / branch / directory 解析结果，避免把 `skills/.curated/...`、repo 路径片段或技术来源信息暴露给用户。
+  - 后续按用户反馈微调为：`main/master` 默认分支不显示额外标签，非默认 Git 分支显示真实分支名，例如 `dev` 或 `feature/search`。
 - `apps/desktop/src/renderer/services/skill-source-channel.ts`
   - 新增远端来源渠道解析，按 `source_url` / `source_label` 区分 GitHub、Gitea、Gitee、普通 Git 与远程链接。
 - `apps/desktop/src/renderer/components/skill/detail-utils.ts`
@@ -155,6 +156,7 @@
   - 从自定义商店安装 skill 时，会把用户定义的商店名称写入导入后的 `source_label`，让 `My Skills` 后续能显示商店来源而不是底层仓库路径。
 - `apps/desktop/tests/unit/components/skill-view-tags.test.tsx`
   - 补充回归测试，覆盖 OpenAI 商店标签、GitHub/Gitea/Gitee/Git 导入标签、自定义商店标签、本地导入与项目导入。
+  - 补充非默认分支来源标签测试，验证 `main` 不显示、非默认分支显示真实分支名。
 - `apps/desktop/tests/unit/components/skill-detail-utils.test.ts`
   - 补充详情来源元信息测试，验证 Gitea、Gitee 与普通 Git 来源渠道显示。
 - `apps/desktop/tests/unit/components/skill-preview-pane.test.tsx`
@@ -431,6 +433,9 @@
 - `pnpm --filter @prompthub/desktop typecheck`
 - `pnpm --filter @prompthub/desktop test -- --run tests/integration/components/skill-ui.integration.test.tsx tests/unit/components/skill-i18n-smoke.test.tsx tests/unit/stores/settings-desktop-workspace.test.ts`
 - `pnpm --filter @prompthub/desktop exec eslint src/renderer/stores/settings.store.ts src/renderer/components/skill/SkillManager.tsx tests/integration/components/skill-ui.integration.test.tsx tests/unit/components/skill-i18n-smoke.test.tsx tests/unit/stores/settings-desktop-workspace.test.ts`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop test -- --run tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-store-card.test.tsx tests/unit/components/skill-store-remote.test.tsx tests/unit/components/skill-preview-pane.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/services/skill-source-badges.ts src/renderer/services/skill-variant-badges.ts src/renderer/components/skill/SkillStoreCard.tsx tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-store-card.test.tsx tests/unit/components/skill-store-remote.test.tsx`
 - `pnpm --filter @prompthub/desktop typecheck`
 
 以上验证均已通过。

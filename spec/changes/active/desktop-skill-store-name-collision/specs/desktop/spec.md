@@ -172,6 +172,7 @@ Skill 商店在加载远端 source 时，必须允许不同 source、不同 bran
 - Then 商店列表和商店详情必须显示当前商店名称或用户自定义商店名称
 - And `My Skills` 卡片和列表必须显示用户可理解的来源分类，例如商店名称、项目导入、本地导入、GitHub 导入、Gitea 导入、Gitee 导入、Git 导入、远程链接导入或本地创建
 - And UI 不得把 branch、directory、repo 路径片段、source identity hash 或商店版本号当作默认标签展示
+- And 当 skill 明确来自非默认 Git 分支时，UI 必须额外显示真实分支名；`main` / `master` 这类默认分支不得显示成额外标签
 - And 详情页必须继续展示来源渠道和具体地址或本地路径，供用户追溯来源
 
 ### Requirement: Refresh Must Preserve Installed State For The Same Remote Skill Identity

@@ -67,6 +67,7 @@ describe("skill view tags", () => {
     );
 
     expect(screen.getByText("OpenAI Codex Store")).toBeInTheDocument();
+    expect(screen.getByText("dev")).toBeInTheDocument();
     expect(screen.queryByText("Official")).not.toBeInTheDocument();
     expect(screen.queryByText("Dev")).not.toBeInTheDocument();
     expect(screen.queryByText(".../.curated/writer")).not.toBeInTheDocument();
@@ -100,6 +101,33 @@ describe("skill view tags", () => {
     expect(screen.getByText("GitHub Import")).toBeInTheDocument();
     expect(screen.queryByText("some-owner/some-repo")).not.toBeInTheDocument();
     expect(screen.queryByText("Stable")).not.toBeInTheDocument();
+    expect(screen.queryByText("main")).not.toBeInTheDocument();
+  });
+
+  it("shows the branch name for non-default branch imports", () => {
+    render(
+      <SkillGalleryCard
+        animationDelayMs={0}
+        isSelected={false}
+        isSelectionMode={false}
+        onDelete={vi.fn()}
+        onOpen={vi.fn()}
+        onQuickInstall={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onToggleSelection={vi.fn()}
+        skill={
+          {
+            ...baseSkill,
+            source_branch: "feature/search",
+            source_url:
+              "https://gitea.example.com/team/skills/tree/feature%2Fsearch/writer",
+          } as any
+        }
+      />,
+    );
+
+    expect(screen.getByText("Gitea Import")).toBeInTheDocument();
+    expect(screen.getByText("feature/search")).toBeInTheDocument();
   });
 
   it("uses specific remote git source badges", () => {

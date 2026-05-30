@@ -198,6 +198,28 @@ describe("SkillStoreCard", () => {
 
     expect(screen.getByText("Claude Code Store")).toBeInTheDocument();
     expect(screen.queryByText("Stable")).not.toBeInTheDocument();
+    expect(screen.queryByText("main")).not.toBeInTheDocument();
     expect(screen.queryByText("skills/claude-api")).not.toBeInTheDocument();
+  });
+
+  it("shows non-default branch names alongside the selected store name", () => {
+    render(
+      <SkillStoreCard
+        skill={makeSkill({
+          source_label: "team/skills",
+          source_branch: "dev",
+          source_directory: "skills/writer",
+        })}
+        isInstalled={false}
+        index={0}
+        storeLabel="Team Store"
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Team Store")).toBeInTheDocument();
+    expect(screen.getByText("dev")).toBeInTheDocument();
+    expect(screen.queryByText("Dev")).not.toBeInTheDocument();
+    expect(screen.queryByText("skills/writer")).not.toBeInTheDocument();
   });
 });

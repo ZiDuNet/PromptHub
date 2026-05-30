@@ -11,6 +11,7 @@
 - [x] 在 `SkillStoreCard` / `SkillStoreDetail` 中展示来源标签与状态 badge。
 - [x] 在 `SkillGalleryCard` / `SkillListView` 中展示导入后来源标签。
 - [x] 收敛 `My Skills` 来源标签语义：默认只显示商店名、项目导入、本地导入、GitHub/Gitea/Gitee/Git 导入、远程链接导入、本地创建等用户可理解来源，不显示 branch、directory、版本或 repo 路径片段。
+- [x] 调整 Git 分支标签语义：`main/master` 不显示分支标签，非默认分支显示真实分支名，不再显示泛化的 `Stable` / `Dev`。
 - [x] 补齐 `My Skills` 列表/画廊分页、每页数量持久化、右键菜单操作，以及从侧栏标签拖拽到 skill 卡片/行的标签赋值交互。
 - [x] 补充组件测试覆盖 official/dev/community/local 等 badge 展示。
 - [x] 梳理并修复 `My Skills -> 删除 skill` 的 repo 生命周期：区分 PromptHub managed 容器与外部源目录，删除时清理孤儿 repo。

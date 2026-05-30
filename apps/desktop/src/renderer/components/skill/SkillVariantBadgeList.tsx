@@ -21,8 +21,6 @@ function toneClassName(tone: SkillVariantBadge["tone"]): string {
       return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
     case "branch":
       return "bg-violet-500/10 text-violet-700 dark:text-violet-300";
-    case "directory":
-      return "bg-primary/10 text-primary";
     case "installed":
       return "bg-green-500/10 text-green-700 dark:text-green-300";
     case "update":

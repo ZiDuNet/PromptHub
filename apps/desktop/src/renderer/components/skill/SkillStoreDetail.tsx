@@ -208,6 +208,13 @@ export function SkillStoreDetail({
       return badges;
     }
 
+    const branchBadges = badges.filter(
+      (badge) =>
+        badge.tone === "branch" ||
+        badge.tone === "dev" ||
+        badge.tone === "stable",
+    );
+
     return [
       {
         key: "store-source",
@@ -215,6 +222,7 @@ export function SkillStoreDetail({
         title: skill.source_label || skill.source_url,
         tone: badges[0]?.tone || "git",
       },
+      ...branchBadges,
       ...badges.filter(
         (badge) => badge.tone === "installed" || badge.tone === "update",
       ),

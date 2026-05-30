@@ -39,6 +39,10 @@ export function SkillStoreCard({
   const statusBadges = variantBadges.filter(
     (badge) => badge.tone === "installed" || badge.tone === "update",
   );
+  const branchBadges = variantBadges.filter(
+    (badge) =>
+      badge.tone === "branch" || badge.tone === "dev" || badge.tone === "stable",
+  );
   const badges = storeLabel
     ? [
         {
@@ -47,6 +51,7 @@ export function SkillStoreCard({
           title: skill.source_label || skill.source_url,
           tone: variantBadges[0]?.tone || "git",
         },
+        ...branchBadges,
         ...statusBadges,
       ]
     : variantBadges;
