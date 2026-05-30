@@ -1,10 +1,19 @@
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SkillFullDetailPage } from "../../../src/renderer/components/skill/SkillFullDetailPage";
 import { SkillManager } from "../../../src/renderer/components/skill/SkillManager";
 import { SkillStoreDetail } from "../../../src/renderer/components/skill/SkillStoreDetail";
-import { createSkillFixture, createSkillLocalFileEntryFixture } from "../../fixtures/skills";
+import {
+  createSkillFixture,
+  createSkillLocalFileEntryFixture,
+} from "../../fixtures/skills";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 
@@ -24,6 +33,8 @@ vi.mock("../../../src/renderer/stores/skill.store", () => ({
 }));
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
+  DEFAULT_SKILL_LIST_PAGE_SIZE: 10,
+  SKILL_LIST_PAGE_SIZE_OPTIONS: [10, 25, 50, 100],
   useSettingsStore: (selector: (state: Record<string, unknown>) => unknown) =>
     useSettingsStoreMock(selector),
 }));
@@ -64,13 +75,18 @@ vi.mock("../../../src/renderer/components/ui/UnsavedChangesDialog", () => ({
   UnsavedChangesDialog: () => null,
 }));
 
-vi.mock("../../../src/renderer/components/skill/SkillVersionHistoryModal", () => ({
-  SkillVersionHistoryModal: () => null,
-}));
+vi.mock(
+  "../../../src/renderer/components/skill/SkillVersionHistoryModal",
+  () => ({
+    SkillVersionHistoryModal: () => null,
+  }),
+);
 
 const baseSkill = createSkillFixture();
 
-function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {}) {
+function createSkillStoreState(
+  overrides: Partial<Record<string, unknown>> = {},
+) {
   return {
     skills: [baseSkill],
     loadSkills: vi.fn().mockResolvedValue(undefined),
@@ -111,6 +127,12 @@ function createSettingsState(overrides: Partial<Record<string, unknown>> = {}) {
     customSkillScanPaths: [],
     translationMode: "full",
     skillInstallMethod: "symlink",
+    skillProjects: [],
+    projectSkillImportModePreference: "copy",
+    setProjectSkillImportModePreference: vi.fn(),
+    skillListPageSize: 10,
+    setSkillListPageSize: vi.fn(),
+    updateSkillProject: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -122,9 +144,9 @@ describe("skill ui integration", () => {
     installWindowMocks({
       api: {
         skill: {
-          readLocalFiles: vi.fn().mockResolvedValue([
-            createSkillLocalFileEntryFixture(),
-          ]),
+          readLocalFiles: vi
+            .fn()
+            .mockResolvedValue([createSkillLocalFileEntryFixture()]),
           versionCreate: vi.fn().mockResolvedValue(undefined),
         },
       },
@@ -149,20 +171,26 @@ describe("skill ui integration", () => {
     });
   });
 
-  it(
-    "renders skill manager with real english locale and updates selection summary",
-    async () => {
+  it("renders skill manager with real english locale and updates selection summary", async () => {
     const skillStoreState = createSkillStoreState();
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
 
     await renderWithI18n(<SkillManager />, { language: "en" });
 
-    expect(screen.getByRole("button", { name: "Batch Manage" })).toBeInTheDocument();
     expect(
-      screen.getByText("Manage all imported skills in one place, regardless of where they came from."),
+      screen.getByRole("button", { name: "Batch Manage" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Manage all imported skills in one place, regardless of where they came from.",
+      ),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Batch Manage" }));
@@ -175,10 +203,159 @@ describe("skill ui integration", () => {
     await waitFor(() => {
       expect(screen.getByText("1 selected")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Batch Deploy" })).toBeInTheDocument();
-    },
-    15000,
-  );
+    expect(
+      screen.getByRole("button", { name: "Batch Deploy" }),
+    ).toBeInTheDocument();
+  }, 15000);
+
+  it("paginates skills and exposes row context actions", async () => {
+    const selectSkill = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      selectSkill,
+      skills: Array.from({ length: 12 }, (_, index) =>
+        createSkillFixture({
+          id: `skill-${index + 1}`,
+          name: `Skill ${index + 1}`,
+        }),
+      ),
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
+
+    await renderWithI18n(<SkillManager />, { language: "en" });
+
+    expect(screen.getAllByText("1-10 / 12").length).toBeGreaterThan(0);
+    expect(screen.getByText("Skill 1")).toBeInTheDocument();
+    expect(screen.queryByText("Skill 11")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+
+    expect(screen.getAllByText("11-12 / 12").length).toBeGreaterThan(0);
+    expect(screen.getByText("Skill 11")).toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByText("Skill 11"));
+    fireEvent.click(screen.getByRole("button", { name: "View Details" }));
+
+    expect(selectSkill).toHaveBeenCalledWith("skill-11");
+  });
+
+  it("uses and updates the persisted skill page size preference", async () => {
+    const setSkillListPageSize = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      skills: Array.from({ length: 30 }, (_, index) =>
+        createSkillFixture({
+          id: `persisted-page-skill-${index + 1}`,
+          name: `Persisted Page Skill ${index + 1}`,
+        }),
+      ),
+    });
+    const settingsState = createSettingsState({
+      skillListPageSize: 25,
+      setSkillListPageSize,
+    });
+
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
+
+    await renderWithI18n(<SkillManager />, { language: "en" });
+
+    expect(screen.getAllByText("1-25 / 30").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByDisplayValue("25"), {
+      target: { value: "50" },
+    });
+
+    expect(setSkillListPageSize).toHaveBeenCalledWith(50);
+  });
+
+  it("localizes skill row context actions in chinese", async () => {
+    const selectSkill = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      selectSkill,
+      skills: [
+        createSkillFixture({
+          id: "skill-zh-menu",
+          name: "中文菜单技能",
+        }),
+      ],
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
+
+    await renderWithI18n(<SkillManager />, { language: "zh" });
+
+    fireEvent.contextMenu(screen.getByText("中文菜单技能"));
+
+    expect(screen.getByRole("button", { name: "查看详情" })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: "添加收藏" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "批量管理标签" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("View Details")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看详情" }));
+
+    expect(selectSkill).toHaveBeenCalledWith("skill-zh-menu");
+  });
+
+  it("assigns a dragged tag to a dropped skill", async () => {
+    const updateSkill = vi.fn().mockResolvedValue(undefined);
+    const skillStoreState = createSkillStoreState({
+      updateSkill,
+      skills: [
+        createSkillFixture({
+          id: "skill-drop",
+          name: "Drop Target Skill",
+          tags: [],
+        }),
+      ],
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
+
+    await renderWithI18n(<SkillManager />, { language: "en" });
+
+    const target = screen.getByText("Drop Target Skill").closest(".group");
+    expect(target).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.drop(target!, {
+        dataTransfer: {
+          types: ["application/x-prompthub-tag"],
+          getData: (type: string) =>
+            type === "application/x-prompthub-tag" ? "assigned" : "",
+        },
+      });
+    });
+
+    expect(updateSkill).toHaveBeenCalledWith("skill-drop", {
+      tags: ["assigned"],
+    });
+  });
 
   it("scans the dropped SKILL.md parent directory on the skills screen", async () => {
     const scanLocalPreview = vi.fn().mockResolvedValue([]);
@@ -188,15 +365,17 @@ describe("skill ui integration", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
     useToastMock.mockReturnValue({ showToast });
 
     installWindowMocks({
       electron: {
-        getPathForFile: vi.fn(
-          () => "/tmp/skills/novel-writer/SKILL.md",
-        ),
+        getPathForFile: vi.fn(() => "/tmp/skills/novel-writer/SKILL.md"),
       },
     });
 
@@ -205,7 +384,9 @@ describe("skill ui integration", () => {
     });
 
     const dropTarget = screen
-      .getByText("Manage all imported skills in one place, regardless of where they came from.")
+      .getByText(
+        "Manage all imported skills in one place, regardless of where they came from.",
+      )
       .closest("div.relative") as HTMLDivElement | null;
 
     expect(dropTarget).not.toBeNull();
@@ -242,15 +423,17 @@ describe("skill ui integration", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
     useToastMock.mockReturnValue({ showToast });
 
     installWindowMocks({
       electron: {
-        getPathForFile: vi.fn(
-          () => "/tmp/skills/novel-writer/README.md",
-        ),
+        getPathForFile: vi.fn(() => "/tmp/skills/novel-writer/README.md"),
       },
     });
 
@@ -259,7 +442,9 @@ describe("skill ui integration", () => {
     });
 
     const dropTarget = screen
-      .getByText("Manage all imported skills in one place, regardless of where they came from.")
+      .getByText(
+        "Manage all imported skills in one place, regardless of where they came from.",
+      )
       .closest("div.relative") as HTMLDivElement | null;
 
     expect(dropTarget).not.toBeNull();
@@ -284,9 +469,7 @@ describe("skill ui integration", () => {
     );
   });
 
-  it(
-    "creates a snapshot from the detail page through the in-app modal",
-    async () => {
+  it("creates a snapshot from the detail page through the in-app modal", async () => {
     const loadSkills = vi.fn().mockResolvedValue(undefined);
     const showToast = vi.fn();
     const skillStoreState = createSkillStoreState({
@@ -295,8 +478,12 @@ describe("skill ui integration", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
     useToastMock.mockReturnValue({ showToast });
 
     await act(async () => {
@@ -306,11 +493,17 @@ describe("skill ui integration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Snapshot" }));
     });
 
-    expect(screen.getByRole("heading", { name: "Create Snapshot" })).toBeInTheDocument();
-    expect(screen.getByText("Enter a note for this snapshot")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Create Snapshot" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Enter a note for this snapshot"),
+    ).toBeInTheDocument();
 
     const textarea = screen.getByPlaceholderText("Describe what changed...");
-    expect((textarea as HTMLTextAreaElement).value).toContain("Manual snapshot");
+    expect((textarea as HTMLTextAreaElement).value).toContain(
+      "Manual snapshot",
+    );
 
     await act(async () => {
       fireEvent.change(textarea, {
@@ -331,114 +524,129 @@ describe("skill ui integration", () => {
       ).not.toBeInTheDocument();
     });
     expect(loadSkills).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith("Version snapshot created", "success");
-    },
-    15000,
-  );
+    expect(showToast).toHaveBeenCalledWith(
+      "Version snapshot created",
+      "success",
+    );
+  }, 15000);
 
-  it(
-    "imports and updates a local store source skill using the latest local SKILL.md content",
-    async () => {
-      const showToast = vi.fn();
-      const installFromRegistry = vi.fn();
-      const installRegistrySkill = vi.fn();
-      const updateRegistrySkill = vi.fn().mockResolvedValue({ status: "updated" });
-      const getRegistrySkillUpdateStatus = vi.fn().mockResolvedValue({
-        status: "update-available",
-      });
+  it("imports and updates a local store source skill using the latest local SKILL.md content", async () => {
+    const showToast = vi.fn();
+    const installFromRegistry = vi.fn();
+    const installRegistrySkill = vi.fn();
+    const updateRegistrySkill = vi
+      .fn()
+      .mockResolvedValue({ status: "updated" });
+    const getRegistrySkillUpdateStatus = vi.fn().mockResolvedValue({
+      status: "update-available",
+    });
 
-      const installedLocalSkill = createSkillFixture({
-        id: "local-writer-installed",
-        name: "local-writer",
-        registry_slug: "local-writer",
-        instructions: "# Local Writer\n\nInstalled stale content",
-        content: "# Local Writer\n\nInstalled stale content",
-      });
+    const installedLocalSkill = createSkillFixture({
+      id: "local-writer-installed",
+      name: "local-writer",
+      registry_slug: "local-writer",
+      instructions: "# Local Writer\n\nInstalled stale content",
+      content: "# Local Writer\n\nInstalled stale content",
+    });
 
-      const localSourceSkill = {
-        slug: "local-writer",
-        name: "local-writer",
-        description: "Local source skill",
-        category: "general",
-        author: "Local",
-        tags: ["local"],
-        version: "1.1.0",
-        content: "# Local Writer\n\nFresh source content",
-        source_url: "/tmp/local-writer",
-        content_url: "/tmp/local-writer/SKILL.md",
-        compatibility: ["claude"],
-      };
+    const localSourceSkill = {
+      slug: "local-writer",
+      name: "local-writer",
+      description: "Local source skill",
+      category: "general",
+      author: "Local",
+      tags: ["local"],
+      version: "1.1.0",
+      content: "# Local Writer\n\nFresh source content",
+      source_url: "/tmp/local-writer",
+      content_url: "/tmp/local-writer/SKILL.md",
+      compatibility: ["claude"],
+    };
 
-      const translationState = vi.fn().mockReturnValue({
-        value: null,
-        hasTranslation: false,
-        isStale: false,
-      });
-      useSettingsStoreMock.mockImplementation((selector) =>
-        selector(createSettingsState()),
+    const translationState = vi.fn().mockReturnValue({
+      value: null,
+      hasTranslation: false,
+      isStale: false,
+    });
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(createSettingsState()),
+    );
+    useToastMock.mockReturnValue({ showToast });
+
+    const installPhaseState = createSkillStoreState({
+      skills: [installedLocalSkill],
+      installFromRegistry,
+      installRegistrySkill,
+      updateRegistrySkill,
+      getRegistrySkillUpdateStatus,
+      getTranslationState: translationState,
+    });
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(installPhaseState),
+    );
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillStoreDetail
+          skill={localSourceSkill as never}
+          isInstalled={false}
+          onClose={vi.fn()}
+        />,
+        { language: "en" },
       );
-      useToastMock.mockReturnValue({ showToast });
+    });
 
-      const installPhaseState = createSkillStoreState({
-        skills: [installedLocalSkill],
-        installFromRegistry,
-        installRegistrySkill,
-        updateRegistrySkill,
-        getRegistrySkillUpdateStatus,
-        getTranslationState: translationState,
-      });
-      useSkillStoreMock.mockImplementation((selector) => selector(installPhaseState));
+    await waitFor(() => {
+      expect(screen.getByText("Fresh source content")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("Installed stale content"),
+    ).not.toBeInTheDocument();
 
-      await act(async () => {
-        await renderWithI18n(
-          <SkillStoreDetail skill={localSourceSkill as never} isInstalled={false} onClose={vi.fn()} />,
-          { language: "en" },
-        );
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText("Fresh source content")).toBeInTheDocument();
-      });
-      expect(screen.queryByText("Installed stale content")).not.toBeInTheDocument();
-
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Import to My Skills" }));
-      });
-
-      expect(installRegistrySkill).toHaveBeenCalledWith(
-        expect.objectContaining({ slug: "local-writer" }),
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Import to My Skills" }),
       );
+    });
 
-      cleanup();
+    expect(installRegistrySkill).toHaveBeenCalledWith(
+      expect.objectContaining({ slug: "local-writer" }),
+    );
 
-      const updatePhaseState = createSkillStoreState({
-        skills: [installedLocalSkill],
-        installFromRegistry,
-        installRegistrySkill,
-        updateRegistrySkill,
-        getRegistrySkillUpdateStatus,
-        getTranslationState: translationState,
-      });
-      useSkillStoreMock.mockImplementation((selector) => selector(updatePhaseState));
+    cleanup();
 
-      await act(async () => {
-        await renderWithI18n(
-          <SkillStoreDetail skill={localSourceSkill as never} isInstalled={true} onClose={vi.fn()} />,
-          { language: "en" },
-        );
-      });
+    const updatePhaseState = createSkillStoreState({
+      skills: [installedLocalSkill],
+      installFromRegistry,
+      installRegistrySkill,
+      updateRegistrySkill,
+      getRegistrySkillUpdateStatus,
+      getTranslationState: translationState,
+    });
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(updatePhaseState),
+    );
 
-      await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Check update" }));
-        fireEvent.click(screen.getByRole("button", { name: "Update" }));
-      });
+    await act(async () => {
+      await renderWithI18n(
+        <SkillStoreDetail
+          skill={localSourceSkill as never}
+          isInstalled={true}
+          onClose={vi.fn()}
+        />,
+        { language: "en" },
+      );
+    });
 
-      expect(updateRegistrySkill).toHaveBeenCalledWith("local-writer", {
-        overwriteLocalChanges: false,
-      });
-    },
-    15000,
-  );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check update" }));
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    });
+
+    expect(updateRegistrySkill).toHaveBeenCalledWith("local-writer", {
+      overwriteLocalChanges: false,
+    });
+  }, 15000);
 
   it("reads project detail SKILL.md content when source_url points to the SKILL.md file", async () => {
     const projectFileSkill = createSkillFixture({
@@ -460,9 +668,9 @@ describe("skill ui integration", () => {
     installWindowMocks({
       api: {
         skill: {
-          readLocalFiles: vi.fn().mockResolvedValue([
-            createSkillLocalFileEntryFixture(),
-          ]),
+          readLocalFiles: vi
+            .fn()
+            .mockResolvedValue([createSkillLocalFileEntryFixture()]),
           readLocalFileByPath: vi.fn().mockResolvedValue({
             path: "SKILL.md",
             content: "# Project Skill\n\nLatest project content",
@@ -473,8 +681,12 @@ describe("skill ui integration", () => {
       },
     });
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation((selector) =>
+      selector(skillStoreState),
+    );
+    useSettingsStoreMock.mockImplementation((selector) =>
+      selector(settingsState),
+    );
 
     await act(async () => {
       await renderWithI18n(

@@ -81,4 +81,39 @@ describe("settings desktop workspace actions", () => {
       "prompt",
     ]);
   });
+
+  it("persists and normalizes the skill list page size preference", async () => {
+    const { useSettingsStore } = await import(
+      "../../../src/renderer/stores/settings.store"
+    );
+
+    useSettingsStore.getState().setSkillListPageSize(25);
+
+    expect(useSettingsStore.getState().skillListPageSize).toBe(25);
+    expect(localStorage.getItem("prompthub-settings")).toContain(
+      '"skillListPageSize":25',
+    );
+
+    useSettingsStore.getState().setSkillListPageSize(999);
+
+    expect(useSettingsStore.getState().skillListPageSize).toBe(10);
+  });
+
+  it("normalizes invalid persisted skill list page sizes", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          skillListPageSize: 999,
+        },
+        version: 14,
+      }),
+    );
+
+    const { useSettingsStore } = await import(
+      "../../../src/renderer/stores/settings.store"
+    );
+
+    expect(useSettingsStore.getState().skillListPageSize).toBe(10);
+  });
 });

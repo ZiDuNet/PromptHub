@@ -2138,9 +2138,9 @@ function PromptSkillMainContent() {
                       onDragOver={handleDetailTagDragOver}
                       onDrop={handleDetailTagDrop}
                       onDragLeave={handleDetailTagDragLeave}
-                      className={`flex min-h-[2rem] flex-wrap items-center gap-1.5 rounded-xl transition-colors ${isTagDropActive
-                        ? 'bg-primary/6 ring-2 ring-primary/20 ring-inset'
-                        : ''
+                      className={`flex min-h-[2.75rem] flex-wrap items-center gap-1.5 rounded-xl border px-1.5 py-1.5 transition-[background-color,border-color,box-shadow] ${isTagDropActive
+                        ? 'border-primary/25 bg-primary/6 shadow-[0_0_0_1px_rgba(59,130,246,0.18)]'
+                        : 'border-transparent'
                       }`}
                     >
                       {selectedPrompt.tags.map((tag) => {

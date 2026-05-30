@@ -22,18 +22,24 @@ import type { Skill, SkillSafetyLevel } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { getRuntimeCapabilities } from "../../runtime";
 import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
-import { buildSkillVariantBadges } from "../../services/skill-variant-badges";
+import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 
 function normalizeStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return value.filter(
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
+    );
   }
 
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value) as unknown;
       return Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        ? parsed.filter(
+            (item): item is string =>
+              typeof item === "string" && item.trim().length > 0,
+          )
         : [];
     } catch {
       return [];
@@ -47,11 +53,10 @@ const MAX_STAGGERED_ROWS = 12;
 
 // Estimated row height for the virtualizer. Real heights are measured via
 // `measureElement` once a row is rendered so the scrollbar stays accurate.
-// Rows expand a bit when tags are present; we estimate slightly above the no-
-// tags baseline to keep early scroll positions stable.
+// Rows are intentionally compact; user/source tags share one metadata line.
 // 行高初值供 virtualizer 估算；实际高度通过 measureElement 在每行首次渲染时
-// 修正，避免滚动时出现长跳变。带标签的行会略高，所以初值取无标签态稍高的值。
-const ESTIMATED_ROW_HEIGHT = 84;
+// 修正，避免滚动时出现长跳变。标签与来源徽章共用一行，保持列表密度。
+const ESTIMATED_ROW_HEIGHT = 72;
 
 function getSafetyIconProps(level: SkillSafetyLevel): {
   Icon: typeof ShieldCheckIcon;
@@ -102,6 +107,8 @@ function normalizePlatformStatusMap(value: unknown): Record<string, boolean> {
 interface SkillListViewProps {
   skills: Skill[];
   skillsWithStoreUpdates?: Set<string>;
+  onContextMenu?: (event: React.MouseEvent, skill: Skill) => void;
+  onDropTag?: (skill: Skill, tag: string) => void;
   onQuickInstall: (skill: Skill) => void;
   onRequestDelete?: (skillId: string, skillName: string) => void;
   selectionMode?: boolean;
@@ -125,6 +132,8 @@ const skillPlatformStatusCache = new Map<string, Record<string, boolean>>();
 export function SkillListView({
   skills,
   skillsWithStoreUpdates = new Set<string>(),
+  onContextMenu,
+  onDropTag,
   onQuickInstall,
   onRequestDelete,
   selectionMode = false,
@@ -287,16 +296,16 @@ export function SkillListView({
                 "Create or import your own skills here. Platform distribution and skill marketplaces are desktop-only.",
               )
             : isDistributionView
-            ? t(
-                "skill.noDistributionSkillsHint",
-                "先导入 skill，再在这里安装、同步或卸载到 Claude、Cursor 等平台。",
-              )
-            : filterType === "favorites"
-              ? t("skill.noFavoritesHint", "点击技能卡片上的星标添加收藏")
-              : t(
-                  "skill.noSkillsHint",
-                  "从 Skill 商店添加、扫描本地环境或手动创建技能开始使用",
-                )}
+              ? t(
+                  "skill.noDistributionSkillsHint",
+                  "先导入 skill，再在这里安装、同步或卸载到 Claude、Cursor 等平台。",
+                )
+              : filterType === "favorites"
+                ? t("skill.noFavoritesHint", "点击技能卡片上的星标添加收藏")
+                : t(
+                    "skill.noSkillsHint",
+                    "从 Skill 商店添加、扫描本地环境或手动创建技能开始使用",
+                  )}
         </p>
       </div>
     );
@@ -307,10 +316,7 @@ export function SkillListView({
 
   return (
     <div ref={scrollParentRef} className="h-full overflow-y-auto">
-      <div
-        className="relative w-full"
-        style={{ height: `${totalSize}px` }}
-      >
+      <div className="relative w-full" style={{ height: `${totalSize}px` }}>
         {virtualItems.map((virtualRow) => {
           const skill = skills[virtualRow.index];
           if (!skill) return null;
@@ -320,6 +326,8 @@ export function SkillListView({
           const totalPlatforms = availablePlatforms.length;
           const hasStoreUpdate = skillsWithStoreUpdates.has(skill.id);
           const visibleTags = normalizeStringArray(skill.tags).slice(0, 3);
+          const sourceBadges = buildMySkillSourceBadges(skill, t);
+          const hasMetadata = sourceBadges.length > 0 || visibleTags.length > 0;
           const isFirstRow = virtualRow.index === 0;
 
           return (
@@ -334,6 +342,29 @@ export function SkillListView({
                 }
                 selectSkill(skill.id);
               }}
+              onContextMenu={(event) => onContextMenu?.(event, skill)}
+              onDragOver={(event) => {
+                if (
+                  !event.dataTransfer.types.includes(
+                    "application/x-prompthub-tag",
+                  )
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={(event) => {
+                const tag = event.dataTransfer.getData(
+                  "application/x-prompthub-tag",
+                );
+                if (!tag) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                onDropTag?.(skill, tag);
+              }}
               style={{
                 position: "absolute",
                 top: 0,
@@ -342,7 +373,7 @@ export function SkillListView({
                 transform: `translateY(${virtualRow.start}px)`,
                 animationDelay: `${Math.min(virtualRow.index, MAX_STAGGERED_ROWS) * 30}ms`,
               }}
-              className={`group flex items-center gap-4 px-6 py-4 cursor-pointer transition-all animate-in fade-in slide-in-from-left-2 ${
+              className={`group flex min-h-[72px] items-center gap-3 px-5 py-3 cursor-pointer transition-all animate-in fade-in slide-in-from-left-2 ${
                 isFirstRow ? "" : "border-t border-border"
               } ${
                 selectionMode && isChecked
@@ -394,10 +425,10 @@ export function SkillListView({
               </div>
 
               {/* Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0">
                   <h3
-                    className={`font-semibold truncate transition-colors ${isSelected ? "text-primary" : "text-foreground group-hover:text-primary"}`}
+                    className={`truncate font-semibold leading-5 transition-colors ${isSelected ? "text-primary" : "text-foreground group-hover:text-primary"}`}
                   >
                     {skill.name}
                   </h3>
@@ -440,55 +471,56 @@ export function SkillListView({
                 <p className="text-xs text-muted-foreground truncate mt-0.5">
                   {skill.description || t("skill.defaultDescription")}
                 </p>
-                  {visibleTags.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {visibleTags.map((tag) => (
+                {hasMetadata ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <SkillVariantBadgeList
+                      badges={sourceBadges}
+                      className="contents"
+                    />
+                    {visibleTags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+                        className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
                       >
                         {tag}
                       </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <SkillVariantBadgeList
-                    badges={buildSkillVariantBadges(skill, t)}
-                    className="mt-2 flex flex-wrap gap-1.5"
-                  />
-                </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
 
               {/* Platform indicators */}
-              {runtimeCapabilities.skillPlatformIntegration && totalPlatforms > 0 && (
-                <div className="flex items-center gap-1 shrink-0">
-                  {availablePlatforms.slice(0, 3).map((platform) => {
-                    const isInstalled =
-                      platformStatuses[skill.id]?.[platform.id];
-                    return (
-                      <div
-                        key={platform.id}
-                        className="flex items-center justify-center"
-                        title={`${platform.name}: ${isInstalled ? t("skill.installed") : t("skill.notInstalled", "未安装")}`}
-                      >
-                        <PlatformIcon
-                          platformId={platform.id}
-                          size={16}
-                          className={
-                            isInstalled ? "opacity-100" : "opacity-40"
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                  <span className="text-[10px] text-primary font-medium ml-1">
-                    {installCount}/{totalPlatforms}
-                  </span>
-                </div>
-              )}
+              {runtimeCapabilities.skillPlatformIntegration &&
+                totalPlatforms > 0 && (
+                  <div className="flex w-28 shrink-0 items-center justify-end gap-1">
+                    {availablePlatforms.slice(0, 3).map((platform) => {
+                      const isInstalled =
+                        platformStatuses[skill.id]?.[platform.id];
+                      return (
+                        <div
+                          key={platform.id}
+                          className="flex items-center justify-center"
+                          title={`${platform.name}: ${isInstalled ? t("skill.installed") : t("skill.notInstalled", "未安装")}`}
+                        >
+                          <PlatformIcon
+                            platformId={platform.id}
+                            size={16}
+                            className={
+                              isInstalled ? "opacity-100" : "opacity-40"
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                    <span className="ml-1 min-w-8 text-right text-[10px] font-medium text-primary">
+                      {installCount}/{totalPlatforms}
+                    </span>
+                  </div>
+                )}
 
               {/* Actions */}
               {!selectionMode && (
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex shrink-0 items-center gap-1">
                   {runtimeCapabilities.skillPlatformIntegration && (
                     <button
                       onClick={(e) => {

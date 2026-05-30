@@ -9,5 +9,25 @@
 - [x] 设计并实现平台侧同名 skill 的唯一安装目录策略，避免按 `skill.name` 覆盖。
 - [x] 设计并实现统一的 variant badge 解析层，供 store 与 My Skills 复用。
 - [x] 在 `SkillStoreCard` / `SkillStoreDetail` 中展示来源标签与状态 badge。
-- [x] 在 `SkillGalleryCard` / `SkillListView` 中展示导入后来源标签与变体 badge。
+- [x] 在 `SkillGalleryCard` / `SkillListView` 中展示导入后来源标签。
+- [x] 收敛 `My Skills` 来源标签语义：默认只显示商店名、项目导入、本地导入、GitHub/Gitea/Gitee/Git 导入、远程链接导入、本地创建等用户可理解来源，不显示 branch、directory、版本或 repo 路径片段。
+- [x] 补齐 `My Skills` 列表/画廊分页、每页数量持久化、右键菜单操作，以及从侧栏标签拖拽到 skill 卡片/行的标签赋值交互。
 - [x] 补充组件测试覆盖 official/dev/community/local 等 badge 展示。
+- [x] 梳理并修复 `My Skills -> 删除 skill` 的 repo 生命周期：区分 PromptHub managed 容器与外部源目录，删除时清理孤儿 repo。
+- [x] 追查并修复自建 Git / Gitea source refresh 后 `source_id` 漂移问题，确保 refresh 前后 identity 稳定。
+- [x] 补充回归测试：自建 Git source refresh 后 `Imported` 不消失。
+- [x] 补充回归测试：删除 skill 后 PromptHub managed repo 容器不会残留孤儿 `SKILL.md`。
+- [x] 将新建/新导入 skill 的 managed 容器目录调整为 `skill-name--短id`，旧纯 id 路径仅保留兼容读取。
+- [x] 建立完整 skill source taxonomy：区分商店源、直接导入、本地扫描、项目扫描、文件恢复、内部 mutation 与对外 projection。
+- [x] 按完整 source taxonomy 重跑白盒：覆盖 built-in registry、built-in remote stores、`skills-sh`、custom stores、direct Git import、local scan、project scan、JSON import、backup restore、managed repo edit、project/platform output。
+- [x] 修复 `skills-sh` source identity：为 `parseSkillsShDetail()` 产出稳定 `source_id`，并补同名/refresh/installed 判断测试。
+- [x] 修复 direct Git import 的选择和已导入判断：从 `slug/source_url` 切换为 `source_id`，并覆盖同 repo 同 slug 不同目录场景。
+- [ ] 补充组合测试：direct Git import 与 persisted git store source 的同名、同源、refresh、Imported 判断语义。
+- [ ] 补充组合测试：local scan / project scan 导入后再 deploy / rescan，不产生循环导入或错误 source identity。
+- [ ] 补充组合测试：managed repo 文件编辑、repo sync、version restore 后保留原 `source_id`，并正确刷新 `directory_fingerprint`。
+- [ ] 补充组合测试：project deploy 同名变体在同一 target 下是 logical-name 单激活/替换关系，而不是并存关系。
+- [ ] 补充组合测试：platform install status 对同名变体按 activation `skillId` 区分。
+- [ ] 设计并评审 `local-dir` / 本地路径 `git-repo` 的 git-branch-aware identity 方案：明确是否把当前 branch 纳入 `source_id`、UI badge 与 refresh 语义。
+- [ ] 补充组合测试：同一 `local-dir` 或本地路径 `git-repo` 在不同 git branch / worktree / detached HEAD / dirty working tree 下的身份与更新语义。
+- [ ] 评估并补充 persisted `remoteStoreEntries` 的旧 identity 缓存清洗策略，避免用户首次 refresh 前继续受到历史错误缓存影响。
+- [ ] 评估 managed 容器 `<short-id>` 的碰撞兜底策略（如 12 位后缀或冲突自动追加后缀）。

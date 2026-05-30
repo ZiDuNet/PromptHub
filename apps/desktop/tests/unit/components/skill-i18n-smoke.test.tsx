@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installWindowMocks } from "../../helpers/window";
 
@@ -78,6 +85,8 @@ vi.mock("../../../src/renderer/stores/skill.store", () => ({
 }));
 
 vi.mock("../../../src/renderer/stores/settings.store", () => ({
+  DEFAULT_SKILL_LIST_PAGE_SIZE: 10,
+  SKILL_LIST_PAGE_SIZE_OPTIONS: [10, 25, 50, 100],
   useSettingsStore: (selector: (state: Record<string, unknown>) => unknown) =>
     useSettingsStoreMock(selector),
 }));
@@ -149,6 +158,8 @@ function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {})
     setRemoteStoreEntry: vi.fn(),
     importScannedSkills: vi.fn().mockResolvedValue({ importedCount: 0 }),
     translateContent: vi.fn().mockResolvedValue(undefined),
+    projectScanState: {},
+    scanProjectSkills: vi.fn().mockResolvedValue([]),
     getTranslationState: vi.fn().mockReturnValue({
       value: null,
       hasTranslation: false,
@@ -168,9 +179,22 @@ function createSettingsState(overrides: Partial<Record<string, unknown>> = {}) {
     translationMode: "full",
     skillInstallMethod: "symlink",
     skillProjects: [],
+    projectSkillImportModePreference: "copy",
+    projectSkillImportPreferencesByProjectId: {},
+    setProjectSkillImportModePreference: vi.fn(),
+    setProjectSkillImportPreferences: vi.fn(),
+    skillListPageSize: 10,
+    setSkillListPageSize: vi.fn(),
+    autoScanInstalledSkills: false,
+    aiModels: [],
     updateSkillProject: vi.fn(),
     ...overrides,
   };
+}
+
+function bindStoreSelector<TState extends Record<string, unknown>>(state: TState) {
+  return (selector?: ((value: TState) => unknown) | undefined) =>
+    typeof selector === "function" ? selector(state) : state;
 }
 
 describe("skill i18n smoke", () => {
@@ -297,8 +321,8 @@ describe("skill i18n smoke", () => {
     const skillStoreState = createSkillStoreState();
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     render(<SkillManager />);
 
@@ -344,8 +368,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     render(<SkillManager />);
 
@@ -383,8 +407,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     render(<SkillManager />);
 
@@ -404,8 +428,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     await act(async () => {
       render(<SkillFullDetailPage />);
@@ -430,6 +454,11 @@ describe("skill i18n smoke", () => {
   });
 
   it("shows project deployment actions for normal library skills", async () => {
+    const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
+      "/tmp/workspace/.agents/skills/write",
+    );
+    const getRepoPath = vi.fn().mockResolvedValue("/Users/demo/skills/write");
+    const scanProjectSkills = vi.fn().mockResolvedValue([]);
     const syncedSkill = {
       ...baseSkill,
       description: "Write helper",
@@ -439,6 +468,14 @@ describe("skill i18n smoke", () => {
     const skillStoreState = createSkillStoreState({
       selectedSkillId: baseSkill.id,
       syncSkillFromRepo: vi.fn().mockResolvedValue(syncedSkill),
+      projectScanState: {
+        "project-1": {
+          scannedSkills: [],
+          isScanning: false,
+          error: null,
+        },
+      },
+      scanProjectSkills,
     });
     const settingsState = createSettingsState({
       skillProjects: [
@@ -453,19 +490,82 @@ describe("skill i18n smoke", () => {
         },
       ],
     });
+    useSkillPlatformMock.mockReturnValue({
+      availablePlatforms: [{ id: "claude", name: "Claude Code" }],
+      batchInstall: vi.fn().mockResolvedValue({
+        successCount: 0,
+        totalCount: 0,
+        failures: [],
+        fallbacks: [],
+      }),
+      deselectAllPlatforms: vi.fn(),
+      installProgress: null,
+      installStatus: {},
+      isBatchInstalling: false,
+      selectedPlatforms: new Set<string>(),
+      selectAllPlatforms: vi.fn(),
+      togglePlatformSelection: vi.fn(),
+      uninstallFromPlatform: vi.fn().mockResolvedValue(undefined),
+      uninstalledPlatforms: [{ id: "claude", name: "Claude Code" }],
+    });
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+    installWindowMocks({
+      api: {
+        skill: {
+          getRepoPath,
+          copyRepoByPathToDirectory,
+        },
+      },
+    });
 
     await act(async () => {
       render(<SkillFullDetailPage />);
     });
 
-    expect(screen.getByText("Project Deployment")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Project Distribution" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Project Distribution" }));
     expect(screen.getByText("Workspace")).toBeInTheDocument();
+    const advancedSettingsButton = screen.getByRole("button", {
+      name: /Advanced Import Settings/,
+    });
+    fireEvent.click(advancedSettingsButton);
+    const advancedSettings = advancedSettingsButton.closest("div");
+    expect(advancedSettings).not.toBeNull();
+    expect(
+      within(advancedSettings as HTMLElement).getByRole("button", {
+        name: /^Copy Copy a standalone snapshot/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(advancedSettings as HTMLElement).getByRole("button", {
+        name: /^Symlink Link the project folder/,
+      }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Deploy write to Selected Projects" }),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Workspace"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Deploy write to Selected Projects" }),
+    );
+
+    await waitFor(() => {
+      expect(getRepoPath).toHaveBeenCalledWith(baseSkill.id);
+      expect(copyRepoByPathToDirectory).toHaveBeenCalledWith(
+        "/Users/demo/skills/write",
+        "write",
+        "/tmp/workspace/.agents/skills",
+        { ifExists: "skip", mode: "copy" },
+      );
+      expect(scanProjectSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "project-1" }),
+      );
+    });
   });
 
   it("renders project skill preview without leaking raw SKILL.md into the preview sidebar", async () => {
@@ -485,8 +585,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     installWindowMocks({
       api: {
@@ -561,8 +661,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState({ translationMode: "full" });
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
     window.api.skill.getRepoPath = vi.fn().mockResolvedValue(baseSkill.local_repo_path);
     window.api.skill.readLocalFile = vi.fn(async (_skillId, relativePath) => {
       if (relativePath === ".prompthub/translations/English/full/meta.json") {
@@ -636,8 +736,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState({ translationMode: "full" });
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     await act(async () => {
       render(<SkillFullDetailPage />);
@@ -668,8 +768,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     await act(async () => {
       render(<SkillFullDetailPage />);
@@ -699,8 +799,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     await act(async () => {
       render(<SkillFullDetailPage />);
@@ -726,8 +826,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState({ skillInstallMethod: "symlink" });
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
     useSkillPlatformMock.mockReturnValue({
       availablePlatforms: [{ id: "claude", name: "Claude Code" }],
       batchInstall: vi.fn().mockResolvedValue({
@@ -776,8 +876,8 @@ describe("skill i18n smoke", () => {
     const settingsState = createSettingsState();
     const originalCreateElement = document.createElement.bind(document);
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     await act(async () => {
       render(<SkillFullDetailPage />);
@@ -816,6 +916,7 @@ describe("skill i18n smoke", () => {
         availablePlatforms={[]}
         handleExport={vi.fn()}
         installMode="symlink"
+        projectDeployMode="copy"
         installProgress={null}
         isBatchInstalling={false}
         onBatchInstall={vi.fn()}
@@ -824,11 +925,16 @@ describe("skill i18n smoke", () => {
         selectAllPlatforms={vi.fn()}
         deselectAllPlatforms={vi.fn()}
         setInstallMode={vi.fn()}
+        setProjectDeployMode={vi.fn()}
         skillMdInstallStatus={{}}
         t={translate as any}
         togglePlatformSelection={vi.fn()}
         uninstallFromPlatform={vi.fn()}
         uninstalledPlatforms={[]}
+        projects={[]}
+        onCreateProject={vi.fn()}
+        onDeployToProjects={vi.fn()}
+        getProjectDeployTargets={() => []}
       />,
     );
 
@@ -852,8 +958,8 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     const { unmount } = render(<SkillManager />);
 
@@ -878,7 +984,7 @@ describe("skill i18n smoke", () => {
     expect(screen.getByText("Skill Workspace")).toBeInTheDocument();
   });
 
-  it("finishes progressive rendering for large skill lists", async () => {
+  it("paginates large skill lists", async () => {
     const manySkills: Skill[] = Array.from({ length: 129 }, (_, index) => ({
       ...baseSkill,
       id: `skill-${index}`,
@@ -893,17 +999,18 @@ describe("skill i18n smoke", () => {
     });
     const settingsState = createSettingsState();
 
-    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
-    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
 
     render(<SkillManager />);
 
-    expect(screen.getByText("Rendering 120/129 in chunks")).toBeInTheDocument();
+    expect(screen.getAllByText("1-10 / 129").length).toBeGreaterThan(0);
+    expect(screen.getByText("skill-0")).toBeInTheDocument();
+    expect(screen.queryByText("skill-10")).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(
-        screen.queryByText("Rendering 120/129 in chunks"),
-      ).not.toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole("button", { name: "2" }));
+
+    expect(screen.getAllByText("11-20 / 129").length).toBeGreaterThan(0);
+    expect(screen.getByText("skill-10")).toBeInTheDocument();
   });
 });

@@ -1440,6 +1440,7 @@
     "iconBackground": "Icon Background",
     "iconBackgroundHint": "Pick a steadier background color for the icon so the detail page no longer feels like it is floating.",
     "useDefaultBackground": "Default",
+    "viewDetail": "View Details",
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
     "delete": "Delete",

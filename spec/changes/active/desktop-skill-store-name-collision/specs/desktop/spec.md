@@ -161,7 +161,7 @@ Skill 商店在加载远端 source 时，必须允许不同 source、不同 bran
 - And 必须恢复来源信息与当前平台激活映射
 - And 不得把这些变体错误合并成一个 skill
 
-### Requirement: UI Must Surface Source Labels For Same-Name Skills
+### Requirement: UI Must Surface User-Readable Source Labels For Same-Name Skills
 
 当商店中存在同名 skill 时，UI 必须提供足够的来源信息帮助用户区分。
 
@@ -169,8 +169,44 @@ Skill 商店在加载远端 source 时，必须允许不同 source、不同 bran
 
 - Given 列表中同时存在多个同名条目
 - When 用户查看卡片或详情
-- Then UI 必须显示 source 名称、repo host、branch、directory、作者中的至少一部分
-- And 应支持通过标签快速识别“stable / dev / community / local”等差异
+- Then 商店列表和商店详情必须显示当前商店名称或用户自定义商店名称
+- And `My Skills` 卡片和列表必须显示用户可理解的来源分类，例如商店名称、项目导入、本地导入、GitHub 导入、Gitea 导入、Gitee 导入、Git 导入、远程链接导入或本地创建
+- And UI 不得把 branch、directory、repo 路径片段、source identity hash 或商店版本号当作默认标签展示
+- And 详情页必须继续展示来源渠道和具体地址或本地路径，供用户追溯来源
+
+### Requirement: Refresh Must Preserve Installed State For The Same Remote Skill Identity
+
+对于同一个远端 skill，刷新商店 source 后系统必须继续识别它是同一个已导入实例，不能因为 refresh 重新计算 identity 而丢失已安装状态。
+
+#### Scenario: Self-hosted Git source refresh keeps imported badge
+
+- Given 用户已经从某个自建 Git / Gitea source 导入一个 skill
+- And 本地 `skills` 表中已经持久化该实例的 `source_id`
+- When 用户点击刷新该 source
+- Then refresh 后远端条目必须继续产出相同的 `source_id`
+- And 商店卡片必须继续显示 `Imported`
+- And 详情页必须继续能定位到已导入实例
+
+### Requirement: Delete From My Skills Must Have Consistent Repo Ownership Semantics
+
+当用户从 `My Skills` 删除一个 skill 时，系统必须明确且一致地处理 PromptHub managed repo 容器，而不是只删除数据库记录导致 repo 残留。
+
+#### Scenario: Delete removes PromptHub-managed variant container
+
+- Given 某个 skill 已经进入 PromptHub managed repo 容器
+- And 该容器由 PromptHub 自己创建并托管
+- When 用户从 `My Skills` 删除该 skill
+- Then 系统必须删除对应的数据库记录
+- And 必须删除该实例对应的 PromptHub managed repo 容器或其 materialized repo 内容
+- And 不得在 `skills/<instance-key>/repo/` 下残留孤儿 `SKILL.md`
+
+#### Scenario: Delete does not remove external original source directory
+
+- Given 某个 skill 最初来自外部本地目录或 Git 仓库
+- And PromptHub 当前只托管其内部 variant 容器
+- When 用户删除该 skill
+- Then 系统只能删除 PromptHub 自己托管的数据
+- And 不得删除用户原始外部目录或原始远端仓库
 
 ### Requirement: Duplicate Detection Must Compare The Full Skill Directory
 
@@ -235,6 +271,10 @@ Skill 商店在加载远端 source 时，必须允许不同 source、不同 bran
 ### UI Recommendation
 
 - 列表不再拆成 `Installed` / `Available` 两个纯过滤区块，否则同名实例容易被分散隐藏。
+- `My Skills` 画廊和列表视图必须提供分页控件，避免大量 skill 时只能依赖一次性渲染或无限滚动。
+- `My Skills` 分页的每页数量必须持久化到本地设置，应用重载后继续使用用户上次选择；无效历史值必须回退到默认值。
+- `My Skills` 画廊卡片和列表行必须支持与 prompt 列表一致的右键快捷操作入口。
+- 用户必须能把侧栏 skill 标签拖拽到某个 skill 卡片或列表行上，以便直接给目标 skill 赋值该标签。
 - 改成统一列表 + 状态 badge：
   - `Installed`
   - `Installed from main`

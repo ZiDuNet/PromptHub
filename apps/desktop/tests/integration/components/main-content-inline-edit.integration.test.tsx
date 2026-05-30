@@ -364,4 +364,32 @@ describe("MainContent inline edit integration", () => {
     expect(showToast).toHaveBeenCalledWith("Saved successfully", "success");
   });
 
+  it("keeps a stable bordered dropzone while a sidebar tag is dragged over the detail tags area", async () => {
+    const promptState = createPromptState(createPrompt({ tags: ["tag-a", "tag-b"] }));
+
+    usePromptStoreMock.mockImplementation((selector) => selector(promptState));
+
+    await act(async () => {
+      await renderWithI18n(<MainContent />, { language: "en" });
+    });
+
+    const dropzone = screen.getByTestId("prompt-detail-tags-dropzone");
+    const dataTransfer = {
+      getData: vi.fn(),
+      setData: vi.fn(),
+      types: ["application/x-prompthub-tag"],
+      dropEffect: "copy",
+    };
+
+    expect(dropzone.className).toContain("border-transparent");
+    expect(dropzone.className).toContain("px-1.5");
+    expect(dropzone.className).toContain("py-1.5");
+
+    fireEvent.dragOver(dropzone, { dataTransfer });
+
+    expect(dropzone.className).toContain("border-primary/25");
+    expect(dropzone.className).toContain("bg-primary/6");
+    expect(dropzone.className).toContain("shadow-[0_0_0_1px_rgba(59,130,246,0.18)]");
+  });
+
 });

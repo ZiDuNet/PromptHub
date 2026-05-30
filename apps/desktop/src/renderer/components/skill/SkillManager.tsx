@@ -21,13 +21,22 @@ import {
   XIcon,
   TagsIcon,
   InboxIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  DownloadIcon,
 } from "lucide-react";
 import { SkillGalleryCard } from "./SkillGalleryCard";
 import { SkillRenderBoundary } from "./SkillRenderBoundary";
 import { useSkillStore } from "../../stores/skill.store";
-import { useSettingsStore } from "../../stores/settings.store";
+import {
+  DEFAULT_SKILL_LIST_PAGE_SIZE,
+  SKILL_LIST_PAGE_SIZE_OPTIONS,
+  useSettingsStore,
+} from "../../stores/settings.store";
 import { SkillQuickInstall } from "./SkillQuickInstall";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
 import { useToast } from "../ui/Toast";
 import type { Skill, ScannedSkill } from "@prompthub/shared/types";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
@@ -38,11 +47,6 @@ import { deriveSkillScanPathsFromCustomAgents } from "../../services/agent-root-
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
-const LARGE_SKILL_LIST_THRESHOLD = 120;
-const INITIAL_SKILL_RENDER_COUNT = 120;
-const SKILL_RENDER_CHUNK_SIZE = 120;
-const SKILL_RENDER_CHUNK_DELAY_MS = 24;
-
 // Lazy load list view for better performance
 // 懒加载列表视图以提升性能
 const SkillListView = lazy(() =>
@@ -82,7 +86,9 @@ function normalizeDroppedSkillPath(filePath: string): string {
   const lowerPath = normalizedPath.toLowerCase();
   if (lowerPath.endsWith("/skill.md")) {
     const slashIndex = normalizedPath.lastIndexOf("/");
-    return slashIndex > 0 ? normalizedPath.slice(0, slashIndex) : normalizedPath;
+    return slashIndex > 0
+      ? normalizedPath.slice(0, slashIndex)
+      : normalizedPath;
   }
 
   if (lowerPath.endsWith(".md")) {
@@ -117,9 +123,18 @@ export function SkillManager() {
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
-  const customAgents = useSettingsStore(
-    (state) => state.customAgents,
+  const customAgents = useSettingsStore((state) => state.customAgents);
+  const storedSkillListPageSize = useSettingsStore(
+    (state) => state.skillListPageSize,
   );
+  const setSkillListPageSize = useSettingsStore(
+    (state) => state.setSkillListPageSize,
+  );
+  const pageSize = SKILL_LIST_PAGE_SIZE_OPTIONS.includes(
+    storedSkillListPageSize as (typeof SKILL_LIST_PAGE_SIZE_OPTIONS)[number],
+  )
+    ? storedSkillListPageSize
+    : DEFAULT_SKILL_LIST_PAGE_SIZE;
   const runtimeCapabilities = getRuntimeCapabilities();
   const webSkillLibraryMode =
     !runtimeCapabilities.skillDistribution && !runtimeCapabilities.skillStore;
@@ -168,14 +183,15 @@ export function SkillManager() {
   const [isScanning, setIsScanning] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
-  const [renderedSkillCount, setRenderedSkillCount] = useState(() =>
-    filteredSkills.length <= LARGE_SKILL_LIST_THRESHOLD
-      ? filteredSkills.length
-      : Math.min(INITIAL_SKILL_RENDER_COUNT, filteredSkills.length),
-  );
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedSkillIds, setSelectedSkillIds] = useState<Set<string>>(
     new Set(),
   );
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    skill: Skill;
+  } | null>(null);
   const { remoteStoreEntries } = useSkillStoreRemoteSync({
     eagerRemoteSources: "all",
   });
@@ -311,22 +327,20 @@ export function SkillManager() {
     return result.importedCount;
   };
 
+  const totalPages = Math.max(1, Math.ceil(filteredSkills.length / pageSize));
   const visibleSkills = useMemo(() => {
-    if (filteredSkills.length <= LARGE_SKILL_LIST_THRESHOLD) {
-      return filteredSkills;
-    }
-
-    return filteredSkills.slice(0, renderedSkillCount);
-  }, [filteredSkills, renderedSkillCount]);
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredSkills.slice(startIndex, startIndex + pageSize);
+  }, [currentPage, filteredSkills, pageSize]);
   const selectedSkills = useMemo(
-    () => filteredSkills.filter((skill) => selectedSkillIds.has(skill.id)),
-    [filteredSkills, selectedSkillIds],
+    () => skills.filter((skill) => selectedSkillIds.has(skill.id)),
+    [skills, selectedSkillIds],
   );
   const allVisibleSelected = useMemo(
     () =>
-      filteredSkills.length > 0 &&
-      filteredSkills.every((skill) => selectedSkillIds.has(skill.id)),
-    [filteredSkills, selectedSkillIds],
+      visibleSkills.length > 0 &&
+      visibleSkills.every((skill) => selectedSkillIds.has(skill.id)),
+    [selectedSkillIds, visibleSkills],
   );
 
   // Load skills on mount, then defer deployed status to idle time
@@ -395,53 +409,18 @@ export function SkillManager() {
   }, [loadSkills, loadDeployedStatus, runtimeCapabilities.skillDistribution]);
 
   useEffect(() => {
-    const targetCount =
-      filteredSkills.length <= LARGE_SKILL_LIST_THRESHOLD
-        ? filteredSkills.length
-        : Math.min(INITIAL_SKILL_RENDER_COUNT, filteredSkills.length);
+    setCurrentPage(1);
+  }, [
+    effectiveFilterType,
+    effectiveStoreView,
+    pageSize,
+    searchQuery,
+    skillFilterTags,
+  ]);
 
-    if (filteredSkills.length <= LARGE_SKILL_LIST_THRESHOLD) {
-      if (renderedSkillCount !== targetCount) {
-        setRenderedSkillCount(targetCount);
-      }
-      return;
-    }
-
-    let disposed = false;
-    let timeoutId: number | undefined;
-
-    if (renderedSkillCount !== targetCount) {
-      setRenderedSkillCount(targetCount);
-    }
-
-    const scheduleNextChunk = () => {
-      timeoutId = window.setTimeout(() => {
-        if (disposed) return;
-
-        setRenderedSkillCount((current) => {
-          const next = Math.min(
-            current + SKILL_RENDER_CHUNK_SIZE,
-            filteredSkills.length,
-          );
-          if (next < filteredSkills.length) {
-            scheduleNextChunk();
-          }
-          return next;
-        });
-      }, SKILL_RENDER_CHUNK_DELAY_MS);
-    };
-
-    if (INITIAL_SKILL_RENDER_COUNT < filteredSkills.length) {
-      scheduleNextChunk();
-    }
-
-    return () => {
-      disposed = true;
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [filteredSkills]);
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   useEffect(() => {
     if (storeView === "store") {
@@ -536,7 +515,9 @@ export function SkillManager() {
       setSelectedSkillIds(new Set());
       return;
     }
-    setSelectedSkillIds(new Set(filteredSkills.map((skill) => skill.id)));
+    setSelectedSkillIds(
+      (prev) => new Set([...prev, ...visibleSkills.map((skill) => skill.id)]),
+    );
   };
 
   const handleBatchFavorite = async () => {
@@ -565,6 +546,45 @@ export function SkillManager() {
 
   const handleBatchTags = () => {
     if (selectedSkills.length === 0) return;
+    setShowBatchTagDialog(true);
+  };
+
+  const handleContextMenu = (event: React.MouseEvent, skill: Skill) => {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY, skill });
+  };
+
+  const handleAddTagToSkill = async (skill: Skill, rawTag: string) => {
+    const normalizedTag = rawTag.trim();
+    if (!normalizedTag) {
+      return;
+    }
+
+    const existingTags = skill.tags || [];
+    if (existingTags.includes(normalizedTag)) {
+      return;
+    }
+
+    try {
+      await updateSkill(skill.id, {
+        tags: [...existingTags, normalizedTag],
+      });
+      showToast(
+        t("skill.tagAssigned", {
+          tag: normalizedTag,
+          name: skill.name,
+          defaultValue: `已为 ${skill.name} 添加标签 ${normalizedTag}`,
+        }),
+        "success",
+      );
+    } catch (error) {
+      console.error("Failed to assign skill tag:", error);
+      showToast(t("toast.updateFailed", "Update failed"), "error");
+    }
+  };
+
+  const openSingleSkillTagDialog = (skill: Skill) => {
+    setSelectedSkillIds(new Set([skill.id]));
     setShowBatchTagDialog(true);
   };
 
@@ -650,34 +670,34 @@ export function SkillManager() {
         "Create or import your own skills here. Platform distribution and skill marketplaces are desktop-only.",
       )
     : isDistributionView
-    ? t(
-        "skill.noDistributionSkillsHint",
-        "Import skills first, then install, sync, or uninstall them to Claude, Cursor, and other platforms here.",
-      )
-      : effectiveFilterType === "favorites"
       ? t(
-          "skill.noFavoritesHint",
-          "Click the star on skill cards to add favorites",
+          "skill.noDistributionSkillsHint",
+          "Import skills first, then install, sync, or uninstall them to Claude, Cursor, and other platforms here.",
         )
-      : effectiveFilterType === "installed"
+      : effectiveFilterType === "favorites"
         ? t(
-            "skill.noImportedSkillsHint",
-            "After importing from Skill Store, local scan, GitHub, or manual creation, they will appear here.",
+            "skill.noFavoritesHint",
+            "Click the star on skill cards to add favorites",
           )
-        : effectiveFilterType === "deployed"
+        : effectiveFilterType === "installed"
           ? t(
-              "skill.noDeployedSkillsHint",
-              "After distributing skills to Claude, Cursor, or other platforms, they will show up here.",
+              "skill.noImportedSkillsHint",
+              "After importing from Skill Store, local scan, GitHub, or manual creation, they will appear here.",
             )
-          : effectiveFilterType === "pending"
+          : effectiveFilterType === "deployed"
             ? t(
-                "skill.noPendingSkillsHint",
-                "Skills not yet distributed to any platform will appear here.",
+                "skill.noDeployedSkillsHint",
+                "After distributing skills to Claude, Cursor, or other platforms, they will show up here.",
               )
-            : t(
-                "skill.noSkillsHint",
-                "Import skills from Skill Store, scan local environments, or create one manually to get started",
-              );
+            : effectiveFilterType === "pending"
+              ? t(
+                  "skill.noPendingSkillsHint",
+                  "Skills not yet distributed to any platform will appear here.",
+                )
+              : t(
+                  "skill.noSkillsHint",
+                  "Import skills from Skill Store, scan local environments, or create one manually to get started",
+                );
 
   const headerSubtitle = webSkillLibraryMode
     ? t(
@@ -685,14 +705,14 @@ export function SkillManager() {
         "Manage your personal skill library in the self-hosted web workspace.",
       )
     : isDistributionView
-    ? t(
-        "skill.distributionHint",
-        "Manage install, sync, and uninstall across connected platforms.",
-      )
-    : t(
-        "skill.workspaceHint",
-        "Manage all imported skills in one place, regardless of where they came from.",
-      );
+      ? t(
+          "skill.distributionHint",
+          "Manage install, sync, and uninstall across connected platforms.",
+        )
+      : t(
+          "skill.workspaceHint",
+          "Manage all imported skills in one place, regardless of where they came from.",
+        );
   const distributionStatsLabel = isDistributionView
     ? t("skill.distributionStats", {
         deployed: deployedSkillNames.size,
@@ -700,6 +720,80 @@ export function SkillManager() {
         defaultValue: `${deployedSkillNames.size} deployed / ${skills.length} total`,
       })
     : null;
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.min(Math.max(page, 1), totalPages));
+  };
+  const visiblePageNumbers = (() => {
+    const windowSize = Math.min(5, totalPages);
+    if (totalPages <= windowSize) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+    if (currentPage <= 3) {
+      return Array.from({ length: windowSize }, (_, index) => index + 1);
+    }
+    if (currentPage >= totalPages - 2) {
+      return Array.from(
+        { length: windowSize },
+        (_, index) => totalPages - windowSize + index + 1,
+      );
+    }
+    return Array.from(
+      { length: windowSize },
+      (_, index) => currentPage - 2 + index,
+    );
+  })();
+  const contextMenuItems: ContextMenuItem[] = (() => {
+    if (!contextMenu) {
+      return [];
+    }
+
+    const { skill } = contextMenu;
+    return [
+      {
+        label: t("skill.viewDetail", "View Details"),
+        icon: <EyeIcon className="w-4 h-4" />,
+        onClick: () => selectSkill(skill.id),
+      },
+      {
+        label: skill.is_favorite
+          ? t("skill.removeFavorite", "Remove Favorite")
+          : t("skill.addFavorite", "Add Favorite"),
+        icon: (
+          <StarIcon
+            className={`w-4 h-4 ${
+              skill.is_favorite ? "fill-amber-400 text-amber-400" : ""
+            }`}
+          />
+        ),
+        onClick: () => void toggleFavorite(skill.id),
+      },
+      {
+        label: t("skill.batchTags", "Batch Tags"),
+        icon: <TagsIcon className="w-4 h-4" />,
+        onClick: () => openSingleSkillTagDialog(skill),
+      },
+      ...(runtimeCapabilities.skillPlatformIntegration
+        ? [
+            {
+              label: t("skill.quickInstall", "Quick Install"),
+              icon: <DownloadIcon className="w-4 h-4" />,
+              onClick: () => setQuickInstallSkill(skill),
+            } satisfies ContextMenuItem,
+          ]
+        : []),
+      {
+        label: t("common.delete", "Delete"),
+        icon: <TrashIcon className="w-4 h-4" />,
+        variant: "destructive",
+        onClick: () =>
+          setDeleteConfirm({
+            isOpen: true,
+            skillIds: [skill.id],
+            skillNames: [skill.name],
+          }),
+      },
+    ];
+  })();
 
   return (
     <div
@@ -756,12 +850,19 @@ export function SkillManager() {
                       ? distributionStatsLabel
                       : `${filteredSkills.length}${effectiveFilterType !== "all" ? ` / ${skills.length}` : ""}`}
                   </span>
-                  {filteredSkills.length > visibleSkills.length && (
+                  {filteredSkills.length > 0 && totalPages > 1 && (
                     <span className="text-[11px] text-muted-foreground">
-                      {t("skill.progressiveRendering", {
-                        rendered: visibleSkills.length,
+                      {t("skill.paginationSummary", {
+                        start: (currentPage - 1) * pageSize + 1,
+                        end: Math.min(
+                          currentPage * pageSize,
+                          filteredSkills.length,
+                        ),
                         total: filteredSkills.length,
-                        defaultValue: `正在分批渲染 ${visibleSkills.length}/${filteredSkills.length}`,
+                        defaultValue: `${(currentPage - 1) * pageSize + 1}-${Math.min(
+                          currentPage * pageSize,
+                          filteredSkills.length,
+                        )} / ${filteredSkills.length}`,
                       })}
                     </span>
                   )}
@@ -952,6 +1053,8 @@ export function SkillManager() {
               <SkillListView
                 skills={visibleSkills}
                 skillsWithStoreUpdates={skillsWithStoreUpdates}
+                onContextMenu={handleContextMenu}
+                onDropTag={(skill, tag) => void handleAddTagToSkill(skill, tag)}
                 onQuickInstall={setQuickInstallSkill}
                 onRequestDelete={(id, name) =>
                   setDeleteConfirm({
@@ -991,10 +1094,8 @@ export function SkillManager() {
                       <SkillGalleryCard
                         key={skill.id}
                         animationDelayMs={
-                          filteredSkills.length > LARGE_SKILL_LIST_THRESHOLD
-                            ? 0
-                            : Math.min(index, MAX_STAGGERED_CARDS) *
-                              CARD_STAGGER_MS
+                          Math.min(index, MAX_STAGGERED_CARDS) *
+                          CARD_STAGGER_MS
                         }
                         hasStoreUpdate={skillsWithStoreUpdates.has(skill.id)}
                         isSelected={isSelected}
@@ -1005,6 +1106,10 @@ export function SkillManager() {
                             skillIds: [selectedSkill.id],
                             skillNames: [selectedSkill.name],
                           })
+                        }
+                        onContextMenu={handleContextMenu}
+                        onDropTag={(selectedSkill, tag) =>
+                          void handleAddTagToSkill(selectedSkill, tag)
                         }
                         onOpen={selectSkill}
                         onQuickInstall={setQuickInstallSkill}
@@ -1019,6 +1124,75 @@ export function SkillManager() {
             </div>
           )}
         </div>
+        {filteredSkills.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border app-wallpaper-panel-strong px-4 py-3">
+            <div className="text-sm text-muted-foreground">
+              {t("skill.paginationSummary", {
+                start: (currentPage - 1) * pageSize + 1,
+                end: Math.min(currentPage * pageSize, filteredSkills.length),
+                total: filteredSkills.length,
+                defaultValue: `${(currentPage - 1) * pageSize + 1}-${Math.min(
+                  currentPage * pageSize,
+                  filteredSkills.length,
+                )} / ${filteredSkills.length}`,
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">
+                  {t("prompt.pageSize", "每页")}
+                </span>
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setSkillListPageSize?.(Number(event.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-md border border-border bg-muted px-2 py-1 text-sm text-foreground"
+                >
+                  {SKILL_LIST_PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="rounded-md p-1.5 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  title={t("common.previous", "Previous")}
+                >
+                  <ChevronLeftIcon className="h-4 w-4" />
+                </button>
+                {visiblePageNumbers.map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page)}
+                    className={`h-8 w-8 rounded-md text-sm transition-colors ${
+                      currentPage === page
+                        ? "bg-primary text-white"
+                        : "hover:bg-accent"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="rounded-md p-1.5 transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  title={t("common.next", "Next")}
+                >
+                  <ChevronRightIcon className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Quick Install Modal */}
@@ -1109,6 +1283,14 @@ export function SkillManager() {
         confirmText={t("common.delete", "Delete")}
         cancelText={t("common.cancel", "Cancel")}
       />
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
 
       {isDropTargetActive ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-sm">

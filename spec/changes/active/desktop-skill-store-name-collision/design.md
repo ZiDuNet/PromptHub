@@ -25,6 +25,95 @@
 
 当前实现只保留了 display identity，导致不同来源与不同内容都被折叠。
 
+## Newly Confirmed Problem Chains
+
+### 1. Delete Flow Currently Removes DB Record Only, Not PromptHub Managed Repo
+
+当前删除调用链是：
+
+`SkillFullDetailPage / My Skills -> skill.store.ts deleteSkill(id) -> window.api.skill.delete(id) -> main/ipc/skill/crud-handlers.ts -> 平台卸载 uninstallSkillMdForSkill(...) -> db.delete(id)`
+
+关键事实：
+
+- `crud-handlers.ts` 当前在删除前只尝试把该 skill 从各平台逻辑目录卸载。
+- 注释已经明确写着：`do NOT delete the source directory`。
+- `packages/db/src/skill.ts#delete(id)` 只执行 `DELETE FROM skills WHERE id = ?`。
+- 整条链路没有调用 `deleteRepoByPath(...)` 或任何 managed repo 清理逻辑。
+
+这意味着：
+
+- PromptHub UI 中“删除 skill”当前语义其实是“从库里移除记录，并尝试平台卸载”。
+- PromptHub managed repo 容器会保留在 `skills/<instance-key>/repo/` 下。
+- 用户看到 repo 目录里仍残留 `SKILL.md`、sidecar 或 repo 内容，是当前实现结果，而不是偶发脏数据。
+
+这与当前用户心智存在明显偏差。对于“进入 My Skills 的 variant 容器”，用户通常会把它理解为 PromptHub 自己托管的数据；删除 skill 时如果容器保留，就会被理解为删除不完整。
+
+基于本轮新增决策，删除语义明确为：
+
+- 删除 `My Skills` 中的 skill 时，PromptHub `data` 目录里该实例对应的 managed 容器必须被彻底清理。
+- 但只能清理 PromptHub 自己托管的容器，不能误删用户原始外部目录。
+
+### 1.1 Managed Container Naming Must Stay Human-Readable
+
+用户已明确要求实例目录可以带唯一后缀，但不能退化成纯 UID 目录名。
+
+因此 managed 容器目录命名应满足：
+
+- 前缀保留逻辑 skill 名，可读、可定位
+- 后缀使用稳定短 ID，保证不同实例不冲突
+
+推荐格式：
+
+- `<skill-name>--<short-id>`
+
+例如：
+
+- `writer--9bd1a77e`
+- `clouddrive2-cli--3f52ac10`
+
+旧的纯 `skill.id` 容器目录继续作为 legacy 路径兼容读取，但新写入与新导入优先使用可读目录名。
+
+### 2. Refresh Can Make Installed State Disappear If Remote Identity Is Recomputed Differently
+
+当前商店安装态判断主链路：
+
+`remote store refresh -> RegistrySkill.source_id -> SkillStore / SkillStoreDetail 按 source_id 匹配 -> skills[].source_id`
+
+UI 已安装判断已经收敛为按 `source_id` 匹配，这是正确方向；但这也使 `source_id` 稳定性成为单点关键路径。
+
+一旦 refresh 后同一个远端条目算出新的 `source_id`，就会同时出现：
+
+- 商店里的 `Imported` badge 消失
+- 详情页不再识别为已导入
+- 用户感觉像“刷新后又变成一个新的 source / 新的实例”
+
+### 3. Self-Hosted Git / Gitea Scan Has A High-Risk Identity Drift Point
+
+当前自建 Git / Gitea 扫描在主进程 `scanRemoteGithub(...)` 中的 source identity 由以下字段构成：
+
+- `sourceType = git-repo`
+- `sourceUrl = parsedRepo.repositoryUrl`
+- `branch = normalizedBranch`
+- `directory = sourceDirectory`
+- `skillPath = canonicalSkillPath`
+
+其中 `sourceDirectory` / `canonicalSkillPath` 是由 `directory` 参数、clone 后 `relativeDirectory`、以及本地扫描结果组合而成。
+
+这条链路的风险点在于：
+
+- 同一个远端 skill，refresh 前后如果 `sourceDirectory` 拼接规则发生变化
+- 或 `canonicalSkillPath` 一次是 repo-relative，一次是 scan-root-relative
+- 或自建 Git 与 GitHub 两条加载链生成字段口径不一致
+
+就会得到不同 `source_id`，从而触发“已导入消失”。
+
+当前已经确认过的一个表现是：
+
+- 早先自建 Git 扫描把临时 `.remote-scan-*` 本地路径错误写进 `source_url/content_url`
+- UI 因而把它识别为 Local 或错误 Remote
+
+虽然这个来源字段问题已经修正，但 identity 稳定性仍需继续验证与收口，特别是 refresh 之后 `source_directory` / `canonical_skill_path` 是否完全一致。
+
 ## Recommended Model
 
 ### 1. RegistrySkill 增加稳定来源身份
@@ -248,6 +337,126 @@ skills/
 ```
 
 因为部分平台生态长期假设目录名与 skill 逻辑名 / frontmatter `name` 对应，这会引入兼容不确定性。
+
+## Skill Source Taxonomy
+
+本轮白盒先把“skill 从哪里来”拆开。`SkillStoreSource.type` 只覆盖商店源，不等于完整 skill 生命周期来源；完整模型必须同时覆盖创建、导入、恢复、内部编辑和对外分发。
+
+### Source Entries Into My Skills
+
+| Source family | Concrete entry | Current code path | Identity / lifecycle notes |
+| --- | --- | --- | --- |
+| PromptHub-authored | 手工创建 skill | `CreateSkillModal -> createSkill` | 通常没有外部 `source_id`；进入 PromptHub managed container，语义接近 `local-authored` |
+| PromptHub-authored | AI 生成后创建 skill | `CreateSkillModal -> createSkill` | 与手工创建相同，AI 只是内容生成器，不应成为来源身份 |
+| Built-in registry | packaged `BUILTIN_SKILL_REGISTRY` | `loadRegistry -> ensureRegistrySkillSourceId` | fallback `sourceType=builtin-registry`，不是用户添加商店 |
+| Built-in remote store | Anthropic Claude Code skills | `BUILTIN_REMOTE_STORES["claude-code"] -> git-repo loader` | 网络 git source，按 repo/branch/directory/skillPath 建 identity |
+| Built-in remote store | OpenAI Codex skills | `BUILTIN_REMOTE_STORES["openai-codex"] -> git-repo loader` | 固定 `branch=main`、`directory=skills/.curated` |
+| Built-in remote store | Community / skills.sh | `BUILTIN_REMOTE_STORES["community"] -> skills-sh loader` | 不是 `SkillStoreSource.type` 枚举里的公开类型，但实际存在，应单独纳入矩阵 |
+| Custom store | `marketplace-json` | `loadMarketplaceStore` | 支持嵌套 `marketplaces/sources/registries`；identity 主要来自 registry URL + `contentUrl/slug` |
+| Custom store | remote `git-repo` | `loadGitHubRepoSkills` / `scanRemoteGithub` | GitHub/Gitea/self-hosted/SSH；identity 包含 `sourceUrl/branch/directory/skillPath` |
+| Custom store | `local-dir` | `loadLocalDirectoryStore -> scanLocalPreview([dir])` | path-aware；当前不编码 Git branch |
+| Custom store | local-path `git-repo` | `source.type=git-repo` + `isLikelyLocalSource(source.url)` -> `loadLocalDirectoryStore(source.url)` | UI 类型是 git-repo，但行为接近 local-dir；当前不会把 source 上的 `branch/directory` 写入 identity |
+| Direct import | Git repository URL in create modal | `CreateSkillModal.handleGitHubInstall -> scanRemoteGithub/loadGitHubSkillRepo -> installRegistrySkill` | 一次性导入，不一定成为 persisted store source |
+| Local scan | default platform scan | `scanLocalPreview()` with no paths | 扫描默认平台目录；可导入 My Skills；来源是外部本地目录，不等同 managed repo |
+| Project scan | registered project roots / deploy targets | `scanProjectSkills -> scanLocalPreview(project paths)` | project skill 既可能被导入 My Skills，也可能只是被管理；这是 source 和 sink 的交界 |
+| File import | Skill JSON import | `importFromJson` | 可携带并恢复 `source_id/source_url/source_branch/source_directory/canonical_skill_path` |
+| Restore | PromptHub backup / export restore | `database-backup.importDatabase` | 不是新业务来源；必须保留原 source identity、版本和 file tree |
+
+### Internal Mutation Sources
+
+进入 My Skills 后，skill 会变成 PromptHub 托管实例；后续变化不应被误判成新的外部 source。
+
+| Mutation family | Current code path | Notes |
+| --- | --- | --- |
+| Managed file edit | `writeLocalFile`, `renameLocalPath`, `deleteLocalFile`, `createLocalDir` | 作用于 managed `repo/`，必要时同步 `SKILL.md` 与 `directory_fingerprint` |
+| Repo sync | `syncFromRepo` / `syncSkillContentFromRepo` | 从 managed repo 回写 DB，不应改变外部 `source_id` |
+| Store update | `updateRegistrySkill` | 应保留同一个 `source_id`，更新内容 hash、版本和 fingerprint |
+| Version restore | `restoreSkillVersion` | 恢复历史内容，不是新来源；应刷新内容和 fingerprint，不应漂移 source identity |
+| Safety/metadata edit | tags, favorite, safety report, translations | 不应改变 source identity |
+
+### Outputs / Projections
+
+这些是 My Skills 对外分发，不是新的 My Skills 来源，除非用户之后从目标目录再次扫描导入。
+
+| Output family | Current code path | Notes |
+| --- | --- | --- |
+| Project deploy copy | `copyRepoByPathToDirectory(..., mode=copy)` | 复制 `repo/` 内容到 project target；不带 `.prompthub/` |
+| Project deploy symlink | `copyRepoByPathToDirectory(..., mode=symlink)` | 链接到 `repo/` 内容目录；外部目录名保持 logical skill name |
+| Platform install | platform handlers / platform panel | 平台侧按 logical name 激活；不应把内部 variant container 名泄漏成平台 skill 名 |
+| Export | Skill JSON / SKILL.md / backup export | 对外文件应携带必要 source metadata，但不暴露 PromptHub internal container 作为业务来源 |
+
+## Lifecycle Combination Matrix
+
+下面这张矩阵不是“穷举所有排列组合”，而是把当前 skill 生命周期里最关键、最容易出错的维度拆出来，作为白盒审计和后续补测的边界。它现在以完整 source taxonomy 为前提，而不是只覆盖商店源。
+
+### Identity Axes
+
+- `sourceFamily`: PromptHub-authored / built-in registry / built-in remote store / custom store / direct import / local scan / project scan / file import / restore / internal mutation / output projection
+- `sourceType`: `builtin-registry` / `git-repo` / `skills-sh` / `marketplace-json` / `local-dir` / `local-path git-repo` / `local-authored` / `managed-import`
+- `sourceUrl`: 来源 URL 或本地目录路径
+- `branch`: 同仓库不同分支
+- `directory`: 同仓库不同目录
+- `skillPath`: 同目录下不同 canonical skill path
+- `display name`: 用户看到的 `name`
+- `directory_fingerprint`: 整目录内容身份
+- `materialization`: PromptHub managed `repo/` / external local directory / project copy / project symlink / platform projection / backup payload
+
+### Operation Axes
+
+- `install/import`
+- `refresh`
+- `update`
+- `delete`
+- `project deploy`
+- `platform install`
+- `backup/restore`
+- `json export/import`
+- `internal edit`
+- `version restore`
+- `safety/metadata update`
+
+### Coverage Matrix
+
+| Combination | Current Status | Notes |
+| --- | --- | --- |
+| Same name + different `sourceUrl` | Covered | 按 `source_id` 区分实例，不再按 `name` 折叠 |
+| Same repo + same name + different `branch` | Covered | `buildSkillSourceId()` 显式包含 `branch` |
+| Same repo + same branch + same name + different `directory` | Covered | `buildSkillSourceId()` 显式包含 `directory` |
+| Same repo + same branch + same directory + different `skillPath` | Covered | `buildSkillSourceId()` 显式包含 `skillPath` |
+| Same name + same `SKILL.md` + different directory content | Covered | `directory_fingerprint` 基于整目录，不再只看 `SKILL.md` |
+| Self-hosted Git refresh with different temp clone roots | Covered | 已有回归测试，`source_id` 不再依赖临时目录 |
+| Refresh after install keeps `Imported` | Covered | Store/UI 已按 `source_id` 稳定判断 |
+| Delete managed skill cleans PromptHub data only | Covered | 删除 managed container，但不误删外部目录 |
+| Project deploy with `copy` / `symlink` | Covered | 对外目录名保持逻辑 `skill.name` |
+| Platform install with logical-name activation | Covered | 平台侧按逻辑名激活，一个逻辑名同时只激活一个变体 |
+| Backup/restore preserves source identity | Covered | 现已恢复 `source_id/source_directory/canonical_skill_path` |
+| JSON export/import preserves source identity | Covered | 现已 round-trip `source_id` 与来源元数据 |
+| PromptHub-authored manual/AI skill enters managed repo | Covered main path | 创建后写入 managed `repo/SKILL.md`；无外部 `source_id` 属于预期 |
+| Built-in `skills-sh` source identity and refresh semantics | Covered main path | `parseSkillsShDetail()` 现生成稳定 `source_id`，避免多个 community 条目按 undefined 折叠 |
+| Direct Git import vs persisted git store source | Covered main path | Create modal 的 direct Git 选择/已导入判断现优先使用 `source_id`，并兼容旧 `source_url` |
+| Default local scan import from platform paths | Needs audit | 作为外部本地目录导入 My Skills；需要确认 `source_id` / `local_repo_path` / managed repo 关系 |
+| Project scan import vs project deploy output | Partially covered | project 既是来源又是分发目标；导入按路径识别，project deploy 按 logical name 投影，需要补循环导入/变体切换测试 |
+| Platform install status for same-name variants | Covered by activation model, needs regression | 平台目录按 logical name 单激活，状态额外校验 activation `skill.id`，避免所有同名变体都显示 installed |
+| Backup/export restore with same-name variants | Covered main path | `skillFiles` 以 `skill.id` 为 key，restore 建 old-id -> new-id 映射；legacy fallback 才按 name |
+| Internal managed repo edits preserve source identity | Partially covered | 文件编辑和 repo sync 不重算外部 source；仍需补 version restore / fingerprint 回归 |
+| Same local-dir path + user switches Git branch in place | High-risk gap | 当前 `local-dir` identity 不显式编码 git branch；`git-repo` 类型但 URL 是本地路径时也会走 local-dir loader |
+| Same source identity + different content due to remote force-push | Partially covered | `source_id` 稳定，但 update/refresh 主要靠内容 hash 与版本判定 |
+| Two logically different sources collide on 8-char short suffix | Theoretical gap | 目录后缀仅是短哈希，不是严格唯一键 |
+| Historical persisted `remoteStoreEntries` with pre-fix bad `source_id` | Partially covered | refresh 后可修正；尚未做自动缓存清洗 |
+
+### White-box Audit Focus
+
+基于当前实现，白盒审计优先关注以下三类问题：
+
+1. **Identity drift**
+- 任一调用链如果绕过 `buildSkillSourceId()`，或输入字段口径不一致，就会把同一 skill 识别成新实例。
+
+2. **Instance vs logical-name confusion**
+- PromptHub 内部允许同名实例并存，但项目目录/平台目录必须按逻辑 skill 名落地；任何把内部 instance key 泄漏到外部分发目录的改动都属于高风险回归。
+
+3. **Source-aware vs path-aware mismatch**
+- 网络 `git-repo` source 是 branch-aware 的；`local-dir` source 当前是 path-aware 的，而不是 branch-aware 的。用户若在同一路径切换 branch，当前实现不会把它自动视为两个 branch variant。
+- 另外，`git-repo` source 如果 URL 被识别为本地路径，也会转入 `loadLocalDirectoryStore(source.url)`，这条链路不会把 custom source 上的 `branch` / `directory` 纳入 `source_id`。
 
 ### 4.6 还需要纳入模型的长期场景
 

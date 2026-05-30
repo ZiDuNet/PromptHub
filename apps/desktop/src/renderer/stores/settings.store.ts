@@ -61,6 +61,8 @@ export const FONT_SIZES = [
 ];
 
 const DEFAULT_TAGS_SECTION_HEIGHT = 140;
+export const SKILL_LIST_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+export const DEFAULT_SKILL_LIST_PAGE_SIZE = 10;
 const DEFAULT_BACKGROUND_IMAGE_OPACITY = 1;
 const DEFAULT_BACKGROUND_IMAGE_BLUR = 0;
 const LEGACY_BACKGROUND_IMAGE_BLUR_DEFAULT = 14;
@@ -223,6 +225,14 @@ function normalizeSyncProvider(value: unknown): SyncProviderKind {
   }
 
   return "manual";
+}
+
+function normalizeSkillListPageSize(value: unknown): number {
+  return SKILL_LIST_PAGE_SIZE_OPTIONS.includes(
+    value as (typeof SKILL_LIST_PAGE_SIZE_OPTIONS)[number],
+  )
+    ? (value as number)
+    : DEFAULT_SKILL_LIST_PAGE_SIZE;
 }
 
 function buildMainProcessSyncSettings(
@@ -601,6 +611,7 @@ interface SettingsState {
   skillTagsSectionHeight: number;
   isSkillTagsSectionCollapsed: boolean;
   desktopHomeModules: DesktopHomeModule[];
+  skillListPageSize: number;
 
   // AI model configuration (legacy single model compatibility)
   // SECURITY NOTE: aiApiKey is stored in localStorage (plaintext).
@@ -715,6 +726,7 @@ interface SettingsState {
   setIsSkillTagsSectionCollapsed: (collapsed: boolean) => void;
   toggleDesktopHomeModule: (moduleId: DesktopHomeModule) => void;
   reorderDesktopHomeModules: (modules: DesktopHomeModule[]) => void;
+  setSkillListPageSize: (pageSize: number) => void;
   setAiProvider: (provider: string) => void;
   setAiApiProtocol: (protocol: AIProtocol) => void;
   setAiApiKey: (key: string) => void;
@@ -1029,6 +1041,7 @@ export const useSettingsStore = create<SettingsState>()(
         skillTagsSectionHeight: DEFAULT_TAGS_SECTION_HEIGHT,
         isSkillTagsSectionCollapsed: false,
         desktopHomeModules: [...DESKTOP_HOME_MODULES],
+        skillListPageSize: DEFAULT_SKILL_LIST_PAGE_SIZE,
         aiProvider: "openai",
         aiApiProtocol: "openai",
         aiApiKey: "",
@@ -1448,6 +1461,10 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ skillTagsSectionHeight: height }),
         setIsSkillTagsSectionCollapsed: (collapsed) =>
           setTouched({ isSkillTagsSectionCollapsed: collapsed }),
+        setSkillListPageSize: (pageSize) =>
+          setTouched({
+            skillListPageSize: normalizeSkillListPageSize(pageSize),
+          }),
         toggleDesktopHomeModule: (moduleId) => {
           const currentModules = get().desktopHomeModules;
           if (
@@ -2004,6 +2021,9 @@ export const useSettingsStore = create<SettingsState>()(
         };
 
         migrateTraeCnPlatformState(next);
+        next.skillListPageSize = normalizeSkillListPageSize(
+          next.skillListPageSize,
+        );
 
         next.syncProvider = clampSyncProvider(
           normalizeSyncProvider(next.syncProvider),
@@ -2068,6 +2088,9 @@ export const useSettingsStore = create<SettingsState>()(
         if (next.tagFilterMode !== "single" && next.tagFilterMode !== "multi") {
           next.tagFilterMode = "multi";
         }
+        next.skillListPageSize = normalizeSkillListPageSize(
+          next.skillListPageSize,
+        );
         if (!Array.isArray(next.customAgents)) {
           next.customAgents = [];
         }

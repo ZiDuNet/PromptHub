@@ -12,18 +12,24 @@ import type { Skill } from "@prompthub/shared/types";
 import { SkillIcon } from "./SkillIcon";
 import { getRuntimeCapabilities } from "../../runtime";
 import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
-import { buildSkillVariantBadges } from "../../services/skill-variant-badges";
+import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 
 function normalizeStringArray(value: unknown): string[] {
   if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return value.filter(
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
+    );
   }
 
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value) as unknown;
       return Array.isArray(parsed)
-        ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        ? parsed.filter(
+            (item): item is string =>
+              typeof item === "string" && item.trim().length > 0,
+          )
         : [];
     } catch {
       return [];
@@ -39,6 +45,8 @@ interface SkillGalleryCardProps {
   isSelected: boolean;
   isSelectionMode: boolean;
   onDelete: (skill: Skill) => void;
+  onContextMenu?: (event: React.MouseEvent, skill: Skill) => void;
+  onDropTag?: (skill: Skill, tag: string) => void;
   onOpen: (skillId: string) => void;
   onQuickInstall: (skill: Skill) => void;
   onToggleFavorite: (skillId: string) => void;
@@ -52,6 +60,8 @@ function SkillGalleryCardComponent({
   isSelected,
   isSelectionMode,
   onDelete,
+  onContextMenu,
+  onDropTag,
   onOpen,
   onQuickInstall,
   onToggleFavorite,
@@ -61,7 +71,7 @@ function SkillGalleryCardComponent({
   const { t } = useTranslation();
   const runtimeCapabilities = getRuntimeCapabilities();
   const visibleTags = normalizeStringArray(skill.tags).slice(0, 4);
-  const variantBadges = buildSkillVariantBadges(skill, t);
+  const sourceBadges = buildMySkillSourceBadges(skill, t);
 
   return (
     <div
@@ -71,6 +81,23 @@ function SkillGalleryCardComponent({
           return;
         }
         onOpen(skill.id);
+      }}
+      onContextMenu={(event) => onContextMenu?.(event, skill)}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes("application/x-prompthub-tag")) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(event) => {
+        const tag = event.dataTransfer.getData("application/x-prompthub-tag");
+        if (!tag) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        onDropTag?.(skill, tag);
       }}
       style={{
         animationDelay: `${animationDelayMs}ms`,
@@ -84,7 +111,7 @@ function SkillGalleryCardComponent({
             : "border-border hover:border-primary/40"
           : "border-border hover:border-primary/50 hover:shadow-xl hover:-translate-y-1"
       }`}
-      >
+    >
       {hasStoreUpdate ? (
         <div
           className="absolute left-4 top-4 z-10 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-600 dark:text-amber-300"
@@ -184,7 +211,10 @@ function SkillGalleryCardComponent({
         {skill.description ||
           t("skill.defaultDescription", "技能描述，帮助 AI 理解何时使用此技能")}
       </p>
-      <SkillVariantBadgeList badges={variantBadges} className="mb-3 flex flex-wrap gap-1.5" />
+      <SkillVariantBadgeList
+        badges={sourceBadges}
+        className="mb-3 flex flex-wrap gap-1.5"
+      />
       {visibleTags.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {visibleTags.map((tag) => (
