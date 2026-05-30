@@ -195,7 +195,7 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
     const skill = db.getById(id);
     if (skill?.name) {
       // Only uninstall SKILL.md from platforms, do NOT delete the source directory.
-      // Deletion from PromptHub only removes the library record, not the original files.
+      // Deletion from PromptHub should only clean PromptHub-managed files, never the original external source.
       try {
         const platforms = SkillInstaller.getSupportedPlatforms();
         await Promise.allSettled(
@@ -208,6 +208,19 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
       } catch (error) {
         console.warn(
           `Failed to uninstall SKILL.md for skill "${skill.name}":`,
+          error,
+        );
+      }
+
+      try {
+        const managedContainerPath =
+          await SkillInstaller.getManagedContainerPathForSkill(skill);
+        if (await SkillInstaller.isManagedRepoPath(managedContainerPath)) {
+          await SkillInstaller.deleteManagedVariantContainer(skill);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to delete managed repo container for skill "${skill.name}":`,
           error,
         );
       }

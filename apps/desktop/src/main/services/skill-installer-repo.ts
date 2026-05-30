@@ -139,6 +139,23 @@ function buildVariantKeyFromSkill(skill: Pick<Skill, "id" | "name" | "source_id"
   return `${logicalName}--${stableSuffix}`;
 }
 
+function getLegacyManagedContainerPath(skillId: string): string {
+  const normalizedSkillId = skillId.trim();
+  if (!normalizedSkillId) {
+    throw new Error("Skill id cannot be empty");
+  }
+  if (normalizedSkillId.includes("/") || normalizedSkillId.includes("\\")) {
+    throw new Error("Skill id must not contain path separators");
+  }
+  return getManagedContainerPathFromInstanceKey(normalizedSkillId);
+}
+
+function getPreferredManagedContainerPath(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
+): string {
+  return getManagedContainerPathFromInstanceKey(buildVariantKeyFromSkill(skill));
+}
+
 function buildSkillVariantSourceMetadata(
   skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
   mode: "copy" | "symlink",
@@ -802,40 +819,81 @@ export function getLocalRepoPath(skillName: string): string {
 }
 
 export function getLocalRepoPathForSkillId(skillId: string): string {
-  const normalizedSkillId = skillId.trim();
-  if (!normalizedSkillId) {
-    throw new Error("Skill id cannot be empty");
-  }
-  if (normalizedSkillId.includes("/") || normalizedSkillId.includes("\\")) {
-    throw new Error("Skill id must not contain path separators");
-  }
-  return path.join(
-    getManagedContainerPathFromInstanceKey(normalizedSkillId),
-    MANAGED_REPO_DIRNAME,
-  );
+  return path.join(getLegacyManagedContainerPath(skillId), MANAGED_REPO_DIRNAME);
 }
 
 export function getLocalRepoContainerPathForSkillId(skillId: string): string {
-  const normalizedSkillId = skillId.trim();
-  if (!normalizedSkillId) {
-    throw new Error("Skill id cannot be empty");
-  }
-  if (normalizedSkillId.includes("/") || normalizedSkillId.includes("\\")) {
-    throw new Error("Skill id must not contain path separators");
-  }
-  return getManagedContainerPathFromInstanceKey(normalizedSkillId);
+  return getLegacyManagedContainerPath(skillId);
+}
+
+export function getPreferredLocalRepoContainerPathForSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
+): string {
+  return getPreferredManagedContainerPath(skill);
+}
+
+export function getPreferredLocalRepoPathForSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">,
+): string {
+  return path.join(getPreferredManagedContainerPath(skill), MANAGED_REPO_DIRNAME);
 }
 
 export async function ensureManagedVariantContainer(
   skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
   mode: "copy" | "symlink",
 ): Promise<{ containerDir: string; repoDir: string }> {
-  const containerDir = getLocalRepoContainerPathForSkillId(skill.id);
-  const repoDir = getLocalRepoPathForSkillId(skill.id);
+  const containerDir = await getManagedContainerPathForSkill(skill);
+  const repoDir = path.join(containerDir, MANAGED_REPO_DIRNAME);
   await initSkillsDir();
   await fs.mkdir(containerDir, { recursive: true });
   await writeVariantSidecarFiles(containerDir, buildSkillVariantSourceMetadata(skill, mode));
   return { containerDir, repoDir };
+}
+
+export async function getManagedContainerPathForSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key" | "local_repo_path">,
+): Promise<string> {
+  let existingManagedContainerFromLocalRepoPath: string | null = null;
+  if (skill.local_repo_path?.trim()) {
+    const normalizedLocalRepoPath = normalizeRepoBaseDirectory(skill.local_repo_path);
+    const repoBasename = path.basename(normalizedLocalRepoPath);
+
+    if (repoBasename === MANAGED_REPO_DIRNAME) {
+      const candidateContainer = path.dirname(normalizedLocalRepoPath);
+      if (await fileExists(candidateContainer)) {
+        existingManagedContainerFromLocalRepoPath = candidateContainer;
+      }
+    } else if (await fileExists(path.join(normalizedLocalRepoPath, MANAGED_REPO_DIRNAME))) {
+      existingManagedContainerFromLocalRepoPath = normalizedLocalRepoPath;
+    }
+  }
+
+  if (existingManagedContainerFromLocalRepoPath) {
+    return existingManagedContainerFromLocalRepoPath;
+  }
+
+  const candidateContainers = [
+    existingManagedContainerFromLocalRepoPath,
+    getPreferredLocalRepoContainerPathForSkill(skill),
+    getLegacyManagedContainerPath(skill.id),
+  ].filter((value, index, array): value is string =>
+    typeof value === "string" && value.trim().length > 0 && array.indexOf(value) === index,
+  );
+
+  for (const candidate of candidateContainers) {
+    if (await fileExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return getPreferredLocalRepoContainerPathForSkill(skill);
+}
+
+export async function deleteManagedVariantContainer(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key" | "local_repo_path">,
+): Promise<void> {
+  const containerPath = await getManagedContainerPathForSkill(skill);
+  await deleteRepoByPath(containerPath);
 }
 
 export async function saveToLocalRepoBySkillId(

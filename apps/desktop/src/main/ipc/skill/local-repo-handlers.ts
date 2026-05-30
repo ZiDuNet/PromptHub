@@ -32,7 +32,7 @@ async function resolveManagedRepoPath(
     return ensuredRepoPath;
   }
 
-  const managedRepoPath = SkillInstaller.getLocalRepoPathForSkillId(skill.id);
+  const managedRepoPath = SkillInstaller.getPreferredLocalRepoPathForSkill(skill);
   if (skill.local_repo_path !== managedRepoPath) {
     context.db.update(skillId, { local_repo_path: managedRepoPath });
   }

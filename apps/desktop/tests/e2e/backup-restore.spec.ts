@@ -12,7 +12,7 @@ const IMAGE_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wn0l1cAAAAASUVORK5CYII=";
 const VIDEO_BASE64 = Buffer.from("prompthub-backup-video").toString("base64");
 
-function findWorkspacePromptFile(workspaceDir: string, promptId: string): string | null {
+function findWorkspacePromptFile(workspaceDir: string, promptTitle: string): string | null {
   const promptsDir = path.join(workspaceDir, "prompts");
   if (!fs.existsSync(promptsDir)) {
     return null;
@@ -32,12 +32,12 @@ function findWorkspacePromptFile(workspaceDir: string, promptId: string): string
         continue;
       }
 
-      if (entry.name !== "prompt.md") {
+      if (!entry.name.endsWith(".md") || entry.name === "_folder.json") {
         continue;
       }
 
       const content = fs.readFileSync(nextPath, "utf8");
-      if (content.includes(promptId)) {
+      if (content.includes(promptTitle)) {
         return nextPath;
       }
     }
@@ -103,6 +103,11 @@ test.describe("E2E: backup restore", () => {
             version: "1.0.0",
             author: "PromptHub E2E",
             tags: ["backup", "e2e"],
+            source_id: "backup-skill-source-id",
+            source_label: "backup/source",
+            source_branch: "release",
+            source_directory: "skills/.curated/backup-skill",
+            canonical_skill_path: "skills/.curated/backup-skill/SKILL.md",
             is_favorite: false,
             currentVersion: 1,
             versionTrackingEnabled: true,
@@ -145,6 +150,16 @@ test.describe("E2E: backup restore", () => {
       expect(exported.backup.videos?.["backup-video.mp4"]).toBe(VIDEO_BASE64);
       expect(
         exported.backup.skills?.some((skill) => skill.id === exported.skillId),
+      ).toBe(true);
+      expect(
+        exported.backup.skills?.some(
+          (skill) =>
+            skill.id === exported.skillId &&
+            skill.source_id === "backup-skill-source-id" &&
+            skill.source_directory === "skills/.curated/backup-skill" &&
+            skill.canonical_skill_path ===
+              "skills/.curated/backup-skill/SKILL.md",
+        ),
       ).toBe(true);
       expect(
         exported.backup.skillFiles?.[exported.skillId]?.some(
@@ -215,6 +230,9 @@ test.describe("E2E: backup restore", () => {
             name: folder.name,
           })),
           skillId: restoredSkill.id,
+          skillSourceId: restoredSkill.source_id ?? null,
+          skillSourceDirectory: restoredSkill.source_directory ?? null,
+          skillCanonicalSkillPath: restoredSkill.canonical_skill_path ?? null,
           skillRepoPath: repoPath,
           skillFiles: skillFiles.map((file) => ({
             path: file.path,
@@ -240,6 +258,13 @@ test.describe("E2E: backup restore", () => {
       ).toBe(true);
       expect(restored.imageBase64).toBe(IMAGE_BASE64);
       expect(restored.videoBase64).toBe(VIDEO_BASE64);
+      expect(restored.skillSourceId).toBe("backup-skill-source-id");
+      expect(restored.skillSourceDirectory).toBe(
+        "skills/.curated/backup-skill",
+      );
+      expect(restored.skillCanonicalSkillPath).toBe(
+        "skills/.curated/backup-skill/SKILL.md",
+      );
       expect(restored.skillFiles).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -249,11 +274,23 @@ test.describe("E2E: backup restore", () => {
         ]),
       );
 
-      const imagePath = path.join(userDataDir, "images", "backup-image.png");
-      const videoPath = path.join(userDataDir, "videos", "backup-video.mp4");
+      const imagePath = path.join(
+        userDataDir,
+        "data",
+        "assets",
+        "images",
+        "backup-image.png",
+      );
+      const videoPath = path.join(
+        userDataDir,
+        "data",
+        "assets",
+        "videos",
+        "backup-video.mp4",
+      );
       const promptFile = findWorkspacePromptFile(
-        path.join(userDataDir, "workspace"),
-        restored.promptId,
+        path.join(userDataDir, "data"),
+        restored.promptTitle,
       );
       const skillFilePath = path.join(
         restored.skillRepoPath,

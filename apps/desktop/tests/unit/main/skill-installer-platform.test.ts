@@ -66,6 +66,7 @@ import {
   installSkillMd,
   installSkillMdForSkill,
   installSkillMdSymlink,
+  installSkillMdSymlinkForSkill,
   uninstallSkillMdForSkill,
 } from "../../../src/main/services/skill-installer-platform";
 
@@ -228,6 +229,27 @@ describe("skill-installer-platform symlink install", () => {
       "/prompthub/skills/skill-a",
       "/platform/skills/writer",
       expect.objectContaining({ recursive: true, filter: expect.any(Function) }),
+    );
+    expect(fsMocks.writeFile).toHaveBeenCalledWith(
+      "/platform/skills/.prompthub-platform-activations.json",
+      expect.stringContaining('"writer"'),
+      "utf-8",
+    );
+  });
+
+  it("records activation state for symlink installs so UI reads installed status", async () => {
+    await installSkillMdSymlinkForSkill(
+      { id: "skill-a", name: "writer", source_id: "source-a" },
+      "# writer a",
+      "claude",
+      "/prompthub/skills/skill-a",
+      ["writer"],
+    );
+
+    expect(fsMocks.symlink).toHaveBeenCalledWith(
+      "/prompthub/skills/skill-a",
+      "/platform/skills/writer",
+      "dir",
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
       "/platform/skills/.prompthub-platform-activations.json",

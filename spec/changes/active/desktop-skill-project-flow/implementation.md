@@ -26,6 +26,20 @@
 - 调整项目导入链路：`从我的技能导入` 弹窗的高级导入设置新增 `复制 / 软连接` 模式选择，并将该模式透传到 `copyRepoByPathToDirectory(...)`；项目内导入我的技能仍保持显式 `Copy Import / Symlink Import`，而 `导入到我的技能` 默认继续使用复制语义。
 - 扩展 `skill-installer-repo.copyRepoByPathToDirectory(...)`、preload API 与 IPC 校验，使项目目标目录支持目录软链接导入；同时补充项目页与主进程回归测试，锁住 `mode: "copy" | "symlink"` 的行为。
 - 为项目级“从我的技能导入”弹窗补充偏好记忆：全局记住最近一次 `copy / symlink` 选择，并按 `project.id` 记住目标目录与自定义目录；同时为该持久化链路增加幂等保护，避免关闭弹窗时把已保存偏好重置为空值。
+- 调整全局 Skill 详情页右栏的信息架构：不再额外渲染独立的 `Project Deployment` 卡片，而是把项目分发并入同一张 `Platform Integration` 卡片中，新增 `全局分发 / 项目分发` 切换，让全局平台安装与项目分发在同一视觉语义下切换，避免右侧出现割裂的第二块部署面板。
+- `SkillPlatformPanel.tsx` 现在同时承载两类集成能力：
+  - `全局分发`：保留原有 `SKILL.md` 平台安装、复制/软链接切换、批量安装与平台列表
+  - `项目分发`：展示项目列表、目标目录摘要、复制/软链接切换、添加项目入口与分发按钮
+- `SkillFullDetailPage.tsx` 删除对 `SkillProjectDeployPanel` 的独立挂载，只把项目分发所需数据和回调透传给 `SkillPlatformPanel`；原有分发逻辑 `handleDeployToProjects(...)` 未改，属于纯 UI 收口。
+- 进一步收敛 `SkillPlatformPanel.tsx` 的项目卡片展示：项目根目录与目标目录只保留单行摘要，完整目标路径改为 `title` 悬浮提示，避免右栏被长绝对路径撑爆；同时补齐 `projectDeploySelectedCount` 多语言文案，并修复 `SkillFullDetailPage` 测试 mock 缺少 `projectSkillImportModePreference` setter 导致的 effect 报错。
+- 继续统一全局详情页与项目页的项目分发语义：`handleDeployToProjects(...)` 现在会先调用 `getRepoPath(skill.id)` 获取真实 repo 路径，再基于 `projectScanState` 过滤掉已存在目标，并以 `{ ifExists: "skip", mode }` 调用 `copyRepoByPathToDirectory(...)`；复制完成后的项目刷新也改为与项目页导入一致的“后台重扫，失败仅告警”模式。
+- 同时把 `项目分发` 顶部提示精简为一句短说明，去掉模式切换下方的重复大段解释，减少右栏信息噪音。
+- 补齐 `projectDeployMissingSource`、`projectDeploySuccess`、`projectDeployFailed` 的 7 语 locale，去掉项目分发链路对英文 fallback 文案的依赖；对应专项测试现在直接命中真实 i18n key，而不是靠默认文案兜底。
+- 修正全局 Skill 详情页默认分发入口：`SkillPlatformPanel` 在切换到新的 Skill 时会优先回到 `全局分发`，不再继承上一个 Skill 详情里停留的 `项目分发` tab。
+- 为全局 Skill 详情页的 `项目分发` 补齐高级设置：默认仍分发到项目根目录下的 `.agents/skills`，展开后可以选择 `copy / symlink`、额外勾选 `.claude/skills` / `.gemini/skills`，也可以添加自定义目标目录；分发时会按每个项目的高级目标选择透传到 `handleDeployToProjects(...)`。
+- 继续把全局详情页的项目分发与项目页“从我的技能导入”对齐：详情页现在复用 `projectSkillImportPreferencesByProjectId`，会读取并保存每个项目的目标目录偏好与自定义目录；没有历史偏好时默认选择 `.agents/skills`，而不是从项目配置中猜测其他目标。
+- 调整 `SkillStore.tsx` 的 `official` 源语义：不再把本地 `registrySkills`/curated 数据伪装成“官方商店”内容展示。当前官方商店改为纯占位态，标题与正文统一提示“后端真实数据源接入后开放，敬请期待”，避免用户误以为这些卡片来自真实官方后端。
+- 更新 `tests/unit/components/skill-i18n-smoke.test.tsx`，改为验证全局 Skill 详情页在同时存在平台安装与项目分发时，会出现 `项目分发` 切换并仍可触发原有分发入口。
 
 ## Verification
 
@@ -48,7 +62,21 @@
 - `pnpm --filter @prompthub/desktop test -- tests/unit/components/top-bar.test.tsx tests/unit/components/sidebar.test.tsx tests/unit/components/skill-store-remote.test.tsx tests/unit/services/skill-filter.test.ts --run`
   - 结果：通过（36/36）
 - `pnpm --filter @prompthub/desktop test -- tests/unit/stores/skill.store.test.ts tests/unit/components/skill-store-remote.test.tsx --run`
-  - 结果：通过（47/47）
+- 结果：通过（47/47）
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillPlatformPanel.tsx src/renderer/components/skill/SkillFullDetailPage.tsx tests/unit/components/skill-i18n-smoke.test.tsx`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-i18n-smoke.test.tsx`
+  - 结果：通过（17/17）
+- `pnpm --filter @prompthub/desktop build`
+  - 结果：通过（保留既有 Vite chunk warning，无新增错误）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-detail-project-distribution.test.tsx`
+  - 结果：通过（8/8）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-detail-project-distribution.test.tsx tests/unit/components/skill-i18n-smoke.test.tsx`
+  - 结果：通过（25/25）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/skill/SkillPlatformPanel.tsx src/renderer/components/skill/SkillFullDetailPage.tsx tests/unit/components/skill-detail-project-distribution.test.tsx tests/unit/components/skill-i18n-smoke.test.tsx`
+  - 结果：通过
 
 ## Notes
 

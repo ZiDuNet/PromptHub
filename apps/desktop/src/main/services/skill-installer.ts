@@ -72,9 +72,13 @@ import {
   deleteLocalRepo,
   deleteLocalRepoFile,
   deleteLocalRepoFileByPath,
+  deleteManagedVariantContainer,
   deleteRepoByPath,
+  getManagedContainerPathForSkill,
   getLocalRepoPath,
   getLocalRepoPathForSkillId,
+  getPreferredLocalRepoContainerPathForSkill,
+  getPreferredLocalRepoPathForSkill,
   isManagedRepoPath,
   listLocalRepoFiles,
   listLocalRepoFilesByPath,
@@ -103,6 +107,7 @@ import {
   installSkillMd,
   installSkillMdForSkill,
   installSkillMdSymlink,
+  installSkillMdSymlinkForSkill,
   installToPlatform,
   uninstallFromPlatform,
   uninstallSkillMd,
@@ -157,10 +162,15 @@ export class SkillInstaller {
   static createLocalRepoDirByPath = createLocalRepoDirByPath;
   static copyRepoByPathToDirectory = copyRepoByPathToDirectory;
   static renameLocalRepoPathByPath = renameLocalRepoPathByPath;
+  static getManagedContainerPathForSkill = getManagedContainerPathForSkill;
   static getLocalRepoPath = getLocalRepoPath;
   static getLocalRepoPathForSkillId = getLocalRepoPathForSkillId;
+  static getPreferredLocalRepoContainerPathForSkill =
+    getPreferredLocalRepoContainerPathForSkill;
+  static getPreferredLocalRepoPathForSkill = getPreferredLocalRepoPathForSkill;
   static renameManagedLocalRepo = renameManagedLocalRepo;
   static deleteLocalRepo = deleteLocalRepo;
+  static deleteManagedVariantContainer = deleteManagedVariantContainer;
   static deleteRepoByPath = deleteRepoByPath;
   static deleteAllLocalRepos = deleteAllLocalRepos;
   static replaceLocalRepoFilesByPath = replaceLocalRepoFilesByPath;
@@ -178,6 +188,7 @@ export class SkillInstaller {
   static getSkillMdInstallStatus = getSkillMdInstallStatus;
   static getSkillMdInstallStatusForSkill = getSkillMdInstallStatusForSkill;
   static installSkillMdSymlink = installSkillMdSymlink;
+  static installSkillMdSymlinkForSkill = installSkillMdSymlinkForSkill;
 
   // ---- Export / import (delegated) ----
   static exportAsSkillMd = exportAsSkillMd;
@@ -661,12 +672,45 @@ export class SkillInstaller {
         const builtin = registrySkills.find((item) => item.slug === skill.name.toLowerCase());
         const normalizedBranch = branch?.trim();
         const normalizedDirectory = directory?.trim().replace(/^\/+|\/+$/g, "");
+        const repoRelativeSkillPath = skill.filePath
+          ? path
+              .relative(repoDir, skill.filePath)
+              .replace(/\\/g, "/")
+              .replace(/^\/+|\/+$/g, "")
+          : "";
+        const relativeDirectoryFromFilePath = repoRelativeSkillPath
+          ? path.posix.dirname(repoRelativeSkillPath)
+          : "";
+        const relativeDirectoryFromLocalPath = skill.localPath
+          ? path
+              .relative(repoDir, skill.localPath)
+              .replace(/\\/g, "/")
+              .replace(/^\/+|\/+$/g, "")
+          : "";
+        const relativeDirectory =
+          relativeDirectoryFromFilePath &&
+          relativeDirectoryFromFilePath !== "." &&
+          !relativeDirectoryFromFilePath.startsWith("../")
+            ? relativeDirectoryFromFilePath
+            : relativeDirectoryFromLocalPath;
+        const sourceDirectory =
+          relativeDirectory && relativeDirectory !== "."
+            ? relativeDirectory
+            : normalizedDirectory || undefined;
+        const canonicalSkillPath = sourceDirectory
+          ? `${sourceDirectory}/SKILL.md`
+          : "SKILL.md";
+        const sourceRepoUrl = normalizedBranch
+          ? sourceDirectory
+            ? `${parsedRepo.repositoryUrl}/tree/${normalizedBranch}/${sourceDirectory}`
+            : `${parsedRepo.repositoryUrl}/tree/${normalizedBranch}`
+          : parsedRepo.repositoryUrl;
         const sourceId = buildSkillSourceId({
           sourceType: "git-repo",
           sourceUrl: parsedRepo.repositoryUrl,
           branch: normalizedBranch,
-          directory: normalizedDirectory,
-          skillPath: skill.filePath,
+          directory: sourceDirectory,
+          skillPath: canonicalSkillPath,
         });
         return {
           slug: skill.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
@@ -675,8 +719,8 @@ export class SkillInstaller {
           source_id: sourceId,
           source_label: `${parsedRepo.owner}/${parsedRepo.repo}`,
           source_branch: normalizedBranch,
-          source_directory: normalizedDirectory || undefined,
-          canonical_skill_path: skill.filePath,
+          source_directory: sourceDirectory,
+          canonical_skill_path: canonicalSkillPath,
           directory_fingerprint: skill.directory_fingerprint,
           description: builtin?.description || skill.description || `${skill.name} skill`,
           category: builtin?.category || "general",
@@ -684,11 +728,10 @@ export class SkillInstaller {
           icon_background: builtin?.icon_background,
           icon_emoji: builtin?.icon_emoji,
           author: builtin?.author || skill.author || parsedRepo.owner,
-          source_url: skill.localPath,
+          source_url: sourceRepoUrl,
           tags: builtin?.tags?.length ? builtin.tags : skill.tags,
           version: builtin?.version || skill.version || "1.0.0",
           content: skill.instructions,
-          content_url: skill.localPath,
           prerequisites: builtin?.prerequisites,
           compatibility: builtin?.compatibility || ["claude", "cursor"],
         } satisfies RegistrySkill;

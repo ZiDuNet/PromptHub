@@ -45,8 +45,9 @@ test.describe("E2E: create skill structure", () => {
       });
 
       expect(installedSkill?.id).toBeTruthy();
+      expect(installedSkill?.local_repo_path).toBeTruthy();
 
-      const managedSkillDir = path.join(userDataDir, "data", "skills", installedSkill!.id);
+      const managedSkillDir = path.dirname(String(installedSkill!.local_repo_path));
       const repoSkillMdPath = path.join(managedSkillDir, "repo", "SKILL.md");
       const sourceMetadataPath = path.join(managedSkillDir, ".prompthub", "source.json");
       const variantMetadataPath = path.join(managedSkillDir, ".prompthub", "variant.json");

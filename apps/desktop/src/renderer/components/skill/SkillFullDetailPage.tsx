@@ -23,7 +23,6 @@ import { SkillIcon } from "./SkillIcon";
 import { SkillCodePane } from "./SkillCodePane";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { SkillPlatformPanel } from "./SkillPlatformPanel";
-import { SkillProjectDeployPanel } from "./SkillProjectDeployPanel";
 import { ProjectSkillPreviewSidebar } from "./ProjectSkillPreviewSidebar";
 import { SkillPreviewPane } from "./SkillPreviewPane";
 import { normalizeLocalSkillDirectoryPath } from "../../services/skill-store-source";
@@ -58,6 +57,9 @@ import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
 import { useSkillPlatform } from "./use-skill-platform";
 import { SkillVersionHistoryModal } from "./SkillVersionHistoryModal";
 import type { SkillSafetyReport } from "@prompthub/shared/types";
+import {
+  getMissingProjectTargetDirs,
+} from "../../services/project-skill-targets";
 import {
   getSkillSafetyFindingTitle,
   getSkillSafetyMethodDescription,
@@ -123,6 +125,8 @@ export function SkillFullDetailPage({
   const loadSkills = useSkillStore((state) => state.loadSkills);
   const syncSkillFromRepo = useSkillStore((state) => state.syncSkillFromRepo);
   const saveSafetyReport = useSkillStore((state) => state.saveSafetyReport);
+  const projectScanState = useSkillStore((state) => state.projectScanState);
+  const scanProjectSkills = useSkillStore((state) => state.scanProjectSkills);
 
   const selectedSkill = useMemo(() => {
     if (overrideSkill) {
@@ -146,6 +150,18 @@ export function SkillFullDetailPage({
     (state) => state.autoScanInstalledSkills,
   );
   const skillProjects = useSettingsStore((state) => state.skillProjects);
+  const projectSkillImportModePreference = useSettingsStore(
+    (state) => state.projectSkillImportModePreference,
+  );
+  const projectSkillImportPreferencesByProjectId = useSettingsStore(
+    (state) => state.projectSkillImportPreferencesByProjectId,
+  );
+  const setProjectSkillImportModePreference = useSettingsStore(
+    (state) => state.setProjectSkillImportModePreference,
+  );
+  const setProjectSkillImportPreferences = useSettingsStore(
+    (state) => state.setProjectSkillImportPreferences,
+  );
   const aiModels = useSettingsStore((state) => state.aiModels);
   const updateSkillProject = useSettingsStore((state) => state.updateSkillProject);
   const [installMode, setInstallMode] = useState<InstallMode>(
@@ -164,6 +180,9 @@ export function SkillFullDetailPage({
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [isProjectDeploying, setIsProjectDeploying] = useState(false);
+  const [projectDeployMode, setProjectDeployMode] = useState<InstallMode>(
+    () => projectSkillImportModePreference,
+  );
   const [snapshotNote, setSnapshotNote] = useState("");
   const [resolvedSkillMdContent, setResolvedSkillMdContent] = useState("");
   const [fileEditorHasUnsavedChanges, setFileEditorHasUnsavedChanges] =
@@ -189,25 +208,23 @@ export function SkillFullDetailPage({
     document.dispatchEvent(new Event(OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT));
   };
 
-  const handleDeployToProjects = async (projectIds: string[]) => {
+  const handleDeployToProjects = async (
+    projectIds: string[],
+    targetDirsByProjectId?: Record<string, string[]>,
+  ) => {
     if (!selectedSkill || projectIds.length === 0) {
-      return;
-    }
-
-    const sourcePath = selectedSkill.local_repo_path || selectedSkill.source_url || "";
-    if (!sourcePath.trim()) {
-      showToast(
-        t("skill.projectDeployMissingSource", "Missing local skill source path."),
-        "error",
-      );
       return;
     }
 
     const selectedProjects = skillProjects.filter((project) =>
       projectIds.includes(project.id),
     );
-    const targets = selectedProjects.flatMap((project) => getProjectDeployTargets(project));
-    if (targets.length === 0) {
+    const selectedProjectTargets = selectedProjects.map((project) => ({
+      project,
+      targetDirs:
+        targetDirsByProjectId?.[project.id] ?? getProjectDeployTargets(project),
+    }));
+    if (!selectedProjectTargets.some(({ targetDirs }) => targetDirs.length > 0)) {
       showToast(
         t(
           "skill.projectDeployNoTargets",
@@ -220,25 +237,69 @@ export function SkillFullDetailPage({
 
     setIsProjectDeploying(true);
     try {
+      const repoPath = await window.api.skill.getRepoPath(selectedSkill.id);
+      if (!repoPath) {
+        showToast(
+          t("skill.projectDeployMissingSource", "Missing local skill source path."),
+          "error",
+        );
+        return;
+      }
+
+      const projectTargetJobs = selectedProjectTargets.flatMap(({ project, targetDirs }) => {
+        const scannedSkills = projectScanState[project.id]?.scannedSkills ?? [];
+        return getMissingProjectTargetDirs(
+          scannedSkills,
+          selectedSkill.name,
+          targetDirs,
+        ).map((targetDir) => ({ project, targetDir }));
+      });
+      if (projectTargetJobs.length === 0) {
+        showToast(
+          t(
+            "skill.projectImportAlreadyExists",
+            "Selected skills are already imported into the selected project folders.",
+          ),
+          "warning",
+        );
+        return;
+      }
+
       await Promise.all(
-        targets.map((targetDir) =>
+        projectTargetJobs.map(({ targetDir }) =>
           window.api.skill.copyRepoByPathToDirectory(
-            sourcePath,
+            repoPath,
             selectedSkill.name,
             targetDir,
+            { ifExists: "skip", mode: projectDeployMode },
           ),
         ),
       );
-      selectedProjects.forEach((project) => {
-        updateSkillProject(project.id, { lastScannedAt: Date.now() });
-      });
       showToast(
         t("skill.projectDeploySuccess", {
-          count: targets.length,
+          count: projectTargetJobs.length,
+          mode:
+            projectDeployMode === "symlink"
+              ? t("skill.symlink", "Symlink")
+              : t("skill.copyMode", "Copy"),
           defaultValue: "Deployed to {{count}} project folder(s).",
         }),
         "success",
       );
+      void Promise.all(
+        selectedProjects.map(async (project) => {
+          await scanProjectSkills(project);
+          updateSkillProject(project.id, { lastScannedAt: Date.now() });
+        }),
+      ).catch(() => {
+        showToast(
+          t(
+            "skill.projectImportLibraryRescanFailed",
+            "Import completed, but PromptHub could not refresh the project list. Please rescan manually.",
+          ),
+          "warning",
+        );
+      });
     } catch (error) {
       showToast(
         t("skill.projectDeployFailed", {
@@ -251,6 +312,14 @@ export function SkillFullDetailPage({
       setIsProjectDeploying(false);
     }
   };
+
+  useEffect(() => {
+    setProjectDeployMode(projectSkillImportModePreference);
+  }, [projectSkillImportModePreference]);
+
+  useEffect(() => {
+    setProjectSkillImportModePreference(projectDeployMode);
+  }, [projectDeployMode, setProjectSkillImportModePreference]);
 
   const targetLang = useMemo(() => {
     const lang = (i18n.language || "").toLowerCase();
@@ -1047,27 +1116,28 @@ export function SkillFullDetailPage({
                       installMode={installMode}
                       installProgress={installProgress}
                       isBatchInstalling={isBatchInstalling}
+                      isProjectDeploying={isProjectDeploying}
                       onBatchInstall={batchInstall}
+                      onCreateProject={openCreateProjectModal}
+                      onDeployToProjects={handleDeployToProjects}
+                      projectDeployMode={projectDeployMode}
+                      projectSkillImportPreferencesByProjectId={
+                        projectSkillImportPreferencesByProjectId
+                      }
                       selectedPlatforms={selectedPlatforms}
                       selectedSkill={selectedSkill}
+                      projects={skillProjects}
                       selectAllPlatforms={selectAllPlatforms}
                       deselectAllPlatforms={deselectAllPlatforms}
                       setInstallMode={setInstallMode}
+                      setProjectDeployMode={setProjectDeployMode}
+                      setProjectSkillImportPreferences={setProjectSkillImportPreferences}
                       skillMdInstallStatus={skillMdInstallStatus}
                       t={t}
                       togglePlatformSelection={togglePlatformSelection}
+                      getProjectDeployTargets={getProjectDeployTargets}
                       uninstallFromPlatform={uninstallFromPlatform}
                       uninstalledPlatforms={uninstalledPlatforms}
-                    />
-
-                    <SkillProjectDeployPanel
-                      projects={skillProjects}
-                      getProjectDeployTargets={getProjectDeployTargets}
-                      isDeploying={isProjectDeploying}
-                      onCreateProject={openCreateProjectModal}
-                      onDeploy={handleDeployToProjects}
-                      selectedSkill={selectedSkill}
-                      t={t}
                     />
                   </div>
                 ) : (

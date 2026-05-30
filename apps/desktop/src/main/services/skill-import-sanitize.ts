@@ -27,6 +27,7 @@ export interface ImportedSkillDraft {
   fallbackTags?: unknown;
   instructions?: unknown;
   source_url?: unknown;
+  source_id?: unknown;
   source_label?: unknown;
   source_branch?: unknown;
   source_directory?: unknown;
@@ -49,6 +50,7 @@ export interface SanitizedImportedSkill {
   tags: string[];
   instructions?: string;
   source_url?: string;
+  source_id?: string;
   source_label?: string;
   source_branch?: string;
   source_directory?: string;
@@ -143,6 +145,7 @@ export function sanitizeImportedSkillDraft(
     tags: sanitizeImportedTags(draft.tags, draft.fallbackTags, defaultTags),
     instructions: sanitizeImportedString(draft.instructions),
     source_url: sanitizeImportedString(draft.source_url, undefined, 500000),
+    source_id: sanitizeImportedString(draft.source_id, undefined, 500000),
     source_label: sanitizeImportedString(draft.source_label, undefined, 500000),
     source_branch: sanitizeImportedString(draft.source_branch, undefined, 256),
     source_directory: sanitizeImportedString(

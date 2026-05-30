@@ -167,8 +167,9 @@ test.describe("E2E: local store source", () => {
         return skills.find((skill) => skill.name === "local-writer") ?? null;
       });
       expect(installedSkill?.id).toBeTruthy();
+      expect(installedSkill?.local_repo_path).toBeTruthy();
 
-      const managedSkillDir = path.join(userDataDir, "data", "skills", installedSkill!.id);
+      const managedSkillDir = path.dirname(String(installedSkill!.local_repo_path));
       expect(fs.existsSync(path.join(managedSkillDir, ".prompthub", "source.json"))).toBe(true);
       expect(fs.existsSync(path.join(managedSkillDir, ".prompthub", "variant.json"))).toBe(true);
       expect(fs.existsSync(path.join(managedSkillDir, "repo", "SKILL.md"))).toBe(true);

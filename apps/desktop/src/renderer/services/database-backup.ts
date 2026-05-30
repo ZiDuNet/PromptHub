@@ -694,6 +694,7 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
             is_favorite: createData.is_favorite ?? false,
             protocol_type: createData.protocol_type ?? "skill",
             currentVersion: createData.currentVersion,
+            source_id: createData.source_id,
             source_label: createData.source_label,
             source_branch: createData.source_branch,
             source_directory: createData.source_directory,
@@ -768,6 +769,7 @@ export async function importDatabase(backup: DatabaseBackup): Promise<void> {
             restoredSkillId,
             file.relativePath,
             file.content,
+            { skipVersionSnapshot: true },
           );
         } catch (error) {
           restoreFailures.push(`skill file ${skillKey}/${file.relativePath}`);

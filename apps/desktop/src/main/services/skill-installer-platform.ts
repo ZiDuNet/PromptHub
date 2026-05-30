@@ -597,6 +597,29 @@ export async function installSkillMdForSkill(
   await setPlatformActivation(platform, skill);
 }
 
+export async function installSkillMdSymlinkForSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skillMdContent: string,
+  platformId: string,
+  canonicalRepoPath?: string,
+  legacySkillNames?: string[],
+): Promise<SkillPlatformInstallResult> {
+  const platform = getSupportedPlatforms().find((entry) => entry.id === platformId);
+  if (!platform) {
+    throw new Error(`Unknown platform: ${platformId}`);
+  }
+
+  const result = await installSkillMdSymlink(
+    skill.name,
+    skillMdContent,
+    platformId,
+    canonicalRepoPath,
+    { legacySkillNames },
+  );
+  await setPlatformActivation(platform, skill);
+  return result;
+}
+
 export async function uninstallSkillMdForSkill(
   skill: Pick<Skill, "id" | "name" | "source_id">,
   platformId: string,

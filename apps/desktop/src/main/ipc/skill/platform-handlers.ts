@@ -131,7 +131,7 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
       const repoPath = await ensureLocalRepoPathBySkillId(db, skillId);
-      return SkillInstaller.installSkillMdForSkill(
+      return SkillInstaller.installSkillMdSymlinkForSkill(
         skill,
         skillMdContent,
         platformId,
@@ -232,14 +232,12 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
       const repoPath = await ensureLocalRepoPathBySkillId(db, skillId);
-      return SkillInstaller.installSkillMdSymlink(
-        skill.name,
+      return SkillInstaller.installSkillMdForSkill(
+        skill,
         skillMdContent,
         platformId,
         repoPath ?? undefined,
-        {
-          legacySkillNames: [skill.name],
-        },
+        [skill.name],
       );
     },
   );

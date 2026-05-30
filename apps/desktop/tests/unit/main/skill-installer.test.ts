@@ -2033,6 +2033,10 @@ describe("SkillInstaller.scanRemoteGithub", () => {
     expect(result[0].slug).toBe("gitea-skill");
     expect(result[0].author).toBe("icelemon");
     expect(result[0].directory_fingerprint).toBe("gitea-fingerprint");
+    expect(result[0].source_url).toBe(
+      "https://gitea.example.com/icelemon/skills",
+    );
+    expect(result[0].content_url).toBeUndefined();
     expect(skillInstallerUtils.gitClone).toHaveBeenCalledWith(
       "https://gitea.example.com/icelemon/skills",
       expect.stringContaining("icelemon-skills"),
@@ -2068,10 +2072,76 @@ describe("SkillInstaller.scanRemoteGithub", () => {
     expect(result).toHaveLength(1);
     expect(result[0].slug).toBe("ssh-skill");
     expect(result[0].directory_fingerprint).toBe("ssh-fingerprint");
+    expect(result[0].source_url).toBe(
+      "https://gitea.example.com/icelemon/skills",
+    );
+    expect(result[0].content_url).toBeUndefined();
     expect(skillInstallerUtils.gitClone).toHaveBeenCalledWith(
       "git@gitea.example.com:icelemon/skills.git",
       expect.stringContaining("icelemon-skills"),
       undefined,
+    );
+  });
+
+  it("keeps source identity stable across refreshes even when clone roots differ", async () => {
+    await SkillInstaller.init();
+
+    const cloneRoots = [
+      path.join(tmpDir, "clone-a"),
+      path.join(tmpDir, "clone-b"),
+    ];
+    let cloneIndex = 0;
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(
+      async (_repoUrl: string, repoDir: string) => {
+        const sourceRoot = cloneRoots[cloneIndex] || cloneRoots[cloneRoots.length - 1];
+        cloneIndex += 1;
+        const sourceSkillDir = path.join(sourceRoot, "skills", "writer");
+        await fs.mkdir(sourceSkillDir, { recursive: true });
+        await fs.writeFile(
+          path.join(sourceSkillDir, "SKILL.md"),
+          [
+            "---",
+            "name: writer",
+            "description: Nested writer skill",
+            "version: 1.0.0",
+            "author: icelemon",
+            "tags: [writer]",
+            "---",
+            "",
+            "# writer",
+          ].join("\n"),
+          "utf-8",
+        );
+        await fs.cp(sourceRoot, repoDir, { recursive: true });
+      },
+    );
+
+    const first = await SkillInstaller.scanRemoteGithub(
+      "https://gitea.example.com/icelemon/skills",
+      [],
+      "main",
+      "skills",
+    );
+    const second = await SkillInstaller.scanRemoteGithub(
+      "https://gitea.example.com/icelemon/skills",
+      [],
+      "main",
+      "skills",
+    );
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+    expect(first[0].source_id).toBe(second[0].source_id);
+    expect(first[0].source_directory).toBe("skills/writer");
+    expect(second[0].source_directory).toBe("skills/writer");
+    expect(first[0].canonical_skill_path).toBe("skills/writer/SKILL.md");
+    expect(second[0].canonical_skill_path).toBe("skills/writer/SKILL.md");
+    expect(first[0].source_url).toBe(
+      "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+    );
+    expect(second[0].source_url).toBe(
+      "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
     );
   });
 });
@@ -2245,6 +2315,43 @@ describe("L3: JSON export/import preserves source_url", () => {
       expect(imported!.source_directory).toBe("skills/.curated/roundtrip");
       expect(imported!.canonical_skill_path).toBe(
         "skills/.curated/roundtrip/SKILL.md",
+      );
+    } finally {
+      sqliteDb.close();
+    }
+  });
+
+  it("importFromJson preserves source_id alongside source metadata", async () => {
+    const sqliteDb = new Database(":memory:");
+    sqliteDb.exec(SCHEMA_TABLES);
+    applySkillMigrationColumns(sqliteDb);
+    sqliteDb.exec(SCHEMA_INDEXES);
+    const db = new SkillDB(sqliteDb);
+
+    try {
+      const json = JSON.stringify({
+        name: "source-id-roundtrip",
+        description: "Keeps source identity",
+        instructions: "# Content",
+        source_id: "source-id-roundtrip-main",
+        source_label: "owner/repo",
+        source_branch: "main",
+        source_directory: "skills/.curated/source-id-roundtrip",
+        canonical_skill_path: "skills/.curated/source-id-roundtrip/SKILL.md",
+      });
+
+      const id = await SkillInstaller.importFromJson(json, db);
+      const imported = db.getById(id);
+
+      expect(imported).not.toBeNull();
+      expect(imported!.source_id).toBe("source-id-roundtrip-main");
+      expect(imported!.source_label).toBe("owner/repo");
+      expect(imported!.source_branch).toBe("main");
+      expect(imported!.source_directory).toBe(
+        "skills/.curated/source-id-roundtrip",
+      );
+      expect(imported!.canonical_skill_path).toBe(
+        "skills/.curated/source-id-roundtrip/SKILL.md",
       );
     } finally {
       sqliteDb.close();

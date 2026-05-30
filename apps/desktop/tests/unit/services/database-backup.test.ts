@@ -687,11 +687,13 @@ describe("database-backup restore", () => {
       "restored-skill-1",
       "SKILL.md",
       "# Writer",
+      { skipVersionSnapshot: true },
     );
     expect(window.api.skill.writeLocalFile).toHaveBeenCalledWith(
       "restored-skill-1",
       "notes/example.md",
       "Example",
+      { skipVersionSnapshot: true },
     );
   });
 
@@ -1129,6 +1131,7 @@ describe("database-backup restore", () => {
       "restored-skill-1",
       "SKILL.md",
       "# Writer",
+      { skipVersionSnapshot: true },
     );
   });
 });

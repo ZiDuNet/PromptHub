@@ -54,6 +54,9 @@ vi.mock("../../../src/main/services/skill-installer-internal", () => ({
 }));
 
 import {
+  getManagedContainerPathForSkill,
+  getPreferredLocalRepoContainerPathForSkill,
+  getPreferredLocalRepoPathForSkill,
   getLocalRepoContainerPathForSkillId,
   getLocalRepoPathForSkillId,
   saveContentToLocalRepoBySkillId,
@@ -63,6 +66,7 @@ import {
 describe("skill-installer-repo variant container", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    internalMocks.fileExists.mockResolvedValue(false);
     fsMocks.stat.mockResolvedValue({ isDirectory: () => true });
     fsMocks.lstat.mockResolvedValue({ isSymbolicLink: () => false });
     fsMocks.mkdir.mockResolvedValue(undefined);
@@ -81,6 +85,38 @@ describe("skill-installer-repo variant container", () => {
     );
   });
 
+  it("prefers human-readable managed container names with a short stable suffix", () => {
+    expect(
+      getPreferredLocalRepoContainerPathForSkill({
+        id: "8ee7f899-b267-4aea-9037-86f0ba1da1bc",
+        name: "clouddrive2-cli",
+        source_id: "source-clouddrive2-main",
+      }),
+    ).toBe("/prompthub/skills/clouddrive2-cli--3c7d25c0");
+    expect(
+      getPreferredLocalRepoPathForSkill({
+        id: "8ee7f899-b267-4aea-9037-86f0ba1da1bc",
+        name: "clouddrive2-cli",
+        source_id: "source-clouddrive2-main",
+      }),
+    ).toBe("/prompthub/skills/clouddrive2-cli--3c7d25c0/repo");
+  });
+
+  it("reuses a legacy managed container when local_repo_path already points to it", async () => {
+    internalMocks.fileExists.mockImplementationOnce(
+      async (targetPath: string) => targetPath === "/prompthub/skills/skill-1",
+    );
+
+    await expect(
+      getManagedContainerPathForSkill({
+        id: "skill-1",
+        name: "writer",
+        source_id: "source-writer-main",
+        local_repo_path: "/prompthub/skills/skill-1/repo",
+      }),
+    ).resolves.toBe("/prompthub/skills/skill-1");
+  });
+
   it("writes SKILL.md into the repo subdirectory and sidecar metadata into .prompthub", async () => {
     await saveContentToLocalRepoBySkillId(
       {
@@ -91,25 +127,26 @@ describe("skill-installer-repo variant container", () => {
       "# Writer\n",
     );
 
-    expect(fsMocks.mkdir).toHaveBeenCalledWith("/prompthub/skills/skill-1", {
-      recursive: true,
-    });
     expect(fsMocks.mkdir).toHaveBeenCalledWith(
-      "/prompthub/skills/skill-1/.prompthub",
+      "/prompthub/skills/writer--7dc211f6",
+      { recursive: true },
+    );
+    expect(fsMocks.mkdir).toHaveBeenCalledWith(
+      "/prompthub/skills/writer--7dc211f6/.prompthub",
       { recursive: true },
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/prompthub/skills/skill-1/repo/SKILL.md",
+      "/prompthub/skills/writer--7dc211f6/repo/SKILL.md",
       "# Writer\n",
       "utf-8",
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/prompthub/skills/skill-1/.prompthub/source.json",
+      "/prompthub/skills/writer--7dc211f6/.prompthub/source.json",
       expect.stringContaining('"logicalName": "writer"'),
       "utf-8",
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/prompthub/skills/skill-1/.prompthub/variant.json",
+      "/prompthub/skills/writer--7dc211f6/.prompthub/variant.json",
       expect.stringContaining('"repoMode": "copy"'),
       "utf-8",
     );
@@ -128,11 +165,11 @@ describe("skill-installer-repo variant container", () => {
 
     expect(fsMocks.symlink).toHaveBeenCalledWith(
       "/external/writer",
-      "/prompthub/skills/skill-1/repo",
+      "/prompthub/skills/writer--7dc211f6/repo",
       "dir",
     );
     expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/prompthub/skills/skill-1/.prompthub/variant.json",
+      "/prompthub/skills/writer--7dc211f6/.prompthub/variant.json",
       expect.stringContaining('"repoMode": "symlink"'),
       "utf-8",
     );
