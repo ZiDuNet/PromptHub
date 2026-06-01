@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SkillAgentsView } from "../../../src/renderer/components/skill/SkillAgentsView";
@@ -16,11 +22,7 @@ const translate = (
   if (typeof fallback === "string") {
     return fallback;
   }
-  if (
-    typeof fallback === "object" &&
-    fallback &&
-    "defaultValue" in fallback
-  ) {
+  if (typeof fallback === "object" && fallback && "defaultValue" in fallback) {
     return String(fallback.defaultValue);
   }
   if (options && "defaultValue" in options) {
@@ -140,7 +142,9 @@ describe("SkillAgentsView", () => {
           scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
           uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
           export: vi.fn().mockResolvedValue("# Library Skill"),
-          readLocalFileByPath: vi.fn().mockResolvedValue({ content: "# Copy Skill" }),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Copy Skill" }),
           installMd: vi.fn().mockResolvedValue(undefined),
           installMdSymlink: vi.fn().mockResolvedValue({
             requestedMode: "symlink",
@@ -157,6 +161,8 @@ describe("SkillAgentsView", () => {
       skillInstallMethod: "symlink",
       skillPlatformOrder: ["claude"],
       disabledPlatformIds: [],
+      projectSkillImportModePreference: "copy",
+      projectSkillImportPreferencesByProjectId: {},
     } as Partial<ReturnType<typeof useSettingsStore.getState>>);
 
     useSkillStore.setState({
@@ -186,6 +192,12 @@ describe("SkillAgentsView", () => {
       setStoreView: vi.fn((view: string) => {
         useSkillStore.setState({ storeView: view as never });
       }),
+      importScannedSkills: vi.fn().mockResolvedValue({
+        importedCount: 1,
+        importedSkills: [],
+        skipped: [],
+        failed: [],
+      }),
       loadDeployedStatus: vi.fn().mockResolvedValue(undefined),
     } as Partial<ReturnType<typeof useSkillStore.getState>>);
   });
@@ -193,16 +205,48 @@ describe("SkillAgentsView", () => {
   it("renders the agent skill browser without opening a persistent detail pane", async () => {
     render(<SkillAgentsView />);
 
-    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(
+      0,
+    );
+    const agentPlatformCard = (
+      await screen.findAllByRole("button", { name: /Claude Code/i })
+    ).find((button) => button.textContent?.includes("skills"));
+    expect(agentPlatformCard).toBeTruthy();
+    expect(agentPlatformCard).toHaveClass("px-3", "py-3", "bg-primary/10");
+    expect(agentPlatformCard).not.toHaveClass("px-4", "bg-primary/5");
+    expect(
+      within(agentPlatformCard!).getByTestId("agent-platform-icon-shell"),
+    ).toHaveClass("h-10", "w-10", "rounded-xl", "bg-muted");
     expect(await screen.findByAltText("claude icon")).toBeInTheDocument();
-    expect((await screen.findAllByText("copy-skill")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("copy-skill")).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getAllByText("linked-skill").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Copy").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Symlink").length).toBeGreaterThan(0);
     expect(screen.getAllByText("In My Skills").length).toBeGreaterThan(0);
     expect(
-      screen.queryByRole("button", { name: /Uninstall/i }),
-    ).not.toBeInTheDocument();
+      screen.getByText(
+        "Browse each agent's Skill directory and manage copy or symlink installs.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("2 skills")).toBeInTheDocument();
+    expect(screen.getByText("1 managed")).toBeInTheDocument();
+    expect(screen.getByText("1 copy")).toBeInTheDocument();
+    expect(screen.getByText("1 symlink")).toBeInTheDocument();
+    expect(screen.getAllByTestId("agent-skill-card")).toHaveLength(2);
+    for (const card of screen.getAllByTestId("agent-skill-card")) {
+      expect(card.firstElementChild).toHaveClass("min-h-[156px]");
+      expect(card.firstElementChild?.className).toContain(
+        "grid-cols-[minmax(0,1fr)_9.5rem]",
+      );
+      expect(
+        within(card).getByRole("button", { name: "Open Folder" }),
+      ).toHaveClass("h-10", "w-10");
+    }
+    expect(
+      screen.getAllByRole("button", { name: /Uninstall from agent/i }).length,
+    ).toBeGreaterThan(0);
     expect(screen.queryByText("# Copy Skill")).not.toBeInTheDocument();
   });
 
@@ -224,14 +268,19 @@ describe("SkillAgentsView", () => {
     fireEvent.click((await screen.findAllByText("copy-skill"))[0]);
 
     expect(screen.getByRole("button", { name: /Back/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Uninstall/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Uninstall/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("button", { name: /Import to My Skills/i }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Copied skill")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Back/i }));
 
     expect(
-      screen.queryByRole("button", { name: /Uninstall/i }),
-    ).not.toBeInTheDocument();
+      screen.getAllByRole("button", { name: /Uninstall from agent/i }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText("copy-skill").length).toBeGreaterThan(0);
   });
 
@@ -243,7 +292,9 @@ describe("SkillAgentsView", () => {
           detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
           scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
           uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
-          readLocalFileByPath: vi.fn().mockResolvedValue({ content: "# Copy Skill" }),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Copy Skill" }),
         },
       },
     });
@@ -263,6 +314,86 @@ describe("SkillAgentsView", () => {
     expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(2);
   });
 
+  it("uninstalls an agent skill directly from the card action", async () => {
+    const { api } = installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([claudePlatform]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+          scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
+          uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Copy Skill" }),
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+
+    render(<SkillAgentsView />);
+
+    const copyCard = (await screen.findAllByTestId("agent-skill-card")).find(
+      (card) => within(card).queryByText("copy-skill"),
+    );
+    expect(copyCard).toBeTruthy();
+
+    fireEvent.click(
+      within(copyCard!).getByRole("button", { name: /Uninstall from agent/i }),
+    );
+    fireEvent.click(screen.getByText("confirm-uninstall"));
+
+    await waitFor(() => {
+      expect(api.skill.uninstallPlatformSkill).toHaveBeenCalledWith(
+        "claude",
+        "/agents/claude/skills/copy-skill",
+      );
+    });
+    expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(2);
+  });
+
+  it("imports an unmanaged agent skill into My Skills from the card action", async () => {
+    const importScannedSkills = vi.fn().mockResolvedValue({
+      importedCount: 1,
+      importedSkills: [],
+      skipped: [],
+      failed: [],
+    });
+    useSkillStore.setState({
+      importScannedSkills,
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    render(<SkillAgentsView />);
+
+    const copyCard = (await screen.findAllByTestId("agent-skill-card")).find(
+      (card) => within(card).queryByText("copy-skill"),
+    );
+    expect(copyCard).toBeTruthy();
+
+    fireEvent.click(
+      within(copyCard!).getByRole("button", { name: /Import to My Skills/i }),
+    );
+
+    await waitFor(() => {
+      expect(importScannedSkills).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            filePath: "/agents/claude/skills/copy-skill/SKILL.md",
+            localPath: "/agents/claude/skills/copy-skill",
+            name: "copy-skill",
+          }),
+        ],
+        undefined,
+        "copy",
+      );
+    });
+    expect(showToastMock).toHaveBeenCalledWith(
+      "Imported to My Skills ({{mode}})",
+      "success",
+    );
+  });
+
   it("installs a My Skills entry into the selected agent through the symlink API", async () => {
     const { api } = installWindowMocks({
       api: {
@@ -271,7 +402,9 @@ describe("SkillAgentsView", () => {
           detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
           scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
           export: vi.fn().mockResolvedValue("# Linked Skill"),
-          readLocalFileByPath: vi.fn().mockResolvedValue({ content: "# Linked Skill" }),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Linked Skill" }),
           installMdSymlink: vi.fn().mockResolvedValue({
             requestedMode: "symlink",
             effectiveMode: "symlink",
@@ -281,19 +414,80 @@ describe("SkillAgentsView", () => {
       },
     });
 
+    useSkillStore.setState({
+      skills: [
+        {
+          id: "library-fresh",
+          name: "fresh-skill",
+          description: "Fresh library skill",
+          instructions: "# Fresh Skill",
+          content: "# Fresh Skill",
+          protocol_type: "skill",
+          author: "PromptHub",
+          local_repo_path: "/library/fresh-skill",
+          tags: ["library"],
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
     render(<SkillAgentsView />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Install My Skill/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Install My Skill/i }),
+    );
     const dialog = screen.getByRole("dialog", { name: /Install My Skill/i });
+    expect(
+      within(dialog).queryByText("Advanced Import Settings"),
+    ).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Import Mode")).toBeInTheDocument();
+    expect(within(dialog).getByText("Select Skills")).toBeInTheDocument();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /fresh-skill/i }),
+    );
     fireEvent.click(within(dialog).getByRole("button", { name: /Symlink/i }));
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: /Install 1 selected skill/i,
+      }),
+    );
 
     await waitFor(() => {
-      expect(api.skill.export).toHaveBeenCalledWith("library-linked", "skillmd");
+      expect(api.skill.export).toHaveBeenCalledWith("library-fresh", "skillmd");
       expect(api.skill.installMdSymlink).toHaveBeenCalledWith(
-        "library-linked",
+        "library-fresh",
         "# Linked Skill",
         "claude",
       );
+    });
+    expect(showToastMock).toHaveBeenCalledWith(
+      "Installed 1 skill(s) to agent",
+      "success",
+    );
+  });
+
+  it("shows toast feedback for manual agent refresh and skill scan actions", async () => {
+    render(<SkillAgentsView />);
+
+    await screen.findByText("copy-skill");
+    showToastMock.mockClear();
+
+    const refreshButtons = screen.getAllByTitle("Refresh");
+    fireEvent.click(refreshButtons[0]);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        "Detected 1 agents",
+        "success",
+      );
+    });
+
+    fireEvent.click(refreshButtons[1]);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith("Scanned 2 skills", "success");
     });
   });
 

@@ -1,6 +1,7 @@
 import {
   act,
   fireEvent,
+  type RenderResult,
   screen,
   waitFor,
   within,
@@ -30,9 +31,7 @@ vi.mock("../../../src/renderer/components/folder", () => ({
 }));
 
 vi.mock("../../../src/renderer/components/layout/tree/SortableTree", () => ({
-  SortableTree: (props: {
-    folderPromptCounts?: Map<string, number>;
-  }) => {
+  SortableTree: (props: { folderPromptCounts?: Map<string, number> }) => {
     sortableTreeMock(props);
     return (
       <div data-testid="sortable-tree">
@@ -248,6 +247,39 @@ describe("Sidebar", () => {
     expect(screen.getByText("Project Skills")).toBeInTheDocument();
   });
 
+  it("shows the detected agent count on the Agent Skills navigation entry", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([
+            { id: "claude", name: "Claude Code", skillsRelativePath: "skills" },
+            { id: "codex", name: "Codex CLI", skillsRelativePath: "skills" },
+            { id: "gemini", name: "Gemini CLI", skillsRelativePath: "skills" },
+          ]),
+          detectPlatforms: vi
+            .fn()
+            .mockResolvedValue(["claude", "codex", "gemini"]),
+        },
+      },
+    });
+    useSettingsStore.setState({
+      disabledPlatformIds: ["codex"],
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Agent Skills/i }),
+      ).toHaveTextContent("2");
+    });
+  });
+
   it("passes direct prompt counts to the folder tree", async () => {
     useUIStore.setState({
       appModule: "prompt",
@@ -256,8 +288,22 @@ describe("Sidebar", () => {
     });
     useFolderStore.setState({
       folders: [
-        { id: "folder-1", name: "Folder A", order: 0, icon: "", createdAt: "", updatedAt: "" },
-        { id: "folder-2", name: "Folder B", order: 1, icon: "", createdAt: "", updatedAt: "" },
+        {
+          id: "folder-1",
+          name: "Folder A",
+          order: 0,
+          icon: "",
+          createdAt: "",
+          updatedAt: "",
+        },
+        {
+          id: "folder-2",
+          name: "Folder B",
+          order: 1,
+          icon: "",
+          createdAt: "",
+          updatedAt: "",
+        },
       ],
       selectedFolderId: null,
       expandedIds: new Set<string>(),
@@ -346,6 +392,47 @@ describe("Sidebar", () => {
     expect(screen.getByText("Agent Skills")).toBeInTheDocument();
   });
 
+  it("shows skill library tags only in My Skills", async () => {
+    useSkillStore.setState({
+      storeView: "my-skills",
+      skills: [
+        {
+          id: "skill-tagged",
+          name: "Tagged Skill",
+          protocol_type: "skill",
+          tags: ["agent-only-leak"],
+          original_tags: [],
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    let view: RenderResult | null = null;
+    await act(async () => {
+      view = await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: /agent-only-leak/i }),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      useSkillStore.setState({
+        storeView: "agents",
+      } as Partial<ReturnType<typeof useSkillStore.getState>>);
+      view?.rerender(<Sidebar currentPage="home" onNavigate={vi.fn()} />);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /agent-only-leak/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("clears the selected skill when returning to my skills", async () => {
     useSkillStore.setState({
       selectedSkillId: "skill-1",
@@ -363,6 +450,43 @@ describe("Sidebar", () => {
 
     expect(useSkillStore.getState().storeView).toBe("my-skills");
     expect(useSkillStore.getState().selectedSkillId).toBeNull();
+  });
+
+  it("does not show status filters as first-level skill navigation", async () => {
+    useSkillStore.setState({
+      deployedSkillNames: new Set<string>(["skill-1"]),
+      skills: [
+        {
+          id: "skill-1",
+          name: "Distributed Skill",
+          protocol_type: "skill",
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+      storeView: "my-skills",
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.queryByRole("button", { name: /Distributed/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Pending/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Favorites/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /My Skills/i })).toHaveClass(
+      "bg-primary",
+    );
   });
 
   it("shows the official store as an unopened zero-count source", async () => {

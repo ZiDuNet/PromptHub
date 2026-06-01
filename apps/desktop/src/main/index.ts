@@ -77,6 +77,7 @@ import {
 } from "./services/recovery-candidates";
 import { getRecoveryCandidatePaths } from "./services/recovery-paths";
 import { logStartupEvent, scrubPath } from "./startup-log";
+import { openDirectoryPath } from "./shell-open-path";
 
 // Disable GPU acceleration (optional; may be needed on some systems)
 // 禁用 GPU 加速（可选，某些系统上可能需要）
@@ -1600,38 +1601,14 @@ ipcMain.handle("data:migrate", async (_event, newPath: string) => {
 // Open a folder in the system file manager
 // 在文件管理器中打开文件夹
 ipcMain.handle("shell:openPath", async (_event, folderPath: string) => {
-  if (typeof folderPath !== "string" || folderPath.trim().length === 0) {
-    return {
-      success: false,
-      error: "shell:openPath requires a non-empty folderPath string",
-    };
-  }
-  // Expand special path tokens
-  // 处理特殊路径
-  let realPath = folderPath;
-  if (folderPath.startsWith("~")) {
-    realPath = folderPath.replace("~", app.getPath("home"));
-  } else if (folderPath.includes("%APPDATA%")) {
-    realPath = folderPath.replace("%APPDATA%", app.getPath("appData"));
-  }
-
-  // Security: only allow opening directories, not executable files
-  // 安全：只允许打开目录，不允许打开可执行文件
-  try {
-    const stat = fs.statSync(realPath);
-    if (!stat.isDirectory()) {
-      return { success: false, error: "Only directories can be opened" };
-    }
-  } catch (statError) {
-    // Path doesn't exist yet — let shell.openPath handle the error
-  }
-
-  try {
-    await shell.openPath(realPath);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
+  return openDirectoryPath(folderPath, {
+    appDataPath: app.getPath("appData"),
+    homePath: app.getPath("home"),
+    lstatSync: fs.lstatSync,
+    openPath: (targetPath) => shell.openPath(targetPath),
+    showItemInFolder: (targetPath) => shell.showItemInFolder(targetPath),
+    statSync: fs.statSync,
+  });
 });
 
 // Show system notification

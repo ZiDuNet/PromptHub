@@ -18,6 +18,7 @@ import {
   AlertTriangleIcon,
   InfoIcon,
   CheckCircleIcon,
+  Loader2Icon,
 } from "lucide-react";
 import { SkillIcon } from "./SkillIcon";
 import { SkillCodePane } from "./SkillCodePane";
@@ -74,6 +75,7 @@ import type { SkillProject } from "@prompthub/shared/types";
 import type { ProjectDetailSkillContext } from "./project-detail-adapter";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { AgentSkillPreviewSidebar } from "./AgentSkillPreviewSidebar";
+import { AgentSkillDetailActions } from "./AgentSkillDetailActions";
 
 const OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT = "open-create-skill-project-modal";
 
@@ -115,10 +117,13 @@ interface SkillFullDetailPageProps {
     onAddDeployTarget?: () => void | Promise<void>;
     onDeployToProjectTargets?: (targetDirs: string[]) => void | Promise<void>;
     onImport?: () => void | Promise<void>;
+    onOpenManagedSkill?: () => void | Promise<void>;
     onRemoveFromProject?: () => void | Promise<void>;
   } | null;
   agentActions?: {
+    isImporting?: boolean;
     isUninstalling?: boolean;
+    onImport?: () => void | Promise<void>;
     onOpenFolder?: () => void | Promise<void>;
     onOpenManagedSkill?: () => void | Promise<void>;
     onUninstall?: () => void | Promise<void>;
@@ -185,7 +190,9 @@ export function SkillFullDetailPage({
     (state) => state.setProjectSkillImportPreferences,
   );
   const aiModels = useSettingsStore((state) => state.aiModels);
-  const updateSkillProject = useSettingsStore((state) => state.updateSkillProject);
+  const updateSkillProject = useSettingsStore(
+    (state) => state.updateSkillProject,
+  );
   const [installMode, setInstallMode] = useState<InstallMode>(
     () => skillInstallMethod,
   );
@@ -206,11 +213,13 @@ export function SkillFullDetailPage({
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [isProjectDeploying, setIsProjectDeploying] = useState(false);
   const [deleteCopyInstallations, setDeleteCopyInstallations] = useState(false);
-  const [projectDeleteDistributionSummary, setProjectDeleteDistributionSummary] =
-    useState({
-      hasCopy: false,
-      hasSymlink: false,
-    });
+  const [
+    projectDeleteDistributionSummary,
+    setProjectDeleteDistributionSummary,
+  ] = useState({
+    hasCopy: false,
+    hasSymlink: false,
+  });
   const [pendingProjectRemoval, setPendingProjectRemoval] = useState<{
     project: SkillProject;
     targets: ProjectDeployedSkillTarget[];
@@ -227,7 +236,9 @@ export function SkillFullDetailPage({
     (() => void) | null
   >(null);
   const translateContent = useSkillStore((state) => state.translateContent);
-  const getTranslationState = useSkillStore((state) => state.getTranslationState);
+  const getTranslationState = useSkillStore(
+    (state) => state.getTranslationState,
+  );
   const clearTranslation = useSkillStore((state) => state.clearTranslation);
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const stalePromptFingerprintRef = useRef<string | null>(null);
@@ -259,7 +270,9 @@ export function SkillFullDetailPage({
       targetDirs:
         targetDirsByProjectId?.[project.id] ?? getProjectDeployTargets(project),
     }));
-    if (!selectedProjectTargets.some(({ targetDirs }) => targetDirs.length > 0)) {
+    if (
+      !selectedProjectTargets.some(({ targetDirs }) => targetDirs.length > 0)
+    ) {
       showToast(
         t(
           "skill.projectDeployNoTargets",
@@ -275,7 +288,10 @@ export function SkillFullDetailPage({
       const repoPath = await window.api.skill.getRepoPath(selectedSkill.id);
       if (!repoPath) {
         showToast(
-          t("skill.projectDeployMissingSource", "Missing local skill source path."),
+          t(
+            "skill.projectDeployMissingSource",
+            "Missing local skill source path.",
+          ),
           "error",
         );
         return;
@@ -291,7 +307,11 @@ export function SkillFullDetailPage({
           ),
         }),
       );
-      if (!deployableProjectTargets.some(({ targetDirs }) => targetDirs.length > 0)) {
+      if (
+        !deployableProjectTargets.some(
+          ({ targetDirs }) => targetDirs.length > 0,
+        )
+      ) {
         showToast(
           t(
             "skill.projectDeployAlreadyAtTarget",
@@ -302,14 +322,17 @@ export function SkillFullDetailPage({
         return;
       }
 
-      const projectTargetJobs = deployableProjectTargets.flatMap(({ project, targetDirs }) => {
-        const scannedSkills = projectScanState[project.id]?.scannedSkills ?? [];
-        return getMissingProjectTargetDirs(
-          scannedSkills,
-          selectedSkill.name,
-          targetDirs,
-        ).map((targetDir) => ({ project, targetDir }));
-      });
+      const projectTargetJobs = deployableProjectTargets.flatMap(
+        ({ project, targetDirs }) => {
+          const scannedSkills =
+            projectScanState[project.id]?.scannedSkills ?? [];
+          return getMissingProjectTargetDirs(
+            scannedSkills,
+            selectedSkill.name,
+            targetDirs,
+          ).map((targetDir) => ({ project, targetDir }));
+        },
+      );
       if (projectTargetJobs.length === 0) {
         showToast(
           t(
@@ -412,10 +435,14 @@ export function SkillFullDetailPage({
       return;
     }
     const statuses = await Promise.all(
-      targets.map(({ target }) => window.api.skill.getLocalPathStatus(target.localPath)),
+      targets.map(({ target }) =>
+        window.api.skill.getLocalPathStatus(target.localPath),
+      ),
     );
     setProjectDeleteDistributionSummary({
-      hasCopy: statuses.some((status) => status.exists && status.mode !== "symlink"),
+      hasCopy: statuses.some(
+        (status) => status.exists && status.mode !== "symlink",
+      ),
       hasSymlink: statuses.some(
         (status) => status.exists && status.mode === "symlink",
       ),
@@ -671,7 +698,9 @@ export function SkillFullDetailPage({
       return;
     }
 
-    if (stalePromptFingerprintRef.current === instructionsTranslationFingerprint) {
+    if (
+      stalePromptFingerprintRef.current === instructionsTranslationFingerprint
+    ) {
       return;
     }
 
@@ -795,7 +824,8 @@ export function SkillFullDetailPage({
             return t("skill.installFallbackRow", {
               platform: label,
               reason: fallback.reason,
-              defaultValue: "{{platform}}: switched to copy install ({{reason}})",
+              defaultValue:
+                "{{platform}}: switched to copy install ({{reason}})",
             });
           })
           .join("\n");
@@ -829,8 +859,7 @@ export function SkillFullDetailPage({
         showToast(
           t("skill.installPartialFailure", {
             details,
-            defaultValue:
-              "Some platforms could not be installed\n{{details}}",
+            defaultValue: "Some platforms could not be installed\n{{details}}",
           }),
           "error",
         );
@@ -873,12 +902,13 @@ export function SkillFullDetailPage({
   const installedPlatformDetails = Object.values(skillMdInstallDetails).filter(
     (status) => status.installed,
   );
-  const hasCopyInstallations = installedPlatformDetails.some(
-    (status) => status.mode === "copy" || !status.mode,
-  ) || projectDeleteDistributionSummary.hasCopy;
-  const hasSymlinkInstallations = installedPlatformDetails.some(
-    (status) => status.mode === "symlink",
-  ) || projectDeleteDistributionSummary.hasSymlink;
+  const hasCopyInstallations =
+    installedPlatformDetails.some(
+      (status) => status.mode === "copy" || !status.mode,
+    ) || projectDeleteDistributionSummary.hasCopy;
+  const hasSymlinkInstallations =
+    installedPlatformDetails.some((status) => status.mode === "symlink") ||
+    projectDeleteDistributionSummary.hasSymlink;
   const hasDistributedInstallations =
     installedPlatformDetails.length > 0 ||
     projectDeleteDistributionSummary.hasCopy ||
@@ -952,7 +982,10 @@ export function SkillFullDetailPage({
     setProjectDeleteDistributionSummary({ hasCopy: false, hasSymlink: false });
     setIsDeleteConfirmOpen(true);
     void inspectProjectDeleteDistribution().catch((error) => {
-      console.warn("Failed to inspect project distributions before delete:", error);
+      console.warn(
+        "Failed to inspect project distributions before delete:",
+        error,
+      );
     });
   };
 
@@ -962,7 +995,9 @@ export function SkillFullDetailPage({
     const projectTargets = getAllProjectDeployedTargets();
     const removableProjectTargets = await Promise.all(
       projectTargets.map(async ({ target }) => {
-        const status = await window.api.skill.getLocalPathStatus(target.localPath);
+        const status = await window.api.skill.getLocalPathStatus(
+          target.localPath,
+        );
         if (!status.exists) {
           return null;
         }
@@ -974,8 +1009,12 @@ export function SkillFullDetailPage({
     );
     await Promise.all(
       removableProjectTargets
-        .filter((target): target is ProjectDeployedSkillTarget => Boolean(target))
-        .map((target) => window.api.skill.deleteLocalFileByPath(target.localPath, ".")),
+        .filter((target): target is ProjectDeployedSkillTarget =>
+          Boolean(target),
+        )
+        .map((target) =>
+          window.api.skill.deleteLocalFileByPath(target.localPath, "."),
+        ),
     );
     await deleteSkill(selectedSkill.id, {
       removeCopyInstallations: deleteCopyInstallations,
@@ -1130,7 +1169,10 @@ export function SkillFullDetailPage({
               ) : null}
               {agentContext ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  <PlatformIcon platformId={agentContext.platformId} size={14} />
+                  <PlatformIcon
+                    platformId={agentContext.platformId}
+                    size={14}
+                  />
                   {agentContext.platformName}
                 </span>
               ) : null}
@@ -1138,11 +1180,11 @@ export function SkillFullDetailPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isAgentDetail && agentContext ? (
+          {isProjectDetail && projectContext ? (
             <>
-              {agentContext.isManaged ? (
+              {projectContext.importedSkill ? (
                 <button
-                  onClick={() => void agentActions?.onOpenManagedSkill?.()}
+                  onClick={() => void projectActions?.onOpenManagedSkill?.()}
                   className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                   title={t("skill.openInMySkills", "Open in My Skills")}
                 >
@@ -1151,23 +1193,47 @@ export function SkillFullDetailPage({
                 </button>
               ) : null}
               <button
-                onClick={() => void agentActions?.onOpenFolder?.()}
+                onClick={() =>
+                  void window.electron?.openPath?.(
+                    selectedSkill.local_repo_path ||
+                      selectedSkill.source_url ||
+                      "",
+                  )
+                }
                 className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
                 title={t("skill.openLocalSource", "Open Local Skill Folder")}
               >
                 <FolderOpenIcon className="h-4 w-4" />
                 {t("common.open", "Open")}
               </button>
-              <button
-                onClick={() => void agentActions?.onUninstall?.()}
-                disabled={agentActions?.isUninstalling}
-                className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 disabled:opacity-60"
-                title={t("common.uninstall", "Uninstall")}
-              >
-                <TrashIcon className="h-4 w-4" />
-                {t("common.uninstall", "Uninstall")}
-              </button>
+              {projectActions?.onRemoveFromProject ? (
+                <button
+                  onClick={() => void projectActions.onRemoveFromProject?.()}
+                  disabled={projectActions.isRemoving}
+                  className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 disabled:opacity-60"
+                  title={t("skill.removeFromProject", "Remove from Project")}
+                >
+                  {projectActions.isRemoving ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <TrashIcon className="h-4 w-4" />
+                  )}
+                  {t("skill.removeFromProject", "Remove from Project")}
+                </button>
+              ) : null}
             </>
+          ) : null}
+          {isAgentDetail && agentContext ? (
+            <AgentSkillDetailActions
+              isImporting={agentActions?.isImporting}
+              isManaged={agentContext.isManaged}
+              isUninstalling={agentActions?.isUninstalling}
+              onImport={agentActions?.onImport}
+              onOpenFolder={agentActions?.onOpenFolder}
+              onOpenManagedSkill={agentActions?.onOpenManagedSkill}
+              onUninstall={agentActions?.onUninstall}
+              t={t}
+            />
           ) : null}
           {!isExternalDetail ? (
             <>
@@ -1326,10 +1392,14 @@ export function SkillFullDetailPage({
           <div className="flex-1 flex flex-col app-wallpaper-panel min-h-0 overflow-hidden">
             <SkillFileEditor
               skillId={selectedSkill.id}
-              localPath={isExternalDetail ? selectedSkill.local_repo_path : undefined}
+              localPath={
+                isExternalDetail ? selectedSkill.local_repo_path : undefined
+              }
               skillName={selectedSkill.name}
               isOpen={true}
-              onSave={() => (isExternalDetail ? Promise.resolve() : loadSkills())}
+              onSave={() =>
+                isExternalDetail ? Promise.resolve() : loadSkills()
+              }
               onUnsavedChange={setFileEditorHasUnsavedChanges}
               mode="inline"
             />
@@ -1339,7 +1409,9 @@ export function SkillFullDetailPage({
             {activeTab === "preview" ? (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
                 <SkillPreviewPane
-                  cachedInstructionsTranslation={effectiveInstructionsTranslation}
+                  cachedInstructionsTranslation={
+                    effectiveInstructionsTranslation
+                  }
                   copyStatus={copyStatus}
                   handleCopy={handleCopy}
                   handleTranslateSkill={handleTranslateSkill}
@@ -1366,7 +1438,9 @@ export function SkillFullDetailPage({
                       onCreateProject={openCreateProjectModal}
                       onDeployToProjects={handleDeployToProjects}
                       getProjectDeployedTargets={getProjectDeployedTargets}
-                      onRemoveFromProjectTargets={requestRemoveFromProjectTargets}
+                      onRemoveFromProjectTargets={
+                        requestRemoveFromProjectTargets
+                      }
                       projectDeployMode={projectDeployMode}
                       projectSkillImportPreferencesByProjectId={
                         projectSkillImportPreferencesByProjectId
@@ -1378,7 +1452,9 @@ export function SkillFullDetailPage({
                       deselectAllPlatforms={deselectAllPlatforms}
                       setInstallMode={setInstallMode}
                       setProjectDeployMode={handleSetProjectDeployMode}
-                      setProjectSkillImportPreferences={setProjectSkillImportPreferences}
+                      setProjectSkillImportPreferences={
+                        setProjectSkillImportPreferences
+                      }
                       skillMdInstallStatus={skillMdInstallStatus}
                       t={t}
                       togglePlatformSelection={togglePlatformSelection}
@@ -1394,19 +1470,32 @@ export function SkillFullDetailPage({
                     isImporting={Boolean(projectActions?.isImporting)}
                     isImported={Boolean(projectContext?.importedSkill)}
                     isRemoving={Boolean(projectActions?.isRemoving)}
-                    isImportAvailable={typeof projectActions?.onImport === "function"}
-                    onAddDeployTarget={projectActions?.onAddDeployTarget ?? (() => undefined)}
-                    onDeploy={projectActions?.onDeployToProjectTargets ?? (() => undefined)}
+                    isImportAvailable={
+                      typeof projectActions?.onImport === "function"
+                    }
+                    onAddDeployTarget={
+                      projectActions?.onAddDeployTarget ?? (() => undefined)
+                    }
+                    onDeploy={
+                      projectActions?.onDeployToProjectTargets ??
+                      (() => undefined)
+                    }
                     onImport={projectActions?.onImport ?? (() => undefined)}
                     onRemoveFromProject={projectActions?.onRemoveFromProject}
                     selectedSkill={selectedSkill}
-                    sourcePath={selectedSkill.local_repo_path || selectedSkill.source_url || ""}
+                    sourcePath={
+                      selectedSkill.local_repo_path ||
+                      selectedSkill.source_url ||
+                      ""
+                    }
                     t={t}
                   />
                 ) : agentContext ? (
                   <AgentSkillPreviewSidebar
                     installMode={agentContext.installMode}
+                    isImporting={Boolean(agentActions?.isImporting)}
                     isManaged={agentContext.isManaged}
+                    onImport={agentActions?.onImport}
                     onOpenFolder={agentActions?.onOpenFolder}
                     platformId={agentContext.platformId}
                     platformName={agentContext.platformName}
@@ -1559,7 +1648,9 @@ export function SkillFullDetailPage({
                   platform:
                     availablePlatforms.find(
                       (platform) => platform.id === pendingUninstallPlatform,
-                    )?.name || pendingUninstallPlatform || "",
+                    )?.name ||
+                    pendingUninstallPlatform ||
+                    "",
                 },
               )}
             </p>
@@ -1586,7 +1677,10 @@ export function SkillFullDetailPage({
         onConfirm={() => {
           void handleTranslateSkill(true);
         }}
-        title={t("skill.translationOutdatedTitle", "Saved translation is outdated")}
+        title={t(
+          "skill.translationOutdatedTitle",
+          "Saved translation is outdated",
+        )}
         message={t(
           "skill.translationOutdatedMessage",
           "This skill's SKILL.md changed after the last translation. Retranslate now?",

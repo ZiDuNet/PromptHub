@@ -76,6 +76,98 @@ describe("CreateSkillModal GitHub import", () => {
     );
   });
 
+  it("splits local scan into Agent import and explicit folder import choices", async () => {
+    const scanLocalPreview = vi.fn().mockResolvedValue([]);
+    installWindowMocks({
+      api: {
+        skill: {
+          scanLocalPreview,
+        },
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Local"));
+    });
+
+    expect(view.getByText("Choose local import source")).toBeTruthy();
+    expect(view.getByText("Import from Agent Skills")).toBeTruthy();
+    expect(view.getByText("Choose Folder and Import")).toBeTruthy();
+    expect(scanLocalPreview).not.toHaveBeenCalled();
+  });
+
+  it("opens Agent Skill management instead of scanning when importing from agents", async () => {
+    const setStoreView = vi.fn((view: string) => {
+      useSkillStore.setState({ storeView: view as never });
+    });
+    const selectSkill = vi.fn();
+    useSkillStore.setState({ selectSkill, setStoreView } as never);
+    installWindowMocks();
+
+    const onClose = vi.fn();
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={onClose} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Local"));
+    });
+    fireEvent.click(view.getByText("Import from Agent Skills"));
+
+    expect(setStoreView).toHaveBeenCalledWith("agents");
+    expect(selectSkill).toHaveBeenCalledWith(null);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("scans only the user-selected local skill folder", async () => {
+    const scanLocalPreview = vi.fn().mockResolvedValue([
+      {
+        name: "local-one",
+        description: "Local one",
+        author: "Tester",
+        tags: [],
+        instructions: "# Local One",
+        filePath: "/Users/demo/skills/local-one/SKILL.md",
+        localPath: "/Users/demo/skills/local-one",
+        platforms: ["Local"],
+      },
+    ]);
+    const selectFolder = vi.fn().mockResolvedValue("/Users/demo/skills");
+    installWindowMocks({
+      api: {
+        skill: {
+          scanLocalPreview,
+        },
+      },
+      electron: {
+        selectFolder,
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Local"));
+    });
+    await act(async () => {
+      fireEvent.click(view.getByText("Choose Folder and Import"));
+    });
+
+    await waitFor(() => {
+      expect(scanLocalPreview).toHaveBeenCalledWith(["/Users/demo/skills"]);
+      expect(view.getByText("local-one")).toBeTruthy();
+    });
+  });
+
   it("scans a GitHub repo and lets users import multiple discovered skills", async () => {
     const installRegistrySkill = vi
       .fn()

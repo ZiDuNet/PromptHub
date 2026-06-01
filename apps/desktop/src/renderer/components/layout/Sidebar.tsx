@@ -25,7 +25,6 @@ import {
   BotIcon,
   StoreIcon,
   GlobeIcon,
-  Clock3Icon,
   FolderPlusIcon,
   BookOpenIcon,
   LinkIcon,
@@ -58,6 +57,7 @@ import { useToast } from "../ui/Toast";
 import { TagManagerModal } from "../prompt/TagManagerModal";
 import { mergePromptTagCatalog } from "../prompt/prompt-modal-utils";
 import { getOrderedGlobalRuleFiles } from "../../services/rule-platform-order";
+import { filterDetectedPlatforms } from "../../services/platform-visibility";
 import {
   DESKTOP_HOME_MODULES,
   type DesktopHomeModule,
@@ -202,6 +202,9 @@ export function Sidebar({
     (state) => state.setSidebarPanelWidth,
   );
   const skillProjects = useSettingsStore((state) => state.skillProjects);
+  const disabledPlatformIds = useSettingsStore(
+    (state) => state.disabledPlatformIds,
+  );
   const desktopHomeModules = useSettingsStore(
     (state) => state.desktopHomeModules,
   );
@@ -277,6 +280,7 @@ export function Sidebar({
     [remoteStoreEntries],
   );
   const [showAllSkillTags, setShowAllSkillTags] = useState(false);
+  const [detectedSkillAgentCount, setDetectedSkillAgentCount] = useState(0);
   const promptStats = useMemo(() => buildPromptStats(prompts), [prompts]);
   const folderPromptCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -300,10 +304,49 @@ export function Sidebar({
     [promptTagCatalog, prompts],
   );
   const uniqueSkillTags = skillStats.uniqueUserTags;
+  const shouldShowSkillTags =
+    storeView === "my-skills" && uniqueSkillTags.length > 0;
   const runtimeCapabilities = getRuntimeCapabilities();
   const webRuntime = isWebRuntime();
   const canAddRuleProject = !webRuntime;
   const activeModule = appModule === "rules" ? "rules" : viewMode;
+
+  useEffect(() => {
+    if (
+      activeModule !== "skill" ||
+      !runtimeCapabilities.skillLocalScan ||
+      !window.api?.skill
+    ) {
+      setDetectedSkillAgentCount(0);
+      return;
+    }
+
+    let disposed = false;
+    const loadAgentCount = async () => {
+      try {
+        const [supported, detected] = await Promise.all([
+          window.api.skill.getSupportedPlatforms(),
+          window.api.skill.detectPlatforms(),
+        ]);
+        if (disposed) {
+          return;
+        }
+        setDetectedSkillAgentCount(
+          filterDetectedPlatforms(supported, detected, disabledPlatformIds)
+            .length,
+        );
+      } catch {
+        if (!disposed) {
+          setDetectedSkillAgentCount(0);
+        }
+      }
+    };
+
+    void loadAgentCount();
+    return () => {
+      disposed = true;
+    };
+  }, [activeModule, disabledPlatformIds, runtimeCapabilities.skillLocalScan]);
   const visibleDesktopModules = useMemo(
     () =>
       desktopHomeModules.filter((moduleId) =>
@@ -1222,8 +1265,8 @@ export function Sidebar({
                     label={t("nav.mySkills", "我的 Skills")}
                     count={skills.length}
                     active={
-                      skillFilterType === "all" &&
-                      storeView === "my-skills" &&
+                      (storeView === "distribution" ||
+                        storeView === "my-skills") &&
                       currentPage === "home"
                     }
                     collapsed={isCollapsed}
@@ -1255,6 +1298,7 @@ export function Sidebar({
                       <NavItem
                         icon={<BotIcon className="w-5 h-5" />}
                         label={t("nav.agentSkills", "Agent Skills")}
+                        count={detectedSkillAgentCount}
                         active={
                           storeView === "agents" && currentPage === "home"
                         }
@@ -1262,61 +1306,6 @@ export function Sidebar({
                         onClick={() => {
                           if (!confirmLeaveDirtySkillEditor()) return;
                           setStoreView("agents");
-                          selectSkill(null);
-                          if (currentPage !== "home") onNavigate("home");
-                        }}
-                      />
-                    </>
-                  )}
-                  <NavItem
-                    icon={<StarIcon className="w-5 h-5" />}
-                    label={t("nav.favorites")}
-                    count={skillStats.favoriteCount}
-                    active={
-                      skillFilterType === "favorites" &&
-                      storeView === "my-skills" &&
-                      currentPage === "home"
-                    }
-                    collapsed={isCollapsed}
-                    onClick={() => {
-                      if (!confirmLeaveDirtySkillEditor()) return;
-                      setSkillFilterType("favorites");
-                      setStoreView("my-skills");
-                      selectSkill(null);
-                      if (currentPage !== "home") onNavigate("home");
-                    }}
-                  />
-                  {runtimeCapabilities.skillDistribution && (
-                    <>
-                      <NavItem
-                        icon={<GlobeIcon className="w-5 h-5" />}
-                        label={t("skill.deployed", "已分发")}
-                        count={skillStats.deployedCount}
-                        active={
-                          storeView === "distribution" && currentPage === "home"
-                        }
-                        collapsed={isCollapsed}
-                        onClick={() => {
-                          if (!confirmLeaveDirtySkillEditor()) return;
-                          setStoreView("distribution");
-                          selectSkill(null);
-                          if (currentPage !== "home") onNavigate("home");
-                        }}
-                      />
-                      <NavItem
-                        icon={<Clock3Icon className="w-5 h-5" />}
-                        label={t("skill.pendingDeployment", "待分发")}
-                        count={skillStats.pendingCount}
-                        active={
-                          skillFilterType === "pending" &&
-                          storeView === "my-skills" &&
-                          currentPage === "home"
-                        }
-                        collapsed={isCollapsed}
-                        onClick={() => {
-                          if (!confirmLeaveDirtySkillEditor()) return;
-                          setSkillFilterType("pending");
-                          setStoreView("my-skills");
                           selectSkill(null);
                           if (currentPage !== "home") onNavigate("home");
                         }}
@@ -1460,8 +1449,7 @@ export function Sidebar({
                 <div className="flex-1" />
 
                 {/* Resize Handle */}
-                {storeView !== "projects" &&
-                  uniqueSkillTags.length > 0 &&
+                {shouldShowSkillTags &&
                   !isCollapsed &&
                   !isSkillTagsCollapsed && (
                     <div
@@ -1471,7 +1459,7 @@ export function Sidebar({
                   )}
 
                 {/* Tags Content */}
-                {storeView !== "projects" && uniqueSkillTags.length > 0 && (
+                {shouldShowSkillTags && (
                   <div
                     className={`sidebar-tag-section shrink-0 flex flex-col overflow-hidden app-wallpaper-panel ${isCollapsed ? "items-center" : ""}`}
                     style={{
@@ -1600,7 +1588,7 @@ export function Sidebar({
               </div>
 
               {/* Skill Tags Popover (collapsed sidebar) */}
-              {storeView !== "projects" && isTagPopoverOpen && (
+              {shouldShowSkillTags && isTagPopoverOpen && (
                 <div
                   ref={tagPopoverRef}
                   className={`fixed z-[9999] transition-all duration-quick ${

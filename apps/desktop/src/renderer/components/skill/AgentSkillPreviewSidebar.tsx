@@ -1,10 +1,12 @@
-import { FolderOpenIcon } from "lucide-react";
+import { DownloadIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
 import type { TFunction } from "i18next";
 import { PlatformIcon } from "../ui/PlatformIcon";
 
 interface AgentSkillPreviewSidebarProps {
   installMode: "copy" | "symlink";
+  isImporting?: boolean;
   isManaged?: boolean;
+  onImport?: () => void | Promise<void>;
   onOpenFolder?: () => void | Promise<void>;
   platformId: string;
   platformName: string;
@@ -14,7 +16,9 @@ interface AgentSkillPreviewSidebarProps {
 
 export function AgentSkillPreviewSidebar({
   installMode,
+  isImporting = false,
   isManaged = false,
+  onImport,
   onOpenFolder,
   platformId,
   platformName,
@@ -47,6 +51,22 @@ export function AgentSkillPreviewSidebar({
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
               {t("skill.inMySkills", "In My Skills")}
             </div>
+          ) : onImport ? (
+            <button
+              type="button"
+              onClick={() => void onImport()}
+              disabled={isImporting}
+              className="flex w-full items-center gap-3 rounded-2xl bg-primary px-4 py-4 text-left text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              {isImporting ? (
+                <Loader2Icon className="h-5 w-5 shrink-0 animate-spin" />
+              ) : (
+                <DownloadIcon className="h-5 w-5 shrink-0" />
+              )}
+              <span className="text-sm font-semibold">
+                {t("skill.addToLibrary", "Import to My Skills")}
+              </span>
+            </button>
           ) : null}
           <button
             type="button"

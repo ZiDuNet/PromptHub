@@ -29,7 +29,7 @@ interface SkillScanPreviewProps {
     userTagsByPath?: Record<string, string[]>,
   ) => Promise<number>;
   /** Re-scan with optional extra paths */
-  onRescan: (customPaths: string[]) => Promise<void>;
+  onRescan: (customPaths: string[]) => Promise<boolean>;
   onClose: () => void;
 }
 
@@ -198,9 +198,11 @@ export function SkillScanPreview({
   const handleRescan = async () => {
     setIsRescanning(true);
     try {
-      await onRescan(customPaths);
-      // Reset selection after rescan
-      setSelectedSkills(new Set());
+      const didRescan = await onRescan(customPaths);
+      if (didRescan) {
+        // Reset selection after a successful rescan because the visible rows may change.
+        setSelectedSkills(new Set());
+      }
     } finally {
       setIsRescanning(false);
     }
@@ -241,6 +243,7 @@ export function SkillScanPreview({
               onClick={handleRescan}
               disabled={isRescanning}
               className="p-2 hover:bg-accent rounded-lg transition-colors text-muted-foreground hover:text-foreground disabled:opacity-50"
+              aria-label={t("skill.rescan", "Re-scan")}
               title={t("skill.rescan", "Re-scan")}
             >
               <RefreshCwIcon

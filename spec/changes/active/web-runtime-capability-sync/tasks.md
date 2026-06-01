@@ -24,7 +24,9 @@
 - [x] 将收藏从 Skill 左侧一级导航移入我的 Skill 顶部筛选，左侧只保留模块级入口
 - [x] 修复 Agent Skill 软链接来源打开行为，打开 `.cline/.agents` 等来源路径时定位链接本身而不是跳到我的 Skill 仓库目标
 - [x] 补齐 Agent Skill 导入到我的 Skill 的卡片和详情入口，并复用扫描 Skill 导入边界
-- [x] 收回 Web runtime 的本机 Skill 能力声明，Web 不再暴露本地扫描、文件编辑、平台集成、分发和 Skill Store capability
+- [x] 拆分新建 Skill 中的本地扫描入口：Agent 导入跳转 Agent Skill；任意本地目录必须先选择路径再扫描
+- [x] 移除我的 Skill 顶部旧“扫描本地”图标入口，只保留库刷新按钮；刷新按钮使用独立 loading 状态并提供 toast
+- [x] 保持 Web runtime 的 Skill 页面入口可见，不再被旧 capability 守卫强制降级到我的 Skill
 - [x] 运行 `lint` / `typecheck` / `test` / `build`
 - [x] 更新 implementation.md
 - [ ] 为旧 Web 读取新桌面备份快照补充未知字段 / 未知枚举兼容测试

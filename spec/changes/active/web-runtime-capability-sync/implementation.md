@@ -30,7 +30,8 @@ In progress.
 - `apps/desktop/src/renderer/components/skill/SkillProjectsView.tsx` 已优化项目 Skill 列表视觉约束：顶部工具区使用固定主操作按钮和图标按钮，列表卡片使用固定内容列 / 操作列，卡片描述区保留稳定高度，并将单列断点收窄到 760px。列表卡片内的打开、查看、导入、分发、删除操作统一为 40px 图标按钮并固定在右下角，避免文字按钮撑乱布局。
 - `apps/desktop/src/renderer/components/skill/SkillProjectsView.tsx` 已在打开/返回项目 Skill 详情时显式保持 `projects` 视图并清空旧 `selectedSkillId`，避免从收藏等筛选状态进入后返回到错误页签。
 - `apps/desktop/tests/unit/components/skill-projects-view.test.tsx` 已补充项目 Skill 卡片布局断言，锁定固定卡片栅格、操作列对齐和主要按钮尺寸；同时覆盖旧收藏状态下打开/返回项目 Skill 详情仍停留在项目 Skill 视图。
-- `apps/desktop/src/renderer/components/skill/SkillManager.tsx` 已明确顶部两个入口的语义：本地扫描用于扫描本机 Agent/托管目录中的 `SKILL.md` 并进入导入预览；刷新用于重新加载 PromptHub Skill 库和平台分发状态。本地扫描和导入预览弹窗内重扫均增加 30 秒超时和错误提示，避免底层路径访问卡住时无限转圈。
+- `apps/desktop/src/renderer/components/skill/SkillManager.tsx` 已移除我的 Skill 顶部旧“扫描本地”图标入口，避免它与库刷新按钮并列造成语义混淆；顶部现在只保留库刷新按钮，用于重新加载 PromptHub Skill 库和平台分发状态，并使用独立 `isRefreshingLibrary` 状态和成功 / 失败 toast，避免被全局 `isLoading` 误触发成无限旋转。
+- 本地 Skill 导入统一进入新建 Skill 的“扫描本地”分流：从 Agent 导入跳转 Agent Skill 管理页；选择路径并导入必须先由用户选定 `xxx/skills` 根目录，再执行 `scanLocalPreview([path])`。导入预览弹窗内重扫保留 30 秒超时和错误提示，避免底层路径访问卡住时无限转圈。
 - `apps/desktop/src/renderer/components/skill/SkillScanPreview.tsx` 已让重扫结果显式区分成功/失败：成功后清空选择，失败时保留当前选择并停止加载。
 - `apps/desktop/src/renderer/i18n/locales/*.json` 已补齐扫描失败、扫描超时、刷新语义说明的 7 语言翻译 key。
 - `apps/desktop/src/renderer/components/skill/SkillManager.tsx` 的批量管理按钮在批量模式下保持原位显示，并支持再次点击退出批量模式；批量工具条不再依赖单独的取消按钮作为唯一退出入口。
@@ -46,7 +47,8 @@ In progress.
 - `apps/desktop/src/main/shell-open-path.ts` 已抽出 `shell:openPath` 打开目录逻辑。普通目录继续直接打开；软链接目录改为在父目录中定位链接本身，避免 Agent Skill 显示 `.cline/skills/...` 却被 Finder 跳转到我的 Skill 仓库真实目标。
 - `apps/desktop/src/renderer/components/skill/SkillAgentsView.tsx`、`AgentSkillPreviewSidebar.tsx`、`SkillFullDetailPage.tsx` 已为未托管的 Agent Skill 增加导入到我的 Skill 的卡片操作、详情顶部操作和详情侧栏操作，默认按 copy 导入并复用 `importScannedSkills` 导入边界。
 - `apps/desktop/src/renderer/components/skill/AgentSkillDetailActions.tsx` 已抽出 Agent 详情顶部操作，避免继续膨胀已经超过 2,000 行的 `SkillFullDetailPage.tsx`。
-- `apps/desktop/src/renderer/runtime.ts` 已重新收回 Web runtime 的本机 Skill 能力声明：`skillDistribution`、`skillFileEditing`、`skillLocalScan`、`skillPlatformIntegration`、`skillStore` 在 Web 下均为 `false`。Web 仍可做备份 / 浏览工作区，但不再让 UI 误认为浏览器具备本机文件系统和平台分发能力。
+- `apps/desktop/src/renderer/components/skill/CreateSkillModal.tsx` 与 `CreateSkillScanSourceChooser.tsx` 已把“扫描本地”拆为两个明确入口：从 Agent 导入会关闭弹窗并进入 Agent Skill 管理页；选择路径并导入会先打开目录选择器，只对用户选择的 `xxx/skills` 根目录执行 `scanLocalPreview([path])`。
+- `apps/desktop/src/renderer/runtime.ts` 与 `SkillManager.tsx` 已保持 Web runtime 下 Skill 商店、项目/Agent Skill、分发与文件编辑等 Skill 页面入口的可见能力标记，避免 Web 页面被旧能力守卫强制降级到我的 Skill。
 - `apps/desktop/tests/unit/components/skill-agents-view.test.tsx` 已覆盖 Agent Skill 大卡片布局、卡片级快速卸载、复用项目式导入弹窗安装我的 Skill，以及手动刷新 / 扫描 toast。
 - `apps/desktop/tests/unit/components/sidebar.test.tsx` 已覆盖 Agent Skill 入口数量显示，并验证禁用平台不会计入数量。
 - `apps/desktop/tests/unit/components/skill-projects-view.test.tsx` 已覆盖项目内已追踪 Skill 在详情页可直接打开我的 Skill。
@@ -54,7 +56,8 @@ In progress.
 - `apps/desktop/tests/unit/components/sidebar.test.tsx` 已覆盖收藏也不再作为 Skill 左侧一级导航出现。
 - `apps/desktop/tests/unit/main/shell-open-path.test.ts` 已覆盖软链接目录使用 `showItemInFolder` 定位链接本身，普通目录打开和非目录拒绝路径。
 - `apps/desktop/tests/unit/components/skill-agents-view.test.tsx` 已覆盖未托管 Agent Skill 可从卡片导入到我的 Skill，并断言导入使用扫描到的完整 Skill 文件夹路径和 copy 模式。
-- `apps/desktop/tests/unit/components/skill-i18n-smoke.test.tsx` 已覆盖批量管理二次点击收起、本地扫描超时提示、扫描成功 toast、库刷新 toast、我的 Skill 顶部已分发 / 待分发筛选、预览弹窗重扫超时后保留选择和当前 Web runtime 下 Skill 页面入口不再被强制切回我的 Skill。
+- `apps/desktop/tests/unit/components/create-skill-modal.test.tsx` 已覆盖本地扫描入口必须先展示 Agent 导入 / 选择路径导入两种选择，Agent 导入会切到 Agent Skill，选择路径导入只扫描用户选择的目录。
+- `apps/desktop/tests/unit/components/skill-i18n-smoke.test.tsx` 已覆盖批量管理二次点击收起、旧工具栏本地扫描入口已移除、库刷新使用独立 loading 和 toast、我的 Skill 顶部已分发 / 待分发筛选、预览弹窗重扫超时后保留选择和当前 Web runtime 下 Skill 页面入口不再被强制切回我的 Skill。
 
 ## Verification
 
@@ -77,6 +80,7 @@ In progress.
 - `pnpm --filter @prompthub/web build` passed and regenerated `apps/web/dist/client`, which is the asset directory referenced by `apps/web-cloudflare/wrangler.jsonc`.
 - `pnpm test -- tests/unit/components/skill-projects-view.test.tsx --run` passed from `apps/desktop`: 1 file, 17 tests.
 - `pnpm test -- tests/unit/components/skill-agents-view.test.tsx --run` passed from `apps/desktop`: 1 file, 9 tests.
+- `pnpm test -- tests/unit/components/create-skill-modal.test.tsx --run` passed from `apps/desktop`: 1 file, 10 tests.
 - `pnpm test -- tests/unit/components/skill-i18n-smoke.test.tsx --run` passed from `apps/desktop`: 1 file, 22 tests.
 - `pnpm test -- tests/unit/components/sidebar.test.tsx --run` passed from `apps/desktop`: 1 file, 21 tests.
 - `pnpm test -- tests/unit/main/shell-open-path.test.ts --run` passed from `apps/desktop`: 1 file, 3 tests.
@@ -84,6 +88,8 @@ In progress.
 - `pnpm --filter @prompthub/web test -- src/client/desktop-runtime-capabilities.test.ts src/client/desktop/install-bridge.test.ts` passed: 2 files, 6 tests.
 - `pnpm --filter @prompthub/web typecheck` passed.
 - `git diff --check` passed.
+- `pnpm --dir apps/desktop exec vitest run tests/unit/components/skill-i18n-smoke.test.tsx` passed: 1 file, 21 tests.
+- `pnpm --dir apps/desktop exec vitest run tests/unit/components/create-skill-modal.test.tsx` passed: 1 file, 10 tests.
 
 ## Boundary Update
 

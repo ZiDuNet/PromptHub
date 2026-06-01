@@ -37,6 +37,7 @@ import {
 import { BUILTIN_SKILL_REGISTRY } from "@prompthub/shared/constants/skill-registry";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { SkillIconPicker } from "./SkillIconPicker";
+import { CreateSkillScanSourceChooser } from "./CreateSkillScanSourceChooser";
 import { getExistingSkillTags } from "./skill-modal-utils";
 import type {
   RegistrySkill,
@@ -117,6 +118,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const importScannedSkills = useSkillStore(
     (state) => state.importScannedSkills,
   );
+  const selectSkill = useSkillStore((state) => state.selectSkill);
+  const setStoreView = useSkillStore((state) => state.setStoreView);
   const existingSkills = useSkillStore((state) => state.skills);
 
   // AI settings for generation
@@ -175,6 +178,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const [importingCount, setImportingCount] = useState(0);
   const [scanImportNotice, setScanImportNotice] = useState<string | null>(null);
   const [scanSearchQuery, setScanSearchQuery] = useState("");
+  const [scanRootPaths, setScanRootPaths] = useState<string[]>([]);
   const [showScanOptionalTags, setShowScanOptionalTags] = useState(false);
   const [scanTagDrafts, setScanTagDrafts] = useState<Record<string, string[]>>(
     {},
@@ -350,6 +354,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setScanDone(false);
     setImportingCount(0);
     setScanImportNotice(null);
+    setScanRootPaths([]);
     setScanTagDrafts({});
     setScanTagInputs({});
     onClose();
@@ -709,9 +714,24 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     }
   };
 
+  const handleImportFromAgentSkills = () => {
+    setStoreView("agents");
+    selectSkill(null);
+    handleClose();
+  };
+
+  const handleChooseLocalSkillFolder = async () => {
+    const selectedFolder = await window.electron?.selectFolder?.();
+    if (!selectedFolder) {
+      return;
+    }
+    await handleScanLocal([selectedFolder]);
+  };
+
   // Scan local skills (preview mode - returns list for user to select)
   // 扫描本地技能（预览模式 - 返回列表供用户选择）
-  const handleScanLocal = async () => {
+  const handleScanLocal = async (customPaths: string[]) => {
+    setScanRootPaths(customPaths);
     setIsScanning(true);
     setScanDone(false);
     setError(null);
@@ -723,7 +743,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
 
     try {
       const allResults: ScannedSkill[] =
-        await window.api.skill.scanLocalPreview();
+        await window.api.skill.scanLocalPreview(customPaths);
       const installedCount = allResults.filter((skill) =>
         installedScanPaths.has(skill.localPath),
       ).length;
@@ -1746,32 +1766,12 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
             <div className="space-y-4">
               {/* Before scan or while scanning */}
               {!scanDone && (
-                <div className="text-center py-8">
-                  <FolderOpenIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground/30" />
-                  <h3 className="font-medium mb-2">
-                    {t("skill.scanLocalTitle", "Scan for Local Skills")}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {t(
-                      "skill.scanLocalHint",
-                      "Automatically detect SKILL.md files from Claude, Cursor, Windsurf and other AI tools.",
-                    )}
-                  </p>
-                  <button
-                    onClick={handleScanLocal}
-                    disabled={isScanning}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                  >
-                    {isScanning ? (
-                      <LoaderIcon className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <SearchIcon className="w-4 h-4" />
-                    )}
-                    {isScanning
-                      ? t("skill.scanning", "Scanning...")
-                      : t("skill.startScan", "Start Scan")}
-                  </button>
-                </div>
+                <CreateSkillScanSourceChooser
+                  isScanning={isScanning}
+                  onChooseLocalFolder={handleChooseLocalSkillFolder}
+                  onImportFromAgents={handleImportFromAgentSkills}
+                  t={t}
+                />
               )}
 
               {/* Scan results */}
@@ -2073,7 +2073,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                   {/* Rescan button */}
                   <div className="flex justify-center">
                     <button
-                      onClick={handleScanLocal}
+                      onClick={() => void handleScanLocal(scanRootPaths)}
                       disabled={isScanning}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
                     >
@@ -2099,7 +2099,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                     )}
                   </p>
                   <button
-                    onClick={handleScanLocal}
+                    onClick={() => void handleScanLocal(scanRootPaths)}
                     disabled={isScanning}
                     className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                   >

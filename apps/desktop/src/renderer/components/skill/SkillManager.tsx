@@ -13,9 +13,9 @@ import {
   TrashIcon,
   StarIcon,
   SendIcon,
+  Clock3Icon,
   LayoutGridIcon,
   ListIcon,
-  FolderInputIcon,
   CheckSquareIcon,
   SquareIcon,
   XIcon,
@@ -31,6 +31,7 @@ import { SkillRenderBoundary } from "./SkillRenderBoundary";
 import {
   useSkillStore,
   type SkillGalleryColumnMode,
+  type SkillFilterType,
 } from "../../stores/skill.store";
 import {
   DEFAULT_SKILL_LIST_PAGE_SIZE,
@@ -51,7 +52,6 @@ import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
 import { getRuntimeCapabilities } from "../../runtime";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
-import { deriveSkillScanPathsFromCustomAgents } from "../../services/agent-root-paths";
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
@@ -67,6 +67,26 @@ const SKILL_GALLERY_COLUMNS: SkillGalleryColumnMode[] = [
   "7",
   "8",
 ];
+const LOCAL_SKILL_SCAN_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  createTimeoutError: () => Error,
+): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(createTimeoutError());
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
 
 function getSkillGalleryGridStyle(
   columns: SkillGalleryColumnMode,
@@ -187,7 +207,6 @@ export function SkillManager() {
   const deleteSkill = useSkillStore((state) => state.deleteSkill);
   const toggleFavorite = useSkillStore((state) => state.toggleFavorite);
   const updateSkill = useSkillStore((state) => state.updateSkill);
-  const isLoading = useSkillStore((state) => state.isLoading);
   const selectedSkillId = useSkillStore((state) => state.selectedSkillId);
   const selectSkill = useSkillStore((state) => state.selectSkill);
   const filterType = useSkillStore((state) => state.filterType);
@@ -195,16 +214,13 @@ export function SkillManager() {
   const viewMode = useSkillStore((state) => state.viewMode);
   const galleryColumns = useSkillStore((state) => state.galleryColumns);
   const setViewMode = useSkillStore((state) => state.setViewMode);
-  const setGalleryColumns = useSkillStore(
-    (state) => state.setGalleryColumns,
-  );
+  const setGalleryColumns = useSkillStore((state) => state.setGalleryColumns);
   const storeView = useSkillStore((state) => state.storeView);
   const setStoreView = useSkillStore((state) => state.setStoreView);
   const setFilterType = useSkillStore((state) => state.setFilterType);
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
-  const customAgents = useSettingsStore((state) => state.customAgents);
   const storedSkillListPageSize = useSettingsStore(
     (state) => state.skillListPageSize,
   );
@@ -237,15 +253,83 @@ export function SkillManager() {
   );
   const webSkillLibraryMode =
     !runtimeCapabilities.skillDistribution && !runtimeCapabilities.skillStore;
-  const effectiveStoreView = webSkillLibraryMode ? "my-skills" : storeView;
+  const legacyDistributionView = storeView === "distribution";
+  const effectiveStoreView =
+    webSkillLibraryMode || legacyDistributionView ? "my-skills" : storeView;
   const effectiveFilterType =
     webSkillLibraryMode &&
-    (filterType === "installed" ||
+    (legacyDistributionView ||
+      filterType === "installed" ||
       filterType === "deployed" ||
       filterType === "pending")
       ? "all"
-      : filterType;
-  const isDistributionView = effectiveStoreView === "distribution";
+      : legacyDistributionView
+        ? "deployed"
+        : filterType;
+  const isDistributionView = false;
+  const skillDistributionCounts = useMemo(() => {
+    let deployed = 0;
+    let favorite = 0;
+
+    for (const skill of skills) {
+      if (skill.is_favorite) {
+        favorite += 1;
+      }
+      if (
+        deployedSkillNames.has(skill.id) ||
+        deployedSkillNames.has(skill.name)
+      ) {
+        deployed += 1;
+      }
+    }
+
+    return {
+      all: skills.length,
+      deployed,
+      favorite,
+      pending: Math.max(skills.length - deployed, 0),
+    };
+  }, [deployedSkillNames, skills]);
+  const mySkillFilterOptions = useMemo(
+    () =>
+      [
+        {
+          icon: <CuboidIcon className="h-3.5 w-3.5" />,
+          label: t("skill.allSkills", "All Skills"),
+          count: skillDistributionCounts.all,
+          value: "all",
+        },
+        {
+          icon: <StarIcon className="h-3.5 w-3.5" />,
+          label: t("skill.favorites", "Favorites"),
+          count: skillDistributionCounts.favorite,
+          value: "favorites",
+        },
+        {
+          icon: <SendIcon className="h-3.5 w-3.5" />,
+          label: t("skill.deployed", "Distributed"),
+          count: skillDistributionCounts.deployed,
+          value: "deployed",
+        },
+        {
+          icon: <Clock3Icon className="h-3.5 w-3.5" />,
+          label: t("skill.pendingDeployment", "Pending"),
+          count: skillDistributionCounts.pending,
+          value: "pending",
+        },
+      ] satisfies Array<{
+        icon: React.ReactNode;
+        label: string;
+        count: number;
+        value: SkillFilterType;
+      }>,
+    [skillDistributionCounts, t],
+  );
+  const handleMySkillFilterChange = (nextFilter: SkillFilterType) => {
+    setStoreView("my-skills");
+    setFilterType(nextFilter);
+    selectSkill(null);
+  };
 
   // Get filtered skills - filter directly in useMemo instead of using store function
   // 直接在 useMemo 中过滤，而不是使用 store 函数（避免函数引用作为依赖）
@@ -279,7 +363,8 @@ export function SkillManager() {
   const [showBatchDeployDialog, setShowBatchDeployDialog] = useState(false);
   const [showBatchTagDialog, setShowBatchTagDialog] = useState(false);
   const [scannedSkills, setScannedSkills] = useState<ScannedSkill[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
+  const [, setIsScanning] = useState(false);
+  const [isRefreshingLibrary, setIsRefreshingLibrary] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -347,23 +432,6 @@ export function SkillManager() {
     distributionSummary: EMPTY_DELETE_DISTRIBUTION_SUMMARY,
   });
 
-  const handleScanLocal = async (customPaths?: string[]) => {
-    if (!runtimeCapabilities.skillLocalScan) {
-      return;
-    }
-
-    setIsScanning(true);
-    try {
-      const result = await scanLocalPreview(customPaths);
-      setScannedSkills(result);
-      setShowScanPreview(true);
-    } catch (err) {
-      console.error("Failed to scan local skills:", err);
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
   const handleDropImport = useCallback(
     async (files: FileList | File[]) => {
       const droppedPaths = Array.from(files)
@@ -385,9 +453,26 @@ export function SkillManager() {
 
       setIsScanning(true);
       try {
-        const result = await scanLocalPreview(uniquePaths);
+        const result = await withTimeout(
+          scanLocalPreview(uniquePaths),
+          LOCAL_SKILL_SCAN_TIMEOUT_MS,
+          () =>
+            new Error(
+              t(
+                "skill.scanLocalTimeout",
+                "Local skill scan timed out. Check whether an agent folder is inaccessible, then try again.",
+              ),
+            ),
+        );
         setScannedSkills(result);
         setShowScanPreview(true);
+        showToast(
+          t("skill.scanLocalComplete", {
+            count: result.length,
+            defaultValue: `Scanned ${result.length} local skill(s)`,
+          }),
+          "success",
+        );
 
         if (result.length === 0) {
           showToast(
@@ -415,11 +500,40 @@ export function SkillManager() {
   // 传给预览弹窗的重新扫描回调
   const handleRescan = async (customPaths: string[]) => {
     if (!runtimeCapabilities.skillLocalScan) {
-      return;
+      return false;
     }
 
-    const result = await scanLocalPreview(customPaths);
-    setScannedSkills(result);
+    try {
+      const result = await withTimeout(
+        scanLocalPreview(customPaths),
+        LOCAL_SKILL_SCAN_TIMEOUT_MS,
+        () =>
+          new Error(
+            t(
+              "skill.scanLocalTimeout",
+              "Local skill scan timed out. Check whether an agent folder is inaccessible, then try again.",
+            ),
+          ),
+      );
+      setScannedSkills(result);
+      showToast(
+        t("skill.scanLocalComplete", {
+          count: result.length,
+          defaultValue: `Scanned ${result.length} local skill(s)`,
+        }),
+        "success",
+      );
+      return true;
+    } catch (err) {
+      console.error("Failed to rescan local skills:", err);
+      showToast(
+        err instanceof Error
+          ? err.message
+          : t("skill.scanLocalFailed", "Failed to scan local skills"),
+        "error",
+      );
+      return false;
+    }
   };
 
   const handleImportScanned = async (
@@ -449,25 +563,6 @@ export function SkillManager() {
       visibleSkills.every((skill) => selectedSkillIds.has(skill.id)),
     [selectedSkillIds, visibleSkills],
   );
-
-  // Load skills on mount, then defer deployed status to idle time
-  useEffect(() => {
-    if (!webSkillLibraryMode) {
-      return;
-    }
-
-    if (storeView !== "my-skills") {
-      setStoreView("my-skills");
-    }
-
-    if (
-      filterType === "installed" ||
-      filterType === "deployed" ||
-      filterType === "pending"
-    ) {
-      setFilterType("all");
-    }
-  }, [filterType, setFilterType, setStoreView, storeView, webSkillLibraryMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -708,7 +803,10 @@ export function SkillManager() {
     setShowBatchTagDialog(true);
   };
 
-  const openDeleteConfirm = async (skillIds: string[], skillNames: string[]) => {
+  const openDeleteConfirm = async (
+    skillIds: string[],
+    skillNames: string[],
+  ) => {
     const fallbackSummary: DeleteDistributionSummary = {
       hasDistribution: skillIds.some((id) => deployedSkillNames.has(id)),
       hasCopy: skillIds.some((id) => deployedSkillNames.has(id)),
@@ -744,7 +842,10 @@ export function SkillManager() {
         };
       });
     } catch (error) {
-      console.warn("Failed to inspect skill distribution before delete:", error);
+      console.warn(
+        "Failed to inspect skill distribution before delete:",
+        error,
+      );
     }
   };
 
@@ -1036,16 +1137,23 @@ export function SkillManager() {
               </div>
 
               <div className="flex items-center gap-2 self-start lg:self-center lg:justify-end">
-                {!isSelectionMode ? (
-                  <button
-                    onClick={toggleSelectionMode}
-                    className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/25 hover:bg-accent"
-                    title={t("skill.batchManage", "Batch Manage")}
-                  >
+                <button
+                  onClick={toggleSelectionMode}
+                  aria-pressed={isSelectionMode}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                    isSelectionMode
+                      ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                      : "border-border app-wallpaper-surface text-foreground hover:border-primary/25 hover:bg-accent"
+                  }`}
+                  title={t("skill.batchManage", "Batch Manage")}
+                >
+                  {isSelectionMode ? (
+                    <XIcon className="w-4 h-4" />
+                  ) : (
                     <CheckSquareIcon className="w-4 h-4" />
-                    {t("skill.batchManage", "Batch Manage")}
-                  </button>
-                ) : null}
+                  )}
+                  {t("skill.batchManage", "Batch Manage")}
+                </button>
                 <div className="flex items-center bg-muted rounded-lg p-0.5">
                   <button
                     onClick={() => setViewMode("gallery")}
@@ -1085,42 +1193,84 @@ export function SkillManager() {
                     triggerClassName="h-10 w-full rounded-lg border border-border app-wallpaper-surface px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between gap-2"
                   />
                 )}
-                {runtimeCapabilities.skillLocalScan && (
-                  <>
-                    <div className="h-4 w-px bg-border" />
-                    <button
-                      onClick={() =>
-                        handleScanLocal(
-                          deriveSkillScanPathsFromCustomAgents(customAgents),
-                        )
-                      }
-                      disabled={isScanning}
-                      className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
-                      title={t("skill.scanLocal", "Scan local skills")}
-                    >
-                      <FolderInputIcon
-                        className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`}
-                      />
-                    </button>
-                  </>
-                )}
                 <div className="h-4 w-px bg-border" />
                 <button
                   onClick={async () => {
-                    await loadSkills();
-                    if (runtimeCapabilities.skillDistribution) {
-                      await loadDeployedStatus();
+                    if (isRefreshingLibrary) {
+                      return;
+                    }
+                    setIsRefreshingLibrary(true);
+                    try {
+                      await loadSkills();
+                      if (runtimeCapabilities.skillDistribution) {
+                        await loadDeployedStatus();
+                      }
+                      showToast(
+                        t(
+                          "skill.refreshLibraryComplete",
+                          "Skill library refreshed",
+                        ),
+                        "success",
+                      );
+                    } catch (error) {
+                      console.error("Failed to refresh skill library:", error);
+                      showToast(
+                        t(
+                          "skill.refreshLibraryFailed",
+                          "Failed to refresh skill library",
+                        ),
+                        "error",
+                      );
+                    } finally {
+                      setIsRefreshingLibrary(false);
                     }
                   }}
+                  disabled={isRefreshingLibrary}
                   className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors"
-                  title={t("settings.refresh")}
+                  title={`${t("settings.refresh")} - ${t(
+                    "skill.refreshLibraryHint",
+                    "Reload the PromptHub Skill library and platform distribution status.",
+                  )}`}
                 >
                   <RefreshCwIcon
-                    className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`}
+                    className={`w-4 h-4 ${isRefreshingLibrary ? "animate-spin" : ""}`}
                   />
                 </button>
               </div>
             </div>
+
+            {effectiveStoreView === "my-skills" && !webSkillLibraryMode ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {mySkillFilterOptions.map((option) => {
+                  const isActive = effectiveFilterType === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleMySkillFilterChange(option.value)}
+                      aria-pressed={isActive}
+                      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-border app-wallpaper-surface text-muted-foreground hover:border-primary/25 hover:bg-accent hover:text-foreground"
+                      }`}
+                    >
+                      {option.icon}
+                      <span>{option.label}</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                          isActive
+                            ? "bg-primary/15 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {option.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
 
             {isSelectionMode ? (
               <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/15 bg-primary/[0.06] p-2">
@@ -1197,14 +1347,6 @@ export function SkillManager() {
                   <TrashIcon className="w-4 h-4" />
                   {t("common.delete", "Delete")}
                 </button>
-                <button
-                  onClick={toggleSelectionMode}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  title={t("common.cancel", "Cancel")}
-                >
-                  <XIcon className="w-4 h-4" />
-                  {t("common.cancel", "Cancel")}
-                </button>
               </div>
             ) : null}
           </div>
@@ -1268,8 +1410,7 @@ export function SkillManager() {
                       <SkillGalleryCard
                         key={skill.id}
                         animationDelayMs={
-                          Math.min(index, MAX_STAGGERED_CARDS) *
-                          CARD_STAGGER_MS
+                          Math.min(index, MAX_STAGGERED_CARDS) * CARD_STAGGER_MS
                         }
                         hasStoreUpdate={skillsWithStoreUpdates.has(skill.id)}
                         isSelected={isSelected}
