@@ -15,17 +15,23 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type {
+  AgentScannedSkill,
+  GitHubRepoMetadata,
+  GitHubTreeEntry,
+  GitHubTreeResponse,
   RegistrySkill,
   SafetyScanAIConfig,
   ScannedSkill,
   ScanLocalResult,
   Skill,
   SkillManifest,
+  SkillPlatformScanResult,
 } from "@prompthub/shared/types";
-import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   buildSkillSourceId,
   computeDirectoryFingerprint,
+  computeDirectoryFingerprintFromHashes,
 } from "@prompthub/shared/utils/skill-identity";
 import { installSkillFromSource } from "../../../../../packages/core/src/skills/install-flow";
 import { initDatabase } from "@/main/database";
@@ -43,6 +49,108 @@ import {
   SKILL_PLATFORMS,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
+
+function parseJson<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function slugifySkillName(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function encodePathSegments(value: string): string {
+  return value
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function isRemoteTreeEntry(
+  value: unknown,
+): value is GitHubTreeEntry & { path: string; type: string; sha?: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "path" in value &&
+    typeof value.path === "string" &&
+    "type" in value &&
+    typeof value.type === "string"
+  );
+}
+
+function isSkillMarkdownPath(filePath: string): boolean {
+  return filePath === "SKILL.md" || filePath.endsWith("/SKILL.md");
+}
+
+function getTreeBackedDirectoryFingerprint(
+  treeEntries: Array<GitHubTreeEntry & { path: string; type: string; sha?: string }>,
+  skillFilePath: string,
+): string | undefined {
+  const normalizedSkillPath = skillFilePath.replace(/^\/+|\/+$/g, "");
+  const skillDir =
+    normalizedSkillPath.toLowerCase() === "skill.md"
+      ? ""
+      : normalizedSkillPath.slice(0, normalizedSkillPath.lastIndexOf("/"));
+  const prefix = skillDir ? `${skillDir}/` : "";
+  const scopedEntries = treeEntries
+    .filter((entry) => entry.type === "blob")
+    .filter((entry) =>
+      prefix ? entry.path.startsWith(prefix) : !entry.path.includes("/"),
+    )
+    .filter((entry) => typeof entry.sha === "string" && entry.sha.length > 0)
+    .map((entry) => ({
+      path: prefix ? entry.path.slice(prefix.length) : entry.path,
+      contentHash: entry.sha!,
+    }));
+
+  return scopedEntries.length > 0
+    ? computeDirectoryFingerprintFromHashes(scopedEntries)
+    : undefined;
+}
+
+function buildRemoteGitStoreUrls(
+  parsedRepo: ReturnType<typeof parseGitRepo> & {},
+  branch: string,
+  skillPath?: string,
+): {
+  repoApiBase: string;
+  treeUrl: string;
+  rawUrl?: string;
+} {
+  if (isGitHubHost(parsedRepo.host)) {
+    const repoApiBase = `https://api.github.com/repos/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}`;
+    return {
+      repoApiBase,
+      treeUrl: `${repoApiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+      rawUrl: skillPath
+        ? `https://raw.githubusercontent.com/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}/${encodeURIComponent(branch)}/${encodePathSegments(skillPath)}`
+        : undefined,
+    };
+  }
+
+  const repoApiBase = `https://${parsedRepo.host}/api/v1/repos/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}`;
+  return {
+    repoApiBase,
+    treeUrl: `${repoApiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    rawUrl: skillPath
+      ? `${repoApiBase}/raw/${encodePathSegments(skillPath)}?ref=${encodeURIComponent(branch)}`
+      : undefined,
+  };
+}
 
 // ---- sub-module re-imports (used inside facade methods) ----
 import {
@@ -76,6 +184,7 @@ import {
   deleteManagedVariantContainer,
   deleteRepoByPath,
   getManagedContainerPathForSkill,
+  getLocalPathStatus,
   getLocalRepoPath,
   getLocalRepoPathForSkillId,
   getPreferredLocalRepoContainerPathForSkill,
@@ -102,8 +211,10 @@ import {
 import {
   detectInstalledPlatforms,
   getSkillMdInstallStatusForSkill,
+  getSkillMdInstallStatusDetailsForSkill,
   getPlatformStatus,
   getSkillMdInstallStatus,
+  getSkillMdInstallStatusDetails,
   getSupportedPlatforms,
   installSkillMd,
   installSkillMdForSkill,
@@ -164,6 +275,7 @@ export class SkillInstaller {
   static copyRepoByPathToDirectory = copyRepoByPathToDirectory;
   static renameLocalRepoPathByPath = renameLocalRepoPathByPath;
   static getManagedContainerPathForSkill = getManagedContainerPathForSkill;
+  static getLocalPathStatus = getLocalPathStatus;
   static getLocalRepoPath = getLocalRepoPath;
   static getLocalRepoPathForSkillId = getLocalRepoPathForSkillId;
   static getPreferredLocalRepoContainerPathForSkill =
@@ -188,8 +300,84 @@ export class SkillInstaller {
   static uninstallSkillMdForSkill = uninstallSkillMdForSkill;
   static getSkillMdInstallStatus = getSkillMdInstallStatus;
   static getSkillMdInstallStatusForSkill = getSkillMdInstallStatusForSkill;
+  static getSkillMdInstallStatusDetails = getSkillMdInstallStatusDetails;
+  static getSkillMdInstallStatusDetailsForSkill =
+    getSkillMdInstallStatusDetailsForSkill;
   static installSkillMdSymlink = installSkillMdSymlink;
   static installSkillMdSymlinkForSkill = installSkillMdSymlinkForSkill;
+
+  static async scanPlatformSkills(
+    platformId: string,
+  ): Promise<SkillPlatformScanResult> {
+    const platform = this.getSupportedPlatforms().find(
+      (entry) => entry.id === platformId,
+    );
+    if (!platform) {
+      throw new Error(`Unknown platform: ${platformId}`);
+    }
+
+    const skillsDir = getPlatformSkillsDir(platform);
+    const scannedSkills = await this.scanLocalPreview([skillsDir]);
+    const agentSkills = await Promise.all(
+      scannedSkills.map(async (skill): Promise<AgentScannedSkill> => {
+        let installMode: AgentScannedSkill["installMode"] = "copy";
+        try {
+          const stat = await fs.lstat(skill.localPath);
+          installMode = stat.isSymbolicLink() ? "symlink" : "copy";
+        } catch (error: unknown) {
+          if (getErrorCode(error) !== "ENOENT") {
+            throw error;
+          }
+        }
+
+        return {
+          ...skill,
+          installMode,
+          platformSkillPath: skill.localPath,
+          platforms: [platform.name],
+        };
+      }),
+    );
+
+    return {
+      platform,
+      skillsDir,
+      scannedSkills: agentSkills,
+    };
+  }
+
+  static async uninstallPlatformSkill(
+    platformId: string,
+    platformSkillPath: string,
+  ): Promise<void> {
+    const platform = this.getSupportedPlatforms().find(
+      (entry) => entry.id === platformId,
+    );
+    if (!platform) {
+      throw new Error(`Unknown platform: ${platformId}`);
+    }
+    if (
+      typeof platformSkillPath !== "string" ||
+      platformSkillPath.trim().length === 0
+    ) {
+      throw new Error("Platform skill path is required");
+    }
+
+    const skillsDir = path.resolve(getPlatformSkillsDir(platform));
+    const targetPath = path.resolve(platformSkillPath);
+    const relativeTarget = path.relative(skillsDir, targetPath);
+    if (
+      !isPathWithin(skillsDir, targetPath) ||
+      relativeTarget === "" ||
+      relativeTarget === "."
+    ) {
+      throw new Error("Path traversal detected: skill path is outside platform");
+    }
+
+    if (await fileExists(targetPath)) {
+      await fs.rm(targetPath, { recursive: true, force: true });
+    }
+  }
 
   // ---- Export / import (delegated) ----
   static exportAsSkillMd = exportAsSkillMd;
@@ -660,11 +848,21 @@ export class SkillInstaller {
     const dirsToCheck: string[] = [];
 
     for (const entry of entries) {
+      if (entry.name.startsWith(".")) {
+        continue;
+      }
+
+      const candidateDir = path.join(scanPath, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name.startsWith(".")) {
-          continue;
+        dirsToCheck.push(candidateDir);
+        continue;
+      }
+
+      if (entry.isSymbolicLink()) {
+        const stat = await fs.stat(candidateDir).catch(() => null);
+        if (stat?.isDirectory()) {
+          dirsToCheck.push(candidateDir);
         }
-        dirsToCheck.push(path.join(scanPath, entry.name));
       }
     }
 
@@ -677,12 +875,24 @@ export class SkillInstaller {
         try {
           const subEntries = await fs.readdir(baseDir, { withFileTypes: true });
           for (const sub of subEntries) {
+            if (sub.name.startsWith(".")) {
+              continue;
+            }
+
+            const nestedDir = path.join(baseDir, sub.name);
             if (sub.isDirectory()) {
-              if (sub.name.startsWith(".")) {
-                continue;
-              }
-              const nestedDir = path.join(baseDir, sub.name);
               if (await fileExists(path.join(nestedDir, "SKILL.md"))) {
+                result.push(nestedDir);
+              }
+              continue;
+            }
+
+            if (sub.isSymbolicLink()) {
+              const stat = await fs.stat(nestedDir).catch(() => null);
+              if (
+                stat?.isDirectory() &&
+                (await fileExists(path.join(nestedDir, "SKILL.md")))
+              ) {
                 result.push(nestedDir);
               }
             }
@@ -732,58 +942,67 @@ export class SkillInstaller {
       );
     }
 
-    const tempRoot = await fs.mkdtemp(
-      path.join(this.skillsDir, ".remote-scan-"),
-    );
-    const repoDir = path.join(
-      tempRoot,
-      `${parsedRepo.owner}-${parsedRepo.repo}`,
+    const initialUrls = buildRemoteGitStoreUrls(parsedRepo, branch?.trim() || "main");
+    const repoMetaRaw = await this.fetchRemoteContent(initialUrls.repoApiBase);
+    const repoMeta = parseJson<GitHubRepoMetadata>(repoMetaRaw || "{}", {});
+    const normalizedBranch =
+      branch?.trim() || repoMeta.default_branch || "main";
+    const normalizedDirectory = directory?.trim().replace(/^\/+|\/+$/g, "");
+    const remoteUrls = buildRemoteGitStoreUrls(parsedRepo, normalizedBranch);
+    const treeRaw = await this.fetchRemoteContent(remoteUrls.treeUrl);
+    const treeData = parseJson<GitHubTreeResponse>(treeRaw || "{}", {});
+    const treeEntries = Array.isArray(treeData.tree)
+      ? treeData.tree.filter(isRemoteTreeEntry)
+      : [];
+    const directoryPrefix = normalizedDirectory
+      ? `${normalizedDirectory}/`
+      : "";
+    const skillFiles = treeEntries.filter(
+      (item) =>
+        item.type === "blob" &&
+        isSkillMarkdownPath(item.path) &&
+        (!directoryPrefix || item.path.startsWith(directoryPrefix)),
     );
 
-    try {
-      await gitClone(parsedRepo.cloneUrl, repoDir, branch);
-      const scanRoot = directory ? path.join(repoDir, directory) : repoDir;
-      const scannedSkills = await this.scanLocalPreview([scanRoot]);
-
-      return scannedSkills.map((skill) => {
-        const builtin = registrySkills.find(
-          (item) => item.slug === skill.name.toLowerCase(),
-        );
-        const normalizedBranch = branch?.trim();
-        const normalizedDirectory = directory?.trim().replace(/^\/+|\/+$/g, "");
-        const repoRelativeSkillPath = skill.filePath
-          ? path
-              .relative(repoDir, skill.filePath)
-              .replace(/\\/g, "/")
-              .replace(/^\/+|\/+$/g, "")
-          : "";
-        const relativeDirectoryFromFilePath = repoRelativeSkillPath
-          ? path.posix.dirname(repoRelativeSkillPath)
-          : "";
-        const relativeDirectoryFromLocalPath = skill.localPath
-          ? path
-              .relative(repoDir, skill.localPath)
-              .replace(/\\/g, "/")
-              .replace(/^\/+|\/+$/g, "")
-          : "";
-        const relativeDirectory =
-          relativeDirectoryFromFilePath &&
-          relativeDirectoryFromFilePath !== "." &&
-          !relativeDirectoryFromFilePath.startsWith("../")
-            ? relativeDirectoryFromFilePath
-            : relativeDirectoryFromLocalPath;
+    const scannedSkills: Array<RegistrySkill | null> = await Promise.all(
+      skillFiles.map(async (item): Promise<RegistrySkill | null> => {
+        const canonicalSkillPath = item.path.replace(/^\/+|\/+$/g, "");
         const sourceDirectory =
-          relativeDirectory && relativeDirectory !== "."
-            ? relativeDirectory
-            : normalizedDirectory || undefined;
-        const canonicalSkillPath = sourceDirectory
-          ? `${sourceDirectory}/SKILL.md`
-          : "SKILL.md";
-        const sourceRepoUrl = normalizedBranch
-          ? sourceDirectory
-            ? `${parsedRepo.repositoryUrl}/tree/${normalizedBranch}/${sourceDirectory}`
-            : `${parsedRepo.repositoryUrl}/tree/${normalizedBranch}`
-          : parsedRepo.repositoryUrl;
+          canonicalSkillPath.toLowerCase() === "skill.md"
+            ? normalizedDirectory || undefined
+            : path.posix.dirname(canonicalSkillPath);
+        const rawUrl = buildRemoteGitStoreUrls(
+          parsedRepo,
+          normalizedBranch,
+          canonicalSkillPath,
+        ).rawUrl;
+        if (!rawUrl) {
+          return null;
+        }
+        const content = await this.fetchRemoteContent(rawUrl).catch(() => "");
+        if (!content.trim()) {
+          return null;
+        }
+
+        const parsedSkill = parseSkillMd(content);
+        const directoryName = sourceDirectory
+          ? sourceDirectory.split("/").filter(Boolean).at(-1) || ""
+          : "";
+        const slug = slugifySkillName(
+          parsedSkill?.frontmatter.name || directoryName || parsedRepo.repo,
+        );
+        const builtin = registrySkills.find((item) => item.slug === slug);
+        const name =
+          builtin?.name ||
+          parsedSkill?.frontmatter.name ||
+          toTitleCase(slug || parsedRepo.repo);
+        const description =
+          builtin?.description ||
+          parsedSkill?.frontmatter.description ||
+          `${name} skill`;
+        const sourceRepoUrl = sourceDirectory
+          ? `${parsedRepo.repositoryUrl}/tree/${encodeURIComponent(normalizedBranch)}/${sourceDirectory}`
+          : `${parsedRepo.repositoryUrl}/tree/${encodeURIComponent(normalizedBranch)}`;
         const sourceId = buildSkillSourceId({
           sourceType: "git-repo",
           sourceUrl: parsedRepo.repositoryUrl,
@@ -791,37 +1010,48 @@ export class SkillInstaller {
           directory: sourceDirectory,
           skillPath: canonicalSkillPath,
         });
+
         return {
-          slug: skill.name
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, ""),
-          name: builtin?.name || skill.name,
-          install_name: skill.name,
+          slug,
+          name,
+          install_name: parsedSkill?.frontmatter.name || undefined,
           source_id: sourceId,
           source_label: `${parsedRepo.owner}/${parsedRepo.repo}`,
           source_branch: normalizedBranch,
           source_directory: sourceDirectory,
           canonical_skill_path: canonicalSkillPath,
-          directory_fingerprint: skill.directory_fingerprint,
-          description:
-            builtin?.description || skill.description || `${skill.name} skill`,
+          directory_fingerprint: getTreeBackedDirectoryFingerprint(
+            treeEntries,
+            canonicalSkillPath,
+          ),
+          description,
           category: builtin?.category || "general",
           icon_url: builtin?.icon_url,
           icon_background: builtin?.icon_background,
           icon_emoji: builtin?.icon_emoji,
-          author: builtin?.author || skill.author || parsedRepo.owner,
+          author:
+            builtin?.author ||
+            parsedSkill?.frontmatter.author ||
+            parsedRepo.owner,
           source_url: sourceRepoUrl,
-          tags: builtin?.tags?.length ? builtin.tags : skill.tags,
-          version: builtin?.version || skill.version || "1.0.0",
-          content: skill.instructions,
+          tags: builtin?.tags?.length
+            ? builtin.tags
+            : parsedSkill?.frontmatter.tags?.length
+              ? parsedSkill.frontmatter.tags
+              : slug.split("-").filter(Boolean),
+          version:
+            builtin?.version || parsedSkill?.frontmatter.version || "1.0.0",
+          content,
+          content_url: rawUrl,
           prerequisites: builtin?.prerequisites,
           compatibility: builtin?.compatibility || ["claude", "cursor"],
         } satisfies RegistrySkill;
-      });
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
-    }
+      }),
+    );
+
+    return scannedSkills.filter(
+      (skill): skill is RegistrySkill => skill !== null,
+    );
   }
 
   static async scanLocal(db: SkillDB): Promise<ScanLocalResult> {

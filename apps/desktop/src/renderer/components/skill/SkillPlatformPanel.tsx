@@ -22,6 +22,7 @@ import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { getProtocolDisplayLabel, getSkillSourceMeta } from "./detail-utils";
 import { getRuntimeCapabilities } from "../../runtime";
+import type { ProjectDeployedSkillTarget } from "../../services/project-skill-targets";
 
 interface SkillPlatformPanelProps {
   availablePlatforms: SkillPlatform[];
@@ -58,12 +59,25 @@ interface SkillPlatformPanelProps {
     projectIds: string[],
     targetDirsByProjectId?: Record<string, string[]>,
   ) => void | Promise<void>;
+  getProjectDeployedTargets?: (
+    project: SkillProject,
+  ) => ProjectDeployedSkillTarget[];
+  onRemoveFromProjectTargets?: (
+    projectId: string,
+    targets: ProjectDeployedSkillTarget[],
+  ) => void | Promise<void>;
 }
 
 interface ProjectSkillImportPreferences {
   selectedTargetIds: string[];
   customTargets: string[];
 }
+
+const PROJECT_TARGET_OPTIONS = [
+  ".agents/skills",
+  ".claude/skills",
+  ".gemini/skills",
+] as const;
 
 export function SkillPlatformPanel({
   availablePlatforms,
@@ -91,6 +105,8 @@ export function SkillPlatformPanel({
   isProjectDeploying = false,
   onCreateProject,
   onDeployToProjects,
+  getProjectDeployedTargets,
+  onRemoveFromProjectTargets,
 }: SkillPlatformPanelProps) {
   const sourceMeta = getSkillSourceMeta(selectedSkill, t);
   const runtimeCapabilities = getRuntimeCapabilities();
@@ -115,9 +131,6 @@ export function SkillPlatformPanel({
   const [projectTargetSelections, setProjectTargetSelections] = useState<
     Record<string, string[]>
   >({});
-  const [projectCustomTargets, setProjectCustomTargets] = useState<
-    Record<string, string[]>
-  >({});
 
   useEffect(() => {
     if (integrationScope === "global" && !hasGlobalIntegration && hasProjectIntegration) {
@@ -135,7 +148,6 @@ export function SkillPlatformPanel({
     setSelectedProjectIds(new Set());
     setShowProjectAdvanced(false);
     setProjectTargetSelections({});
-    setProjectCustomTargets({});
   }, [hasGlobalIntegration, selectedSkill.id]);
 
   const effectiveSelectedProjectIds = useMemo(() => {
@@ -157,35 +169,26 @@ export function SkillPlatformPanel({
     });
   };
 
-  const getPresetProjectTargets = (project: SkillProject) => {
+  const buildProjectTargetPath = (project: SkillProject, relativeTarget: string) => {
     const normalizedRoot = project.rootPath.replace(/[\\/]+$/, "");
-    if (!normalizedRoot) {
+    return `${normalizedRoot}/${relativeTarget}`;
+  };
+
+  const getPresetProjectTargets = (project: SkillProject) => {
+    if (!project.rootPath.replace(/[\\/]+$/, "")) {
       return [];
     }
-    return [
-      {
-        id: `${normalizedRoot}/.agents/skills`,
-        label: ".agents/skills",
-        path: `${normalizedRoot}/.agents/skills`,
-      },
-      {
-        id: `${normalizedRoot}/.claude/skills`,
-        label: ".claude/skills",
-        path: `${normalizedRoot}/.claude/skills`,
-      },
-      {
-        id: `${normalizedRoot}/.gemini/skills`,
-        label: ".gemini/skills",
-        path: `${normalizedRoot}/.gemini/skills`,
-      },
-    ];
+    return PROJECT_TARGET_OPTIONS.map((relativeTarget) => ({
+      id: buildProjectTargetPath(project, relativeTarget),
+      label: relativeTarget,
+      path: buildProjectTargetPath(project, relativeTarget),
+    }));
   };
 
   const getProjectCustomTargets = (project: SkillProject): string[] => {
     const savedCustomTargets =
       projectSkillImportPreferencesByProjectId[project.id]?.customTargets ?? [];
-    const sessionCustomTargets = projectCustomTargets[project.id] ?? [];
-    return Array.from(new Set([...savedCustomTargets, ...sessionCustomTargets]));
+    return Array.from(new Set(savedCustomTargets));
   };
 
   const getInitialTargetSelection = (project: SkillProject): string[] => {
@@ -198,7 +201,7 @@ export function SkillPlatformPanel({
       projectSkillImportPreferencesByProjectId[project.id]?.selectedTargetIds ?? []
     ).filter((targetId) => availableTargetIds.has(targetId));
     if (savedTargetIds.length > 0) {
-      return savedTargetIds;
+      return [savedTargetIds[0]];
     }
 
     const firstPreset = presetTargets[0];
@@ -208,51 +211,8 @@ export function SkillPlatformPanel({
   const getProjectTargetSelection = (project: SkillProject): string[] => {
     const selected = projectTargetSelections[project.id];
     return selected && selected.length > 0
-      ? selected
+      ? [selected[0]]
       : getInitialTargetSelection(project);
-  };
-
-  const toggleProjectTarget = (project: SkillProject, targetId: string) => {
-    const current = getProjectTargetSelection(project);
-    const next = current.includes(targetId)
-      ? current.filter((entry) => entry !== targetId)
-      : [...current, targetId];
-
-    setProjectTargetSelections((previous) => ({
-      ...previous,
-      [project.id]: next,
-    }));
-    setProjectSkillImportPreferences?.(project.id, {
-      selectedTargetIds: next,
-      customTargets: getProjectCustomTargets(project),
-    });
-  };
-
-  const handleAddCustomProjectTarget = async (project: SkillProject) => {
-    const selectedPath = await window.electron?.selectFolder?.();
-    if (!selectedPath) {
-      return;
-    }
-
-    const nextCustomTargets = Array.from(
-      new Set([...getProjectCustomTargets(project), selectedPath]),
-    );
-    const nextSelectedTargets = Array.from(
-      new Set([...getProjectTargetSelection(project), selectedPath]),
-    );
-
-    setProjectCustomTargets((previous) => ({
-      ...previous,
-      [project.id]: nextCustomTargets,
-    }));
-    setProjectTargetSelections((previous) => ({
-      ...previous,
-      [project.id]: nextSelectedTargets,
-    }));
-    setProjectSkillImportPreferences?.(project.id, {
-      selectedTargetIds: nextSelectedTargets,
-      customTargets: nextCustomTargets,
-    });
   };
 
   const summarizeTargetDirs = (targetDirs: string[], projectRootPath: string): string => {
@@ -268,6 +228,35 @@ export function SkillPlatformPanel({
         }),
       ),
     ).join(", ");
+  };
+
+  const selectedProjectTargetLabel = useMemo(() => {
+    const firstProject = normalizedProjects[0];
+    if (!firstProject) {
+      return PROJECT_TARGET_OPTIONS[0];
+    }
+    const firstTarget = getProjectTargetSelection(firstProject)[0];
+    if (!firstTarget) {
+      return PROJECT_TARGET_OPTIONS[0];
+    }
+    return summarizeTargetDirs([firstTarget], firstProject.rootPath);
+  }, [normalizedProjects, projectSkillImportPreferencesByProjectId, projectTargetSelections]);
+
+  const setProjectTargetForAllProjects = (relativeTarget: string) => {
+    const nextSelections = Object.fromEntries(
+      normalizedProjects.map((project) => [
+        project.id,
+        [buildProjectTargetPath(project, relativeTarget)],
+      ]),
+    );
+    setProjectTargetSelections(nextSelections);
+
+    for (const project of normalizedProjects) {
+      setProjectSkillImportPreferences?.(project.id, {
+        selectedTargetIds: [buildProjectTargetPath(project, relativeTarget)],
+        customTargets: getProjectCustomTargets(project),
+      });
+    }
   };
 
   return (
@@ -337,22 +326,16 @@ export function SkillPlatformPanel({
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-border app-wallpaper-surface p-4">
+                <div className="rounded-2xl border border-border app-wallpaper-surface p-3">
                   <button
                     type="button"
                     onClick={() => setShowProjectAdvanced((previous) => !previous)}
                     className="flex w-full items-center justify-between gap-3 text-left"
                   >
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                         <Settings2Icon className="h-4 w-4" />
                         {t("skill.advancedImportSettings", "Advanced Import Settings")}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {t(
-                          "skill.advancedImportSettingsHint",
-                          "Choose one or more target folders. If you skip this, PromptHub defaults to .agents/skills.",
-                        )}
                       </div>
                     </div>
                     <ChevronDownIcon
@@ -363,51 +346,72 @@ export function SkillPlatformPanel({
                   </button>
 
                   {showProjectAdvanced ? (
-                    <div className="mt-4 space-y-2">
-                      <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    <div className="mt-3 space-y-2">
+                      <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
                         {t("skill.importMode", "Import Mode")}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-accent/40 p-1">
                         <button
                           type="button"
                           onClick={() => setProjectDeployMode?.("copy")}
-                          className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                          title={t(
+                            "skill.projectImportCopyModeHint",
+                            "Copy a standalone snapshot into the selected project folders.",
+                          )}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
                             projectDeployMode === "copy"
-                              ? "border-primary/40 bg-primary/5"
-                              : "border-border bg-background hover:bg-accent"
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-muted-foreground hover:bg-background hover:text-foreground"
                           }`}
                         >
-                          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                            <CopyPlusIcon className="h-4 w-4" />
-                            {t("skill.copyMode", "Copy")}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {t(
-                              "skill.projectImportCopyModeHint",
-                              "Copy a standalone snapshot into the selected project folders.",
-                            )}
-                          </div>
+                          <CopyPlusIcon className="h-3.5 w-3.5" />
+                          {t("skill.copyMode", "Copy")}
                         </button>
                         <button
                           type="button"
                           onClick={() => setProjectDeployMode?.("symlink")}
-                          className={`rounded-2xl border px-4 py-3 text-left transition-colors ${
+                          title={t(
+                            "skill.projectImportSymlinkModeHint",
+                            "Link the project folder to My Skills so source updates stay in sync.",
+                          )}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium transition-colors ${
                             projectDeployMode === "symlink"
-                              ? "border-primary/40 bg-primary/5"
-                              : "border-border bg-background hover:bg-accent"
+                              ? "bg-primary text-white shadow-sm"
+                              : "text-muted-foreground hover:bg-background hover:text-foreground"
                           }`}
                         >
-                          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                            <LinkIcon className="h-4 w-4" />
-                            {t("skill.symlink", "Symlink")}
-                          </div>
-                          <div className="mt-1 text-xs text-muted-foreground">
-                            {t(
-                              "skill.projectImportSymlinkModeHint",
-                              "Link the project folder to My Skills so source updates stay in sync.",
-                            )}
-                          </div>
+                          <LinkIcon className="h-3.5 w-3.5" />
+                          {t("skill.symlink", "Symlink")}
                         </button>
+                      </div>
+                      <div className="pt-2">
+                        <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                          {t("skill.projectTargetFolders", "Target Folders")}
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-1.5">
+                          {PROJECT_TARGET_OPTIONS.map((relativeTarget) => {
+                            const isTargetSelected =
+                              selectedProjectTargetLabel === relativeTarget;
+                            return (
+                              <button
+                                key={relativeTarget}
+                                type="button"
+                                onClick={() => setProjectTargetForAllProjects(relativeTarget)}
+                                className={`inline-flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-medium transition-colors ${
+                                  isTargetSelected
+                                    ? "bg-primary text-white shadow-sm"
+                                    : "bg-accent/60 text-muted-foreground hover:bg-background hover:text-foreground"
+                                }`}
+                                title={relativeTarget}
+                              >
+                                {isTargetSelected ? (
+                                  <CheckIcon className="h-3.5 w-3.5 shrink-0" />
+                                ) : null}
+                                <span className="truncate">{relativeTarget}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   ) : null}
@@ -437,6 +441,8 @@ export function SkillPlatformPanel({
                     <div className="space-y-2">
                       {normalizedProjects.map((project) => {
                         const isSelected = effectiveSelectedProjectIds.has(project.id);
+                        const deployedTargets =
+                          getProjectDeployedTargets?.(project) ?? [];
 
                         return (
                           <div
@@ -472,66 +478,61 @@ export function SkillPlatformPanel({
                                     project.rootPath,
                                   )}
                                 </div>
+                                {deployedTargets.length > 0 ? (
+                                  <div className="mt-2 text-[11px] leading-relaxed text-emerald-600 dark:text-emerald-300">
+                                    {t("skill.projectDeployedTargetCount", {
+                                      count: deployedTargets.length,
+                                      defaultValue:
+                                        "Distributed to {{count}} target folder(s)",
+                                    })}
+                                  </div>
+                                ) : null}
                               </div>
-                              <div
-                                className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${
-                                  isSelected
-                                    ? "border-primary bg-primary text-white"
-                                    : "border-muted-foreground/30"
-                                }`}
-                              >
-                                {isSelected ? <CheckIcon className="h-3 w-3" /> : null}
+                              <div className="mt-1 flex shrink-0 items-center gap-2">
+                                {deployedTargets.length > 0 ? (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void onRemoveFromProjectTargets?.(
+                                        project.id,
+                                        deployedTargets,
+                                      );
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key !== "Enter" && event.key !== " ") {
+                                        return;
+                                      }
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void onRemoveFromProjectTargets?.(
+                                        project.id,
+                                        deployedTargets,
+                                      );
+                                    }}
+                                    className="rounded-lg border border-destructive/30 px-2 py-1 text-[10px] font-medium text-destructive hover:bg-destructive/10"
+                                  >
+                                    {t(
+                                      "skill.removeFromProject",
+                                      "Remove from Project",
+                                    )}
+                                  </span>
+                                ) : null}
+                                <div
+                                  className={`flex h-5 w-5 items-center justify-center rounded border-2 ${
+                                    isSelected
+                                      ? "border-primary bg-primary text-white"
+                                      : "border-muted-foreground/30"
+                                  }`}
+                                >
+                                  {isSelected ? (
+                                    <CheckIcon className="h-3 w-3" />
+                                  ) : null}
+                                </div>
                               </div>
                             </button>
 
-                            {showProjectAdvanced ? (
-                              <div className="space-y-2 border-t border-border/70 px-4 pb-4 pt-3">
-                                <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                                  {t("skill.projectTargetFolders", "Target Folders")}
-                                </div>
-                                <div className="grid grid-cols-1 gap-2">
-                                  {[
-                                    ...getPresetProjectTargets(project),
-                                    ...getProjectCustomTargets(project).map((target) => ({
-                                      id: target,
-                                      label: t("skill.customProjectDeployTarget", "Custom target"),
-                                      path: target,
-                                    })),
-                                  ].map((target) => {
-                                    const isTargetSelected = getProjectTargetSelection(
-                                      project,
-                                    ).includes(target.id);
-                                    return (
-                                      <button
-                                        key={target.id}
-                                        type="button"
-                                        onClick={() => toggleProjectTarget(project, target.id)}
-                                        className={`rounded-xl border px-3 py-2 text-left transition-colors ${
-                                          isTargetSelected
-                                            ? "border-primary/40 bg-primary/5"
-                                            : "border-border bg-background hover:bg-accent"
-                                        }`}
-                                      >
-                                        <div className="text-xs font-medium text-foreground">
-                                          {target.label}
-                                        </div>
-                                        <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                                          {target.path}
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleAddCustomProjectTarget(project)}
-                                  className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-3 py-2 text-xs text-foreground transition-colors hover:bg-accent"
-                                >
-                                  <FolderPlusIcon className="h-3.5 w-3.5" />
-                                  {t("skill.addDeployTarget", "Add Folder")}
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         );
                       })}

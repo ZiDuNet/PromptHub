@@ -37,6 +37,10 @@ Read:
   - Repository structure and static content findings from the local package scan are preserved as preflight evidence in the AI prompt instead of being discarded after file counting.
   - Package prompt content is bounded by deterministic per-file and total content budgets, with explicit truncation/omission notices so large packages fail visibly instead of silently narrowing review scope.
   - Safety scan keeps symlink/path escape filtering in the real filesystem reader; the regression test verifies escaped symlink content is not included in the scan prompt.
+- Fixed Skill UI consistency regressions:
+  - Sidebar and TopBar now treat the unopened official store as an empty catalog instead of exposing built-in registry counts or search results.
+  - Skill list rows now render cached platform install status immediately but still refresh the current visible Skill ids, so post-install status cannot stay grey from a stale module cache.
+  - Skill file tree directory buttons now expose `aria-expanded` and keep the existing recursive toggle behavior for synthetic folders created from nested package file paths.
 
 ## Verification
 
@@ -59,13 +63,17 @@ Read:
   - Passed: 1 file, 42 tests.
 - Full desktop Vitest suite:
   - `pnpm --filter @prompthub/desktop test:run`
-  - Failed: 12 files failed, 170 passed; 26 tests failed, 1521 passed.
-  - Observed failures are outside the safety scan change area: `top-bar.test.tsx`, `skill-store-custom-sources.test.tsx`, `skill-filter*.test.ts`, `skill-platform-sync.test.ts`, `skill-stats.test.ts`, `skill-db-versioning.test.ts`, and integration tests whose `settings.store` mocks are missing newer exports.
+  - Failed: 11 files failed, 171 passed; 25 tests failed, 1528 passed.
+  - Observed failures are outside the Skill UI consistency change area: integration tests whose `settings.store` mocks are missing `AI_SCENARIO_MODEL_ROUTE` or `SKILL_LIST_PAGE_SIZE_OPTIONS`, `skill-store-custom-sources.test.tsx` expecting the old official-store empty text, `skill-filter*.test.ts` / `skill-stats.test.ts` expecting deployed name matching instead of id matching, `skill-platform-sync.test.ts` expecting `skillName` payloads instead of `skillId`, and `skill-db-versioning.test.ts` hitting a duplicate `source_url` migration column.
 - Type and lint:
   - `pnpm --filter @prompthub/desktop typecheck`
   - Passed.
   - `pnpm --filter @prompthub/desktop lint`
   - Passed.
+- Skill UI regression suite:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/components/sidebar.test.tsx tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-file-editor.test.tsx tests/unit/components/top-bar.test.tsx tests/unit/components/skill-store-installed-state.test.tsx`
+  - Passed: 5 files, 44 tests.
+  - Note: Vitest still prints a React `act` warning from the Skill list platform-status async effect in one test, but the asserted stale-status transition passes.
 
 Regression coverage added:
 
@@ -84,6 +92,10 @@ Regression coverage added:
 - Added safety scan regressions for installed internal-Gitea packages and for store detail passing the managed package path.
 - Added prompt-sensitive safety scan coverage for ordinary package docs/reference files, repository preflight evidence, prompt budget/truncation behavior, and real filesystem symlink escape filtering.
 - Added store batch scan coverage for preserving `local_repo_path` when scanning installed managed packages.
+- Added Sidebar regression coverage that the unopened official store shows a zero-count source.
+- Added TopBar regression coverage that remote store catalog search still works while official unopened registry skills are not searchable.
+- Added Skill list regression coverage that an already-rendered row refreshes stale platform install state after a later status read.
+- Added Skill file browser regression coverage that nested synthetic folders from package paths can be expanded to reveal files.
 
 ## Docs Synced
 

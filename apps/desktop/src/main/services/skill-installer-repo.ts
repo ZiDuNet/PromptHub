@@ -11,6 +11,7 @@ import type {
   SkillLocalFileBufferEntry,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
+  SkillLocalPathStatus,
 } from "@prompthub/shared/types";
 import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
 import {
@@ -680,6 +681,27 @@ export async function readLocalRepoFileByPath(
     content,
     isDirectory: false,
   };
+}
+
+export async function getLocalPathStatus(
+  absolutePath: string,
+): Promise<SkillLocalPathStatus> {
+  const normalizedPath = normalizeRepoBaseDirectory(absolutePath);
+  try {
+    const stat = await fs.lstat(normalizedPath);
+    if (stat.isSymbolicLink()) {
+      return { exists: true, mode: "symlink" };
+    }
+    if (stat.isDirectory() || stat.isFile()) {
+      return { exists: true, mode: "copy" };
+    }
+    return { exists: true };
+  } catch (error: unknown) {
+    if (getErrorCode(error) === "ENOENT") {
+      return { exists: false };
+    }
+    throw error;
+  }
 }
 
 // ==================== Write ====================

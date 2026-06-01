@@ -9,7 +9,12 @@ import {
   SKILL_PLATFORMS,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
-import type { Skill, SkillPlatformInstallResult } from "@prompthub/shared/types";
+import type {
+  Skill,
+  SkillPlatformInstallStatus,
+  SkillPlatformInstallStatusMap,
+  SkillPlatformInstallResult,
+} from "@prompthub/shared/types";
 import {
   fileExists,
   getErrorCode,
@@ -21,6 +26,12 @@ import {
   isInternalSkillRepoEntry,
   saveContentToLocalRepo,
 } from "./skill-installer-repo";
+import {
+  getCherryStudioSkillStatus,
+  installCherryStudioSkill,
+  isCherryStudioPlatform,
+  uninstallCherryStudioSkill,
+} from "./cherry-studio-skill-platform";
 import {
   getPlatformSkillsDir,
   getCustomAgentPlatforms,
@@ -146,6 +157,23 @@ async function cleanupLegacyPlatformSkillDirs(
       continue;
     }
     await removePlatformSkillDir(platform, legacyName);
+  }
+}
+
+async function cleanupLegacyCherryStudioSkills(
+  platform: SkillPlatform,
+  effectivePlatformSkillName: string,
+  legacySkillNames?: string[],
+): Promise<void> {
+  if (!legacySkillNames || legacySkillNames.length === 0) {
+    return;
+  }
+
+  for (const legacyName of legacySkillNames) {
+    if (!legacyName || legacyName === effectivePlatformSkillName) {
+      continue;
+    }
+    await uninstallCherryStudioSkill(platform, legacyName);
   }
 }
 
@@ -404,6 +432,15 @@ export async function installSkillMd(
   const skillDir = path.join(skillsDir, skillName);
 
   try {
+    if (isCherryStudioPlatform(platform.id)) {
+      await installCherryStudioSkill(platform, skillName, canonicalDir);
+      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      console.log(
+        `Successfully registered skill directory for "${skillName}" in ${platform.name}`,
+      );
+      return;
+    }
+
     await fs.mkdir(skillsDir, { recursive: true });
     await copySkillRepoToPlatform(canonicalDir, skillDir);
     await cleanupLegacyPlatformSkillDirs(platform, skillName, options?.legacySkillNames);
@@ -432,6 +469,15 @@ export async function uninstallSkillMd(
   }
 
   try {
+    if (isCherryStudioPlatform(platform.id)) {
+      await uninstallCherryStudioSkill(platform, skillName);
+      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      console.log(
+        `Successfully unregistered SKILL.md for "${skillName}" from ${platform.name}`,
+      );
+      return;
+    }
+
     await removePlatformSkillDir(platform, skillName);
     await cleanupLegacyPlatformSkillDirs(platform, skillName, options?.legacySkillNames);
     console.log(
@@ -462,9 +508,84 @@ export async function getSkillMdInstallStatus(
 
     status[platform.id] = false;
     for (const platformSkillName of platformSkillNames) {
+      if (isCherryStudioPlatform(platform.id)) {
+        if (await getCherryStudioSkillStatus(platform, platformSkillName)) {
+          status[platform.id] = true;
+          break;
+        }
+        continue;
+      }
+
       const skillMdPath = path.join(skillsDir, platformSkillName, "SKILL.md");
       if (await fileExists(skillMdPath)) {
         status[platform.id] = true;
+        break;
+      }
+    }
+  }
+
+  return status;
+}
+
+async function inspectPlatformSkillInstall(
+  platform: SkillPlatform,
+  platformSkillName: string,
+): Promise<SkillPlatformInstallStatus> {
+  validateSkillName(platformSkillName);
+  if (isCherryStudioPlatform(platform.id)) {
+    return (await getCherryStudioSkillStatus(platform, platformSkillName))
+      ? { installed: true, mode: "copy" }
+      : { installed: false };
+  }
+
+  const skillDir = path.join(getPlatformSkillsDir(platform), platformSkillName);
+  const skillMdPath = path.join(skillDir, "SKILL.md");
+
+  try {
+    const stat = await fs.lstat(skillDir);
+    if (stat.isSymbolicLink()) {
+      return { installed: true, mode: "symlink" };
+    }
+    if (stat.isDirectory() || stat.isFile()) {
+      return {
+        installed: await fileExists(skillMdPath),
+        mode: "copy",
+      };
+    }
+  } catch (error: unknown) {
+    if (getErrorCode(error) !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  if (await fileExists(skillMdPath)) {
+    return { installed: true, mode: "copy" };
+  }
+
+  return { installed: false };
+}
+
+export async function getSkillMdInstallStatusDetails(
+  skillName: string,
+  options?: SkillMdInstallOptions,
+): Promise<SkillPlatformInstallStatusMap> {
+  validateSkillName(skillName);
+  const status: SkillPlatformInstallStatusMap = {};
+
+  for (const platform of getSupportedPlatforms()) {
+    const platformSkillNames = [
+      skillName,
+      ...(options?.legacySkillNames ?? []),
+    ].filter((value, index, list) => value && list.indexOf(value) === index);
+
+    status[platform.id] = { installed: false };
+    for (const platformSkillName of platformSkillNames) {
+      const installStatus = await inspectPlatformSkillInstall(
+        platform,
+        platformSkillName,
+      );
+      if (installStatus.installed) {
+        status[platform.id] = installStatus;
         break;
       }
     }
@@ -520,6 +641,16 @@ export async function installSkillMdSymlink(
   };
 
   try {
+    if (isCherryStudioPlatform(platform.id)) {
+      await installCherryStudioSkill(platform, skillName, canonicalDir);
+      await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
+      return {
+        requestedMode: "symlink",
+        effectiveMode: "copy",
+        fallbackReason: "Cherry Studio requires database registration",
+      };
+    }
+
     // Ensure parent exists
     await fs.mkdir(platformSkillsDir, { recursive: true });
 
@@ -644,6 +775,26 @@ export async function getSkillMdInstallStatusForSkill(
   for (const platform of getSupportedPlatforms()) {
     status[platform.id] =
       baseStatus[platform.id] && (await isPlatformActivationCurrent(platform, skill));
+  }
+
+  return status;
+}
+
+export async function getSkillMdInstallStatusDetailsForSkill(
+  skill: Pick<Skill, "id" | "name" | "source_id">,
+  legacySkillNames?: string[],
+): Promise<SkillPlatformInstallStatusMap> {
+  const baseStatus = await getSkillMdInstallStatusDetails(skill.name, {
+    legacySkillNames,
+  });
+  const status: SkillPlatformInstallStatusMap = {};
+
+  for (const platform of getSupportedPlatforms()) {
+    const installStatus = baseStatus[platform.id] ?? { installed: false };
+    status[platform.id] =
+      installStatus.installed && (await isPlatformActivationCurrent(platform, skill))
+        ? installStatus
+        : { installed: false };
   }
 
   return status;

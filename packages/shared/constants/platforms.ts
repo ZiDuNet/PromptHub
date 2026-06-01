@@ -41,7 +41,10 @@ function joinPlatformPath(basePath: string, relativePath: string): string {
     : normalizedBase;
 }
 
-function stripTrailingRelativePath(fullPath: string, relativePath: string): string {
+function stripTrailingRelativePath(
+  fullPath: string,
+  relativePath: string,
+): string {
   const trimmed = fullPath.trim().replace(/[\\/]+$/, "");
   if (!trimmed || !relativePath.trim()) {
     return trimmed;
@@ -103,6 +106,7 @@ export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "opencode",
   "cline",
   "cursor",
+  "cherry-studio",
   "windsurf",
   "kiro",
   "kilo",
@@ -150,6 +154,17 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.cursor",
     },
     skillsRelativePath: "skills",
+  },
+  {
+    id: "cherry-studio",
+    name: "Cherry Studio",
+    icon: "Bot",
+    rootDir: {
+      darwin: "~/Library/Application Support/CherryStudioDev",
+      win32: "%APPDATA%\\CherryStudio",
+      linux: "~/.config/CherryStudio",
+    },
+    skillsRelativePath: "Data\\Skills",
   },
   {
     id: "windsurf",

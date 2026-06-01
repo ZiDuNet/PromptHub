@@ -108,6 +108,38 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.SKILL_SCAN_PLATFORM_SKILLS,
+    async (_, platformId: string) => {
+      if (typeof platformId !== "string" || platformId.trim().length === 0) {
+        throw new Error(
+          "skill:scanPlatformSkills requires a non-empty platformId",
+        );
+      }
+      return SkillInstaller.scanPlatformSkills(platformId);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_UNINSTALL_PLATFORM_SKILL,
+    async (_, platformId: string, platformSkillPath: string) => {
+      if (typeof platformId !== "string" || platformId.trim().length === 0) {
+        throw new Error(
+          "skill:uninstallPlatformSkill requires a non-empty platformId",
+        );
+      }
+      if (
+        typeof platformSkillPath !== "string" ||
+        platformSkillPath.trim().length === 0
+      ) {
+        throw new Error(
+          "skill:uninstallPlatformSkill requires a non-empty platformSkillPath",
+        );
+      }
+      return SkillInstaller.uninstallPlatformSkill(platformId, platformSkillPath);
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.SKILL_INSTALL_MD,
     async (
       _,
@@ -131,7 +163,7 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
       const repoPath = await ensureLocalRepoPathBySkillId(db, skillId);
-      return SkillInstaller.installSkillMdSymlinkForSkill(
+      return SkillInstaller.installSkillMdForSkill(
         skill,
         skillMdContent,
         platformId,
@@ -205,6 +237,24 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.SKILL_GET_MD_INSTALL_STATUS_DETAILS,
+    async (_, skillId: string) => {
+      if (typeof skillId !== "string" || skillId.trim().length === 0) {
+        throw new Error(
+          "skill:getMdInstallStatusDetails requires a non-empty skillId",
+        );
+      }
+      const skill = db.getById(skillId);
+      if (!skill) {
+        throw new Error(`Skill not found: ${skillId}`);
+      }
+      return SkillInstaller.getSkillMdInstallStatusDetailsForSkill(skill, [
+        skill.name,
+      ]);
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.SKILL_INSTALL_MD_SYMLINK,
     async (
       _,
@@ -232,7 +282,7 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         throw new Error(`Skill not found: ${skillId}`);
       }
       const repoPath = await ensureLocalRepoPathBySkillId(db, skillId);
-      return SkillInstaller.installSkillMdForSkill(
+      return SkillInstaller.installSkillMdSymlinkForSkill(
         skill,
         skillMdContent,
         platformId,

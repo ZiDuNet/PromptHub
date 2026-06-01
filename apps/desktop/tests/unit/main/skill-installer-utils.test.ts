@@ -2,9 +2,8 @@ import * as childProcess from "child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("child_process", async () => {
-  const actual = await vi.importActual<typeof import("child_process")>(
-    "child_process",
-  );
+  const actual =
+    await vi.importActual<typeof import("child_process")>("child_process");
 
   return {
     ...actual,
@@ -131,6 +130,53 @@ describe("skill-installer-utils", () => {
       expect(resolvedPath).toContain(".cline/skills");
     });
 
+    it("resolves the built-in Cherry Studio Windows skills path under AppData", () => {
+      const originalPlatform = process.platform;
+      const originalHome = process.env.HOME;
+      const originalUserProfile = process.env.USERPROFILE;
+      const originalAppData = process.env.APPDATA;
+
+      Object.defineProperty(process, "platform", {
+        value: "win32",
+        configurable: true,
+      });
+      process.env.HOME = "C:\\Users\\TestUser";
+      process.env.USERPROFILE = "C:\\Users\\TestUser";
+      process.env.APPDATA = "C:\\Users\\TestUser\\AppData\\Roaming";
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      invalidateCustomPathsCache();
+
+      const platform = getPlatformById("cherry-studio");
+      expect(platform).toBeDefined();
+      expect(getPlatformRootDir(platform!)).toBe(
+        "C:\\Users\\TestUser\\AppData\\Roaming\\CherryStudio",
+      );
+      const skillsDir = getPlatformSkillsDir(platform!);
+      expect(skillsDir).toContain("CherryStudio");
+      expect(skillsDir).toContain("Data");
+      expect(skillsDir).toContain("Skills");
+      expect(skillsDir.replace(/[\\/]+/g, "\\")).toBe(
+        "C:\\Users\\TestUser\\AppData\\Roaming\\CherryStudio\\Data\\Skills",
+      );
+
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      process.env.HOME = originalHome;
+      process.env.USERPROFILE = originalUserProfile;
+      if (originalAppData === undefined) {
+        delete process.env.APPDATA;
+      } else {
+        process.env.APPDATA = originalAppData;
+      }
+      invalidateCustomPathsCache();
+    });
+
     it("resolves the Antigravity global skills path", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
       vi.mocked(initDatabase).mockReturnValue({
@@ -249,7 +295,9 @@ describe("skill-installer-utils", () => {
       expect(platform).toBeDefined();
 
       expect(getPlatformRootDir(platform!)).toBe("/tmp/opencode-root");
-      expect(getPlatformSkillsDir(platform!)).toBe("/tmp/opencode-root/custom-skills");
+      expect(getPlatformSkillsDir(platform!)).toBe(
+        "/tmp/opencode-root/custom-skills",
+      );
       expect(getPlatformGlobalRulePath(platform!)).toBe(
         "/tmp/opencode-root/docs/AGENTS.md",
       );
@@ -267,7 +315,9 @@ describe("skill-installer-utils", () => {
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
       vi.mocked(initDatabase).mockReturnValue({
-        prepare: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
       } as unknown as ReturnType<typeof initDatabase>);
       invalidateCustomPathsCache();
 
@@ -277,7 +327,9 @@ describe("skill-installer-utils", () => {
         "C:\\Users\\TestUser\\.config\\opencode",
       );
       const skillsDir = getPlatformSkillsDir(platform!);
-      expect(skillsDir.startsWith("C:\\Users\\TestUser\\.config\\opencode")).toBe(true);
+      expect(
+        skillsDir.startsWith("C:\\Users\\TestUser\\.config\\opencode"),
+      ).toBe(true);
       expect(skillsDir.endsWith("skills")).toBe(true);
 
       Object.defineProperty(process, "platform", {
@@ -301,7 +353,9 @@ describe("skill-installer-utils", () => {
       process.env.HOME = "C:\\Users\\TestUser";
       process.env.USERPROFILE = "C:\\Users\\TestUser";
       vi.mocked(initDatabase).mockReturnValue({
-        prepare: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+        prepare: vi
+          .fn()
+          .mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
       } as unknown as ReturnType<typeof initDatabase>);
       invalidateCustomPathsCache();
 
@@ -605,7 +659,10 @@ describe("skill-installer-utils", () => {
         kill: vi.fn(),
       } as unknown as childProcess.ChildProcess);
 
-      const promise = gitClone("git@gitea.example.com:icelemon/skills.git", "/tmp/dest");
+      const promise = gitClone(
+        "git@gitea.example.com:icelemon/skills.git",
+        "/tmp/dest",
+      );
       closeHandlers[0]?.(0);
 
       await expect(promise).resolves.toBeUndefined();
@@ -614,7 +671,9 @@ describe("skill-installer-utils", () => {
 
   describe("gitListRemoteBranches", () => {
     it("rejects empty URL", () => {
-      expect(() => gitListRemoteBranches("" as string)).toThrow(/cannot be empty/);
+      expect(() => gitListRemoteBranches("" as string)).toThrow(
+        /cannot be empty/,
+      );
     });
 
     it("parses remote branch names from git ls-remote output", async () => {
@@ -623,17 +682,19 @@ describe("skill-installer-utils", () => {
       const closeHandlers: Array<(code: number) => void> = [];
 
       vi.mocked(childProcess.spawn).mockReturnValue({
-        stdout: { on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)) },
-        stderr: { on: vi.fn((event, cb) => event === "data" && stderrHandlers.push(cb)) },
+        stdout: {
+          on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)),
+        },
+        stderr: {
+          on: vi.fn((event, cb) => event === "data" && stderrHandlers.push(cb)),
+        },
         on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
         kill: vi.fn(),
       } as unknown as childProcess.ChildProcess);
 
       const promise = gitListRemoteBranches("git@github.com:demo/skills.git");
       stdoutHandlers[0]?.(
-        Buffer.from(
-          "abc123\trefs/heads/main\ndef456\trefs/heads/release\n",
-        ),
+        Buffer.from("abc123\trefs/heads/main\ndef456\trefs/heads/release\n"),
       );
       closeHandlers[0]?.(0);
 
@@ -645,7 +706,9 @@ describe("skill-installer-utils", () => {
       const closeHandlers: Array<(code: number) => void> = [];
 
       vi.mocked(childProcess.spawn).mockReturnValue({
-        stdout: { on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)) },
+        stdout: {
+          on: vi.fn((event, cb) => event === "data" && stdoutHandlers.push(cb)),
+        },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
         kill: vi.fn(),

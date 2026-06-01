@@ -54,9 +54,19 @@ export type SkillFilterType =
   | "deployed"
   | "pending";
 export type SkillViewMode = "gallery" | "list";
+export type SkillGalleryColumnMode =
+  | "auto"
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7"
+  | "8";
 export type SkillStoreView =
   | "my-skills"
   | "projects"
+  | "agents"
   | "distribution"
   | "store";
 // Translation cache constraints
@@ -599,6 +609,7 @@ interface SkillState {
   // View mode
   // 视图模式
   viewMode: SkillViewMode;
+  galleryColumns: SkillGalleryColumnMode;
 
   // Search & Filter
   searchQuery: string;
@@ -631,7 +642,10 @@ interface SkillState {
   createSkill: (data: CreateSkillParams) => Promise<Skill | null>;
   updateSkill: (id: string, data: UpdateSkillParams) => Promise<Skill | null>;
   syncSkillFromRepo: (id: string) => Promise<Skill | null>;
-  deleteSkill: (id: string) => Promise<boolean>;
+  deleteSkill: (
+    id: string,
+    options?: { removeCopyInstallations?: boolean },
+  ) => Promise<boolean>;
   toggleFavorite: (id: string) => Promise<void>;
   scanLocalSkills: () => Promise<ScanLocalResult>;
   scanLocalPreview: (customPaths?: string[]) => Promise<ScannedSkill[]>;
@@ -662,6 +676,7 @@ interface SkillState {
   // View mode actions
   // 视图模式操作
   setViewMode: (mode: SkillViewMode) => void;
+  setGalleryColumns: (mode: SkillGalleryColumnMode) => void;
 
   // Search & Filter Actions
   setSearchQuery: (query: string) => void;
@@ -750,6 +765,7 @@ export const useSkillStore = create<SkillState>()(
       isLoading: false,
       error: null,
       viewMode: "gallery" as SkillViewMode,
+      galleryColumns: "auto" as SkillGalleryColumnMode,
       searchQuery: "",
       filterType: "all",
       filterTags: [] as string[],
@@ -917,9 +933,12 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      deleteSkill: async (id) => {
+      deleteSkill: async (id, options) => {
         try {
-          const success = await window.api.skill.delete(id);
+          const success =
+            options === undefined
+              ? await window.api.skill.delete(id)
+              : await window.api.skill.delete(id, options);
           if (success) {
             set((state) => ({
               skills: state.skills.filter((s) => s.id !== id),
@@ -1196,6 +1215,10 @@ export const useSkillStore = create<SkillState>()(
 
       setViewMode: (mode) => {
         set({ viewMode: mode });
+      },
+
+      setGalleryColumns: (mode) => {
+        set({ galleryColumns: mode });
       },
 
       setSearchQuery: (query) => {
@@ -1834,6 +1857,7 @@ Rules:
         }
         return {
           viewMode: state.viewMode,
+          galleryColumns: state.galleryColumns,
           filterType: state.filterType,
           storeView: state.storeView,
           selectedProjectId: state.selectedProjectId,

@@ -9,6 +9,7 @@ import {
 } from "../../services/skill-repo-sync";
 import type {
   CreateSkillParams,
+  SkillDeleteOptions,
   SkillSafetyScanInput,
   UpdateSkillParams,
 } from "@prompthub/shared/types";
@@ -187,47 +188,73 @@ export function registerSkillCrudHandlers({ db }: SkillIPCContext): void {
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.SKILL_DELETE, async (_, id: string) => {
-    if (typeof id !== "string" || id.trim().length === 0) {
-      throw new Error("skill:delete requires a non-empty id");
-    }
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_DELETE,
+    async (_, id: string, options?: SkillDeleteOptions) => {
+      if (typeof id !== "string" || id.trim().length === 0) {
+        throw new Error("skill:delete requires a non-empty id");
+      }
+      if (
+        options !== undefined &&
+        (!options || typeof options !== "object" || Array.isArray(options))
+      ) {
+        throw new Error("skill:delete options must be an object");
+      }
 
-    const skill = db.getById(id);
-    if (skill?.name) {
-      // Only uninstall SKILL.md from platforms, do NOT delete the source directory.
-      // Deletion from PromptHub should only clean PromptHub-managed files, never the original external source.
-      try {
-        const platforms = SkillInstaller.getSupportedPlatforms();
-        await Promise.allSettled(
-          platforms.map((platform) =>
-            SkillInstaller.uninstallSkillMdForSkill(skill, platform.id, [
+      const skill = db.getById(id);
+      if (skill?.name) {
+        // Only uninstall SKILL.md from platforms, do NOT delete the source directory.
+        // Deletion from PromptHub should only clean PromptHub-managed files, never the original external source.
+        try {
+          const platforms = SkillInstaller.getSupportedPlatforms();
+          const installDetails =
+            await SkillInstaller.getSkillMdInstallStatusDetailsForSkill(skill, [
               skill.name,
-            ]),
-          ),
-        );
-      } catch (error) {
-        console.warn(
-          `Failed to uninstall SKILL.md for skill "${skill.name}":`,
-          error,
-        );
-      }
-
-      try {
-        const managedContainerPath =
-          await SkillInstaller.getManagedContainerPathForSkill(skill);
-        if (await SkillInstaller.isManagedRepoPath(managedContainerPath)) {
-          await SkillInstaller.deleteManagedVariantContainer(skill);
+            ]);
+          const shouldRemoveCopyInstallations =
+            options?.removeCopyInstallations ?? true;
+          await Promise.allSettled(
+            platforms
+              .filter((platform) => {
+                const installStatus = installDetails[platform.id];
+                if (!installStatus?.installed) {
+                  return false;
+                }
+                if (installStatus.mode === "symlink") {
+                  return true;
+                }
+                return shouldRemoveCopyInstallations;
+              })
+              .map((platform) =>
+                SkillInstaller.uninstallSkillMdForSkill(skill, platform.id, [
+                  skill.name,
+                ]),
+              ),
+          );
+        } catch (error) {
+          console.warn(
+            `Failed to uninstall SKILL.md for skill "${skill.name}":`,
+            error,
+          );
         }
-      } catch (error) {
-        console.warn(
-          `Failed to delete managed repo container for skill "${skill.name}":`,
-          error,
-        );
-      }
-    }
 
-    return db.delete(id);
-  });
+        try {
+          const managedContainerPath =
+            await SkillInstaller.getManagedContainerPathForSkill(skill);
+          if (await SkillInstaller.isManagedRepoPath(managedContainerPath)) {
+            await SkillInstaller.deleteManagedVariantContainer(skill);
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to delete managed repo container for skill "${skill.name}":`,
+            error,
+          );
+        }
+      }
+
+      return db.delete(id);
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.SKILL_SCAN_LOCAL, async () =>
     SkillInstaller.scanLocal(db),

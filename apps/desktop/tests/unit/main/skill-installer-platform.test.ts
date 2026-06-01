@@ -40,6 +40,13 @@ const utilsMocks = vi.hoisted(() => ({
   validateMCPConfig: vi.fn(),
 }));
 
+const cherryStudioMocks = vi.hoisted(() => ({
+  getCherryStudioSkillStatus: vi.fn().mockResolvedValue(true),
+  installCherryStudioSkill: vi.fn().mockResolvedValue(undefined),
+  isCherryStudioPlatform: vi.fn((platformId: string) => platformId === "cherry-studio"),
+  uninstallCherryStudioSkill: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("fs/promises", () => fsMocks);
 
 vi.mock("../../../src/main/services/skill-installer-internal", () => ({
@@ -60,9 +67,17 @@ vi.mock("../../../src/main/services/skill-installer-utils", () => ({
   validateMCPConfig: utilsMocks.validateMCPConfig,
 }));
 
+vi.mock("../../../src/main/services/cherry-studio-skill-platform", () => ({
+  getCherryStudioSkillStatus: cherryStudioMocks.getCherryStudioSkillStatus,
+  installCherryStudioSkill: cherryStudioMocks.installCherryStudioSkill,
+  isCherryStudioPlatform: cherryStudioMocks.isCherryStudioPlatform,
+  uninstallCherryStudioSkill: cherryStudioMocks.uninstallCherryStudioSkill,
+}));
+
 import {
   getSupportedPlatforms,
   getSkillMdInstallStatusForSkill,
+  getSkillMdInstallStatusDetailsForSkill,
   installSkillMd,
   installSkillMdForSkill,
   installSkillMdSymlink,
@@ -74,6 +89,7 @@ describe("skill-installer-platform symlink install", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     utilsMocks.getCustomAgentPlatforms.mockReturnValue([]);
+    utilsMocks.getPlatformSkillsDir.mockReturnValue("/platform/skills");
     fsMocks.lstat.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
     fsMocks.mkdir.mockResolvedValue(undefined);
     fsMocks.cp.mockResolvedValue(undefined);
@@ -95,6 +111,22 @@ describe("skill-installer-platform symlink install", () => {
       "/platform/skills/demo-skill",
       expect.objectContaining({ recursive: true, filter: expect.any(Function) }),
     );
+  });
+
+  it("registers Cherry Studio installs through its database-backed adapter", async () => {
+    await installSkillMd(
+      "demo-skill",
+      "# skill",
+      "cherry-studio",
+      "/prompthub/skills/demo-skill",
+    );
+
+    expect(cherryStudioMocks.installCherryStudioSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cherry-studio" }),
+      "demo-skill",
+      "/prompthub/skills/demo-skill",
+    );
+    expect(fsMocks.cp).not.toHaveBeenCalled();
   });
 
   it("includes enabled custom agents in supported platforms", () => {
@@ -133,6 +165,27 @@ describe("skill-installer-platform symlink install", () => {
     expect(result).toEqual({
       requestedMode: "symlink",
       effectiveMode: "symlink",
+    });
+  });
+
+  it("falls back to copy semantics for Cherry Studio symlink requests because Cherry requires DB registration", async () => {
+    const result = await installSkillMdSymlink(
+      "demo-skill",
+      "# skill",
+      "cherry-studio",
+      "/prompthub/skills/demo-skill",
+    );
+
+    expect(cherryStudioMocks.installCherryStudioSkill).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cherry-studio" }),
+      "demo-skill",
+      "/prompthub/skills/demo-skill",
+    );
+    expect(fsMocks.symlink).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      requestedMode: "symlink",
+      effectiveMode: "copy",
+      fallbackReason: "Cherry Studio requires database registration",
     });
   });
 
@@ -288,6 +341,52 @@ describe("skill-installer-platform symlink install", () => {
     expect(Object.values(status).every(Boolean)).toBe(true);
   });
 
+  it("reports whether active platform installs are copies or symlinks", async () => {
+    internalMocks.fileExists.mockImplementation(async (target: string) => {
+      return (
+        target.endsWith("/.prompthub-platform-activations.json") ||
+        target.endsWith("/SKILL.md")
+      );
+    });
+    fsMocks.readFile = vi.fn(async () =>
+      JSON.stringify({
+        writer: {
+          skillId: "skill-a",
+          skillName: "writer",
+        },
+      }),
+    ) as any;
+    utilsMocks.getPlatformSkillsDir.mockImplementation((platform) =>
+      `/platform/${platform.id}/skills`,
+    );
+    fsMocks.lstat.mockImplementation(async (target: string) => {
+      if (target.includes("/claude/")) {
+        return {
+          isSymbolicLink: () => true,
+          isDirectory: () => false,
+          isFile: () => false,
+        };
+      }
+      return {
+        isSymbolicLink: () => false,
+        isDirectory: () => true,
+        isFile: () => false,
+      };
+    });
+
+    const status = await getSkillMdInstallStatusDetailsForSkill(
+      { id: "skill-a", name: "writer", source_id: "source-a" },
+      ["writer"],
+    );
+
+    expect(status.claude).toEqual({ installed: true, mode: "symlink" });
+    expect(
+      Object.values(status).some(
+        (entry) => entry.installed && entry.mode === "copy",
+      ),
+    ).toBe(true);
+  });
+
   it("uninstalls the shared logical platform directory and clears activation", async () => {
     internalMocks.fileExists.mockResolvedValue(true);
     fsMocks.readFile = vi.fn(async () =>
@@ -313,6 +412,38 @@ describe("skill-installer-platform symlink install", () => {
       "/platform/skills/.prompthub-platform-activations.json",
       expect.not.stringContaining('"writer"'),
       "utf-8",
+    );
+  });
+
+  it("removes the platform target for copy or symlink installs without deleting the PromptHub source", async () => {
+    internalMocks.fileExists.mockResolvedValue(true);
+    fsMocks.readFile = vi.fn(async () =>
+      JSON.stringify({
+        writer: {
+          skillId: "skill-a",
+          skillName: "writer",
+        },
+      }),
+    ) as any;
+
+    await uninstallSkillMdForSkill(
+      { id: "skill-a", name: "writer", source_id: "source-a" },
+      "claude",
+      ["writer"],
+    );
+
+    expect(fsMocks.rm).toHaveBeenCalledTimes(1);
+    expect(fsMocks.rm).toHaveBeenCalledWith(
+      "/platform/skills/writer",
+      { recursive: true, force: true },
+    );
+    expect(fsMocks.rm).not.toHaveBeenCalledWith(
+      "/prompthub/skills/skill-a",
+      expect.anything(),
+    );
+    expect(fsMocks.rm).not.toHaveBeenCalledWith(
+      "/prompthub/skills/writer",
+      expect.anything(),
     );
   });
 });

@@ -58,8 +58,10 @@ import { useSkillPlatform } from "./use-skill-platform";
 import { SkillVersionHistoryModal } from "./SkillVersionHistoryModal";
 import type { SkillSafetyReport } from "@prompthub/shared/types";
 import {
+  getDeployedProjectSkillTargets,
   getDeployableProjectTargetDirs,
   getMissingProjectTargetDirs,
+  type ProjectDeployedSkillTarget,
 } from "../../services/project-skill-targets";
 import {
   getSkillSafetyFindingTitle,
@@ -70,6 +72,8 @@ import { getRuntimeCapabilities } from "../../runtime";
 import type { Skill } from "@prompthub/shared/types";
 import type { SkillProject } from "@prompthub/shared/types";
 import type { ProjectDetailSkillContext } from "./project-detail-adapter";
+import { PlatformIcon } from "../ui/PlatformIcon";
+import { AgentSkillPreviewSidebar } from "./AgentSkillPreviewSidebar";
 
 const OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT = "open-create-skill-project-modal";
 
@@ -97,6 +101,13 @@ export type InstallMode = "copy" | "symlink";
 interface SkillFullDetailPageProps {
   overrideSkill?: Skill;
   projectContext?: ProjectDetailSkillContext | null;
+  agentContext?: {
+    installMode: "copy" | "symlink";
+    isManaged?: boolean;
+    platformId: string;
+    platformName: string;
+    sourcePath: string;
+  } | null;
   projectActions?: {
     isImporting?: boolean;
     isDeploying?: boolean;
@@ -106,11 +117,19 @@ interface SkillFullDetailPageProps {
     onImport?: () => void | Promise<void>;
     onRemoveFromProject?: () => void | Promise<void>;
   } | null;
+  agentActions?: {
+    isUninstalling?: boolean;
+    onOpenFolder?: () => void | Promise<void>;
+    onOpenManagedSkill?: () => void | Promise<void>;
+    onUninstall?: () => void | Promise<void>;
+  } | null;
   onBack?: () => void;
 }
 
 export function SkillFullDetailPage({
   overrideSkill,
+  agentActions,
+  agentContext,
   projectContext,
   projectActions,
   onBack,
@@ -136,6 +155,8 @@ export function SkillFullDetailPage({
     return skills.find((s) => s.id === selectedSkillId);
   }, [overrideSkill, skills, selectedSkillId]);
   const isProjectDetail = Boolean(projectContext);
+  const isAgentDetail = Boolean(agentContext);
+  const isExternalDetail = isProjectDetail || isAgentDetail;
 
   const [copyStatus, setCopyStatus] = useState<Record<string, boolean>>({});
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -169,6 +190,9 @@ export function SkillFullDetailPage({
     () => skillInstallMethod,
   );
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [pendingUninstallPlatform, setPendingUninstallPlatform] = useState<
+    string | null
+  >(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -181,6 +205,16 @@ export function SkillFullDetailPage({
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [isProjectDeploying, setIsProjectDeploying] = useState(false);
+  const [deleteCopyInstallations, setDeleteCopyInstallations] = useState(false);
+  const [projectDeleteDistributionSummary, setProjectDeleteDistributionSummary] =
+    useState({
+      hasCopy: false,
+      hasSymlink: false,
+    });
+  const [pendingProjectRemoval, setPendingProjectRemoval] = useState<{
+    project: SkillProject;
+    targets: ProjectDeployedSkillTarget[];
+  } | null>(null);
   const [projectDeployMode, setProjectDeployMode] = useState<InstallMode>(
     () => projectSkillImportModePreference,
   );
@@ -344,6 +378,85 @@ export function SkillFullDetailPage({
     setProjectSkillImportModePreference(mode);
   };
 
+  const getProjectDeployedTargets = (project: SkillProject) => {
+    if (!selectedSkill) {
+      return [];
+    }
+    const scannedSkills = projectScanState[project.id]?.scannedSkills ?? [];
+    return getDeployedProjectSkillTargets(
+      scannedSkills,
+      selectedSkill.name,
+      getProjectDeployTargets(project),
+    );
+  };
+
+  const requestRemoveFromProjectTargets = (
+    projectId: string,
+    targets: ProjectDeployedSkillTarget[],
+  ) => {
+    const project = skillProjects.find((entry) => entry.id === projectId);
+    if (!project || targets.length === 0) {
+      return;
+    }
+    setPendingProjectRemoval({ project, targets });
+  };
+
+  const getAllProjectDeployedTargets = () =>
+    skillProjects.flatMap((project) =>
+      getProjectDeployedTargets(project).map((target) => ({ project, target })),
+    );
+
+  const inspectProjectDeleteDistribution = async () => {
+    const targets = getAllProjectDeployedTargets();
+    if (targets.length === 0) {
+      return;
+    }
+    const statuses = await Promise.all(
+      targets.map(({ target }) => window.api.skill.getLocalPathStatus(target.localPath)),
+    );
+    setProjectDeleteDistributionSummary({
+      hasCopy: statuses.some((status) => status.exists && status.mode !== "symlink"),
+      hasSymlink: statuses.some(
+        (status) => status.exists && status.mode === "symlink",
+      ),
+    });
+  };
+
+  const confirmRemoveFromProjectTargets = async () => {
+    if (!pendingProjectRemoval) {
+      return;
+    }
+    const { project, targets } = pendingProjectRemoval;
+    setPendingProjectRemoval(null);
+    setIsProjectDeploying(true);
+    try {
+      await Promise.all(
+        targets.map((target) =>
+          window.api.skill.deleteLocalFileByPath(target.localPath, "."),
+        ),
+      );
+      showToast(
+        t("skill.projectRemoveDistributionSuccess", {
+          count: targets.length,
+          defaultValue: "Removed from {{count}} project folder(s).",
+        }),
+        "success",
+      );
+      await scanProjectSkills(project);
+      updateSkillProject(project.id, { lastScannedAt: Date.now() });
+    } catch (error) {
+      showToast(
+        t("skill.projectRemoveDistributionFailed", {
+          reason: getErrorMessage(error),
+          defaultValue: "Failed to remove project skill: {{reason}}",
+        }),
+        "error",
+      );
+    } finally {
+      setIsProjectDeploying(false);
+    }
+  };
+
   const targetLang = useMemo(() => {
     const lang = (i18n.language || "").toLowerCase();
     return lang.startsWith("zh")
@@ -448,7 +561,7 @@ export function SkillFullDetailPage({
         return;
       }
 
-      if (isProjectDetail) {
+      if (isExternalDetail) {
         try {
           const localSkillDirectory = normalizeLocalSkillDirectoryPath(
             selectedSkill.local_repo_path || selectedSkill.source_url || "",
@@ -505,7 +618,7 @@ export function SkillFullDetailPage({
     selectedSkill?.instructions,
     selectedSkill?.content,
     selectedSkill?.updated_at,
-    isProjectDetail,
+    isExternalDetail,
     syncSkillFromRepo,
   ]);
 
@@ -518,7 +631,7 @@ export function SkillFullDetailPage({
         return;
       }
 
-      if (isProjectDetail) {
+      if (isExternalDetail) {
         setTranslationSidecar(null);
         return;
       }
@@ -545,7 +658,7 @@ export function SkillFullDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [isProjectDetail, selectedSkill?.id, targetLang, translationMode]);
+  }, [isExternalDetail, selectedSkill?.id, targetLang, translationMode]);
 
   useEffect(() => {
     if (!selectedSkill || !resolvedSkillMdContent.trim()) {
@@ -572,7 +685,7 @@ export function SkillFullDetailPage({
   ]);
 
   useEffect(() => {
-    if (!selectedSkill || !autoScanInstalledSkills) {
+    if (!selectedSkill || !autoScanInstalledSkills || isAgentDetail) {
       return;
     }
 
@@ -622,12 +735,14 @@ export function SkillFullDetailPage({
     autoScanInstalledSkills,
     resolvedSkillMdContent,
     selectedSkill,
+    isAgentDetail,
   ]);
   const {
     availablePlatforms,
     batchInstall: installSelectedPlatforms,
     deselectAllPlatforms,
     installProgress,
+    installDetails: skillMdInstallDetails = {},
     installStatus: skillMdInstallStatus,
     isBatchInstalling,
     selectedPlatforms,
@@ -709,7 +824,18 @@ export function SkillFullDetailPage({
     }
   };
 
-  const uninstallFromPlatform = async (platformId: string) => {
+  const requestUninstallFromPlatform = (platformId: string) => {
+    setPendingUninstallPlatform(platformId);
+  };
+
+  const confirmUninstallFromPlatform = async () => {
+    if (!pendingUninstallPlatform) {
+      return;
+    }
+
+    const platformId = pendingUninstallPlatform;
+    setPendingUninstallPlatform(null);
+
     try {
       await uninstallSkillFromPlatform(platformId);
       showToast(t("skill.uninstallSuccess", "Uninstall successful"), "success");
@@ -723,6 +849,20 @@ export function SkillFullDetailPage({
   };
 
   if (!selectedSkill) return null;
+
+  const installedPlatformDetails = Object.values(skillMdInstallDetails).filter(
+    (status) => status.installed,
+  );
+  const hasCopyInstallations = installedPlatformDetails.some(
+    (status) => status.mode === "copy" || !status.mode,
+  ) || projectDeleteDistributionSummary.hasCopy;
+  const hasSymlinkInstallations = installedPlatformDetails.some(
+    (status) => status.mode === "symlink",
+  ) || projectDeleteDistributionSummary.hasSymlink;
+  const hasDistributedInstallations =
+    installedPlatformDetails.length > 0 ||
+    projectDeleteDistributionSummary.hasCopy ||
+    projectDeleteDistributionSummary.hasSymlink;
 
   const runSafetyScan = async () => {
     setIsScanningSafety(true);
@@ -786,15 +926,40 @@ export function SkillFullDetailPage({
   };
 
   const handleDelete = () => {
-    if (isProjectDetail) return;
+    if (isExternalDetail) return;
     if (!selectedSkill) return;
+    setDeleteCopyInstallations(false);
+    setProjectDeleteDistributionSummary({ hasCopy: false, hasSymlink: false });
     setIsDeleteConfirmOpen(true);
+    void inspectProjectDeleteDistribution().catch((error) => {
+      console.warn("Failed to inspect project distributions before delete:", error);
+    });
   };
 
   const confirmDelete = async () => {
-    if (isProjectDetail) return;
+    if (isExternalDetail) return;
     if (!selectedSkill) return;
-    await deleteSkill(selectedSkill.id);
+    const projectTargets = getAllProjectDeployedTargets();
+    const removableProjectTargets = await Promise.all(
+      projectTargets.map(async ({ target }) => {
+        const status = await window.api.skill.getLocalPathStatus(target.localPath);
+        if (!status.exists) {
+          return null;
+        }
+        if (status.mode === "symlink" || deleteCopyInstallations) {
+          return target;
+        }
+        return null;
+      }),
+    );
+    await Promise.all(
+      removableProjectTargets
+        .filter((target): target is ProjectDeployedSkillTarget => Boolean(target))
+        .map((target) => window.api.skill.deleteLocalFileByPath(target.localPath, ".")),
+    );
+    await deleteSkill(selectedSkill.id, {
+      removeCopyInstallations: deleteCopyInstallations,
+    });
     setIsDeleteConfirmOpen(false);
     selectSkill(null);
   };
@@ -827,7 +992,7 @@ export function SkillFullDetailPage({
         throw new Error("TRANSLATION_EMPTY");
       }
 
-      if (!isProjectDetail) {
+      if (!isExternalDetail) {
         const nextSidecar = await writeSkillTranslationSidecar({
           skillId: selectedSkill.id,
           sourceContent: resolvedSkillMdContent,
@@ -937,17 +1102,54 @@ export function SkillFullDetailPage({
                 <GlobeIcon className="w-3.5 h-3.5" />
                 {selectedSkill.author || t("skill.localStorage")}
               </div>
-              {!isProjectDetail ? (
+              {!isExternalDetail ? (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                   {t("skill.currentVersion", "Version")} v
                   {selectedSkill.currentVersion || 0}
+                </span>
+              ) : null}
+              {agentContext ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  <PlatformIcon platformId={agentContext.platformId} size={14} />
+                  {agentContext.platformName}
                 </span>
               ) : null}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!isProjectDetail ? (
+          {isAgentDetail && agentContext ? (
+            <>
+              {agentContext.isManaged ? (
+                <button
+                  onClick={() => void agentActions?.onOpenManagedSkill?.()}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                  title={t("skill.openInMySkills", "Open in My Skills")}
+                >
+                  <FolderOpenIcon className="h-4 w-4" />
+                  {t("skill.openInMySkills", "Open in My Skills")}
+                </button>
+              ) : null}
+              <button
+                onClick={() => void agentActions?.onOpenFolder?.()}
+                className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+                title={t("skill.openLocalSource", "Open Local Skill Folder")}
+              >
+                <FolderOpenIcon className="h-4 w-4" />
+                {t("common.open", "Open")}
+              </button>
+              <button
+                onClick={() => void agentActions?.onUninstall?.()}
+                disabled={agentActions?.isUninstalling}
+                className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 disabled:opacity-60"
+                title={t("common.uninstall", "Uninstall")}
+              >
+                <TrashIcon className="h-4 w-4" />
+                {t("common.uninstall", "Uninstall")}
+              </button>
+            </>
+          ) : null}
+          {!isExternalDetail ? (
             <>
               <button
                 onClick={openSnapshotModal}
@@ -1104,10 +1306,10 @@ export function SkillFullDetailPage({
           <div className="flex-1 flex flex-col app-wallpaper-panel min-h-0 overflow-hidden">
             <SkillFileEditor
               skillId={selectedSkill.id}
-              localPath={isProjectDetail ? selectedSkill.local_repo_path : undefined}
+              localPath={isExternalDetail ? selectedSkill.local_repo_path : undefined}
               skillName={selectedSkill.name}
               isOpen={true}
-              onSave={() => (isProjectDetail ? Promise.resolve() : loadSkills())}
+              onSave={() => (isExternalDetail ? Promise.resolve() : loadSkills())}
               onUnsavedChange={setFileEditorHasUnsavedChanges}
               mode="inline"
             />
@@ -1131,7 +1333,7 @@ export function SkillFullDetailPage({
                   translationMode={translationMode}
                 />
 
-                {!isProjectDetail ? (
+                {!isExternalDetail ? (
                   <div className="space-y-6">
                     <SkillPlatformPanel
                       availablePlatforms={availablePlatforms}
@@ -1143,6 +1345,8 @@ export function SkillFullDetailPage({
                       onBatchInstall={batchInstall}
                       onCreateProject={openCreateProjectModal}
                       onDeployToProjects={handleDeployToProjects}
+                      getProjectDeployedTargets={getProjectDeployedTargets}
+                      onRemoveFromProjectTargets={requestRemoveFromProjectTargets}
                       projectDeployMode={projectDeployMode}
                       projectSkillImportPreferencesByProjectId={
                         projectSkillImportPreferencesByProjectId
@@ -1159,11 +1363,11 @@ export function SkillFullDetailPage({
                       t={t}
                       togglePlatformSelection={togglePlatformSelection}
                       getProjectDeployTargets={getProjectDeployTargets}
-                      uninstallFromPlatform={uninstallFromPlatform}
+                      uninstallFromPlatform={requestUninstallFromPlatform}
                       uninstalledPlatforms={uninstalledPlatforms}
                     />
                   </div>
-                ) : (
+                ) : isProjectDetail ? (
                   <ProjectSkillPreviewSidebar
                     deployTargets={projectContext?.projectDeployTargets ?? []}
                     isDeploying={Boolean(projectActions?.isDeploying)}
@@ -1179,7 +1383,17 @@ export function SkillFullDetailPage({
                     sourcePath={selectedSkill.local_repo_path || selectedSkill.source_url || ""}
                     t={t}
                   />
-                )}
+                ) : agentContext ? (
+                  <AgentSkillPreviewSidebar
+                    installMode={agentContext.installMode}
+                    isManaged={agentContext.isManaged}
+                    onOpenFolder={agentActions?.onOpenFolder}
+                    platformId={agentContext.platformId}
+                    platformName={agentContext.platformName}
+                    sourcePath={agentContext.sourcePath}
+                    t={t}
+                  />
+                ) : null}
               </div>
             ) : (
               <SkillCodePane
@@ -1228,14 +1442,122 @@ export function SkillFullDetailPage({
               })}
             </p>
             <p className="text-xs text-muted-foreground/80">
+              {hasDistributedInstallations
+                ? t(
+                    "skill.deleteDistributedHint",
+                    "This removes the skill from PromptHub. Source files are preserved. Distributed symlinks will be removed because they point back to PromptHub.",
+                  )
+                : t(
+                    "skill.deleteSourceOnlyHint",
+                    "Only removes this skill from the PromptHub library. Source files are preserved.",
+                  )}
+            </p>
+            {hasSymlinkInstallations ? (
+              <p className="text-xs text-destructive">
+                {t(
+                  "skill.deleteSymlinkInstallationsHint",
+                  "Symlink distributions will be deleted directly.",
+                )}
+              </p>
+            ) : null}
+            {hasCopyInstallations ? (
+              <label className="flex items-start gap-2 rounded-xl border border-border bg-accent/30 p-3 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                  checked={deleteCopyInstallations}
+                  onChange={(event) =>
+                    setDeleteCopyInstallations(event.currentTarget.checked)
+                  }
+                />
+                <span>
+                  <span className="block font-medium text-foreground">
+                    {t(
+                      "skill.deleteCopyInstallationsLabel",
+                      "Also delete copied distributions",
+                    )}
+                  </span>
+                  <span className="mt-1 block text-muted-foreground">
+                    {t(
+                      "skill.deleteCopyInstallationsHelp",
+                      "Leave unchecked to keep copied Agent or project folders as detached copies.",
+                    )}
+                  </span>
+                </span>
+              </label>
+            ) : null}
+          </div>
+        }
+        confirmText={t("common.delete", "Delete")}
+        cancelText={t("common.cancel", "Cancel")}
+      />
+      <ConfirmDialog
+        isOpen={pendingProjectRemoval !== null}
+        onClose={() => setPendingProjectRemoval(null)}
+        onConfirm={() => {
+          void confirmRemoveFromProjectTargets();
+        }}
+        variant="destructive"
+        title={t("skill.confirmProjectRemoveTitle", "Remove from project")}
+        message={
+          <div className="space-y-2">
+            <p>
+              {t("skill.confirmProjectRemoveMessage", {
+                name: selectedSkill?.name || "",
+                project: pendingProjectRemoval?.project.name || "",
+                count: pendingProjectRemoval?.targets.length ?? 0,
+                defaultValue:
+                  "Remove {{name}} from {{count}} selected project folder(s) in {{project}}?",
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground/80">
               {t(
-                "skill.deleteHint",
-                "Only removes from PromptHub library. Source files are preserved. Platform installations will be uninstalled.",
+                "skill.projectRemoveDistributionHint",
+                "Copied project folders are deleted from the project. Symlink project folders remove only the link.",
               )}
             </p>
           </div>
         }
-        confirmText={t("common.delete", "Delete")}
+        confirmText={t("skill.removeFromProject", "Remove from Project")}
+        cancelText={t("common.cancel", "Cancel")}
+      />
+      <ConfirmDialog
+        isOpen={pendingUninstallPlatform !== null}
+        onClose={() => setPendingUninstallPlatform(null)}
+        onConfirm={() => {
+          void confirmUninstallFromPlatform();
+        }}
+        variant="destructive"
+        title={t("skill.confirmUninstallTitle", "Confirm Uninstall")}
+        message={
+          <div className="space-y-2">
+            <p>
+              {t(
+                "skill.confirmUninstallMessage",
+                "Are you sure you want to uninstall this skill from {{platform}}?",
+                {
+                  platform:
+                    availablePlatforms.find(
+                      (platform) => platform.id === pendingUninstallPlatform,
+                    )?.name || pendingUninstallPlatform || "",
+                },
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground/80">
+              {skillMdInstallDetails[pendingUninstallPlatform || ""]?.mode ===
+              "symlink"
+                ? t(
+                    "skill.platformUninstallSymlinkHint",
+                    "This removes the symlink from the selected platform. The PromptHub source stays in place.",
+                  )
+                : t(
+                    "skill.platformUninstallCopyHint",
+                    "This removes the copied skill folder from the selected platform.",
+                  )}
+            </p>
+          </div>
+        }
+        confirmText={t("skill.uninstall", "Uninstall")}
         cancelText={t("common.cancel", "Cancel")}
       />
       <ConfirmDialog

@@ -37,6 +37,37 @@ export function getMissingProjectTargetDirs(
   );
 }
 
+export interface ProjectDeployedSkillTarget {
+  targetDir: string;
+  localPath: string;
+}
+
+export function getDeployedProjectSkillTargets(
+  scannedSkills: ScannedSkill[],
+  skillName: string,
+  targetDirs: string[],
+): ProjectDeployedSkillTarget[] {
+  const expectedName = skillName.trim().toLowerCase();
+  const expectedTargetPaths = new Map(
+    targetDirs.map((targetDir) => [
+      normalizeProjectPathForComparison(getProjectTargetSkillPath(targetDir, skillName)),
+      targetDir,
+    ]),
+  );
+
+  return scannedSkills
+    .filter((skill) => skill.name.trim().toLowerCase() === expectedName)
+    .map((skill) => ({
+      skill,
+      normalizedPath: normalizeProjectPathForComparison(skill.localPath),
+    }))
+    .filter(({ normalizedPath }) => expectedTargetPaths.has(normalizedPath))
+    .map(({ skill, normalizedPath }) => ({
+      localPath: skill.localPath,
+      targetDir: expectedTargetPaths.get(normalizedPath) ?? skill.localPath,
+    }));
+}
+
 export function isProjectDeployTargetCompatible(
   sourcePath: string,
   skillName: string,

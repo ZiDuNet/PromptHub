@@ -85,7 +85,7 @@ export function SkillPreviewPane({
     <div className="lg:col-span-2 flex h-full min-h-0 flex-col overflow-hidden space-y-6">
       <section className="shrink-0 space-y-4">
         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] flex items-center gap-2">
-          {t("skill.skillDescription", "技能描述")}
+          {t("skill.skillDescription", "Skill 描述")}
         </h3>
         <div className="app-wallpaper-panel rounded-2xl border border-border p-5 space-y-4">
           <p className="text-sm text-foreground/90 leading-relaxed">

@@ -188,6 +188,7 @@ async function renderProjectDistribution(options?: {
   settingsState?: ReturnType<typeof createSettingsState>;
   showToast?: ReturnType<typeof vi.fn>;
   skipProjectTabClick?: boolean;
+  skillPlatformState?: Record<string, unknown>;
 }) {
   useToastMock.mockReturnValue({ showToast: options?.showToast ?? vi.fn() });
   useSkillPlatformMock.mockReturnValue({
@@ -200,6 +201,7 @@ async function renderProjectDistribution(options?: {
     }),
     deselectAllPlatforms: vi.fn(),
     installProgress: null,
+    installDetails: {},
     installStatus: {},
     isBatchInstalling: false,
     selectedPlatforms: new Set<string>(),
@@ -207,6 +209,7 @@ async function renderProjectDistribution(options?: {
     togglePlatformSelection: vi.fn(),
     uninstallFromPlatform: vi.fn().mockResolvedValue(undefined),
     uninstalledPlatforms: [{ id: "claude", name: "Claude Code" }],
+    ...(options?.skillPlatformState ?? {}),
   });
 
   useSkillStoreMock.mockImplementation(
@@ -272,6 +275,167 @@ describe("Skill detail project distribution", () => {
     ).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Workspace")).not.toBeInTheDocument();
     expect(setProjectSkillImportModePreference).not.toHaveBeenCalled();
+  });
+
+  it("requires confirmation before uninstalling a global platform skill", async () => {
+    const uninstallFromPlatform = vi.fn().mockResolvedValue(undefined);
+    const showToast = vi.fn();
+
+    await renderProjectDistribution({
+      showToast,
+      skipProjectTabClick: true,
+      skillPlatformState: {
+        installDetails: { claude: { installed: true, mode: "symlink" } },
+        installStatus: { claude: true },
+        uninstallFromPlatform,
+        uninstalledPlatforms: [],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+
+    expect(
+      screen.getByText(
+        "Are you sure you want to uninstall this skill from Claude Code?",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This removes the symlink from the selected platform. The PromptHub source stays in place.",
+      ),
+    ).toBeInTheDocument();
+    expect(uninstallFromPlatform).not.toHaveBeenCalled();
+
+    const uninstallButtons = screen.getAllByRole("button", { name: "Uninstall" });
+    fireEvent.click(uninstallButtons[uninstallButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(uninstallFromPlatform).toHaveBeenCalledWith("claude");
+      expect(showToast).toHaveBeenCalledWith(
+        "Uninstall successful",
+        "success",
+      );
+    });
+  });
+
+  it("does not mention distributed cleanup when deleting an undistributed skill", async () => {
+    await renderProjectDistribution({ skipProjectTabClick: true });
+
+    fireEvent.click(screen.getByTitle("Delete"));
+
+    expect(
+      screen.getByText(
+        "Only removes this skill from the PromptHub library. Source files are preserved.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Also delete copied distributions"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Symlink distributions will be deleted directly."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets users keep copied distributions when deleting from PromptHub", async () => {
+    const deleteSkill = vi.fn().mockResolvedValue(true);
+
+    await renderProjectDistribution({
+      skipProjectTabClick: true,
+      skillStoreState: createSkillStoreState({ deleteSkill }),
+      skillPlatformState: {
+        installDetails: { claude: { installed: true, mode: "copy" } },
+        installStatus: { claude: true },
+      },
+    });
+
+    fireEvent.click(screen.getByTitle("Delete"));
+
+    expect(
+      screen.getByText("Also delete copied distributions"),
+    ).toBeInTheDocument();
+
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(deleteSkill).toHaveBeenCalledWith(baseSkill.id, {
+        removeCopyInstallations: false,
+      });
+    });
+  });
+
+  it("warns that symlink distributions are deleted directly", async () => {
+    await renderProjectDistribution({
+      skipProjectTabClick: true,
+      skillPlatformState: {
+        installDetails: { claude: { installed: true, mode: "symlink" } },
+        installStatus: { claude: true },
+      },
+    });
+
+    fireEvent.click(screen.getByTitle("Delete"));
+
+    expect(
+      screen.getByText("Symlink distributions will be deleted directly."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Also delete copied distributions"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deletes project symlink distributions when deleting the PromptHub skill", async () => {
+    const deleteSkill = vi.fn().mockResolvedValue(true);
+    const deleteLocalFileByPath = vi.fn().mockResolvedValue(undefined);
+    window.api.skill.deleteLocalFileByPath = deleteLocalFileByPath;
+    window.api.skill.getLocalPathStatus = vi
+      .fn()
+      .mockResolvedValue({ exists: true, mode: "symlink" });
+
+    await renderProjectDistribution({
+      skipProjectTabClick: true,
+      skillStoreState: createSkillStoreState({
+        deleteSkill,
+        projectScanState: {
+          "project-1": {
+            scannedSkills: [
+              {
+                name: "write",
+                description: "Write better",
+                author: "Local",
+                tags: ["general"],
+                instructions: "# Write",
+                filePath: "/tmp/workspace/.agents/skills/write/SKILL.md",
+                localPath: "/tmp/workspace/.agents/skills/write",
+                platforms: ["Custom"],
+              },
+            ],
+            isScanning: false,
+            error: null,
+          },
+        },
+      }),
+    });
+
+    fireEvent.click(screen.getByTitle("Delete"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Symlink distributions will be deleted directly."),
+      ).toBeInTheDocument();
+    });
+
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(deleteLocalFileByPath).toHaveBeenCalledWith(
+        "/tmp/workspace/.agents/skills/write",
+        ".",
+      );
+      expect(deleteSkill).toHaveBeenCalledWith(baseSkill.id, {
+        removeCopyInstallations: false,
+      });
+    });
   });
 
   it("uses repo path and skip semantics when distributing from detail page", async () => {
@@ -407,6 +571,58 @@ describe("Skill detail project distribution", () => {
       );
     });
     expect(copyRepoByPathToDirectory).not.toHaveBeenCalled();
+  });
+
+  it("removes an already distributed project target from the detail page", async () => {
+    const deleteLocalFileByPath = vi.fn().mockResolvedValue(undefined);
+    const scanProjectSkills = vi.fn().mockResolvedValue([]);
+    window.api.skill.deleteLocalFileByPath = deleteLocalFileByPath;
+
+    await renderProjectDistribution({
+      skillStoreState: createSkillStoreState({
+        scanProjectSkills,
+        projectScanState: {
+          "project-1": {
+            scannedSkills: [
+              {
+                name: "write",
+                description: "Write better",
+                author: "Local",
+                tags: ["general"],
+                instructions: "# Write",
+                filePath: "/tmp/workspace/.agents/skills/write/SKILL.md",
+                localPath: "/tmp/workspace/.agents/skills/write",
+                platforms: ["Custom"],
+              },
+            ],
+            isScanning: false,
+            error: null,
+          },
+        },
+      }),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove from Project" }));
+    expect(
+      screen.getByText(
+        "Copied project folders are deleted from the project. Symlink project folders remove only the link.",
+      ),
+    ).toBeInTheDocument();
+
+    const removeButtons = screen.getAllByRole("button", {
+      name: "Remove from Project",
+    });
+    fireEvent.click(removeButtons[removeButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(deleteLocalFileByPath).toHaveBeenCalledWith(
+        "/tmp/workspace/.agents/skills/write",
+        ".",
+      );
+      expect(scanProjectSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "project-1" }),
+      );
+    });
   });
 
   it("warns instead of copying when the selected target is the source location", async () => {

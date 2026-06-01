@@ -4,11 +4,14 @@ import type {
   CreateSkillParams,
   MCPServerConfig,
   SkillPlatformInstallResult,
+  SkillPlatformInstallStatusMap,
   SkillSafetyReport,
   SkillSafetyScanInput,
   SkillFileSnapshot,
+  SkillPlatformScanResult,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
+  SkillLocalPathStatus,
   SkillMCPConfig,
   SkillVersion,
   UpdateSkillParams,
@@ -23,7 +26,8 @@ export const skillApi = {
   getAll: () => ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_ALL),
   update: (id: string, data: UpdateSkillParams) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_UPDATE, id, data),
-  delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.SKILL_DELETE, id),
+  delete: (id: string, options?: { removeCopyInstallations?: boolean }) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_DELETE, id, options),
   scanLocal: () => ipcRenderer.invoke(IPC_CHANNELS.SKILL_SCAN_LOCAL),
   scanLocalPreview: (
     customPaths?: string[],
@@ -70,6 +74,17 @@ export const skillApi = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_SUPPORTED_PLATFORMS),
   detectPlatforms: () =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_DETECT_PLATFORMS),
+  scanPlatformSkills: (platformId: string): Promise<SkillPlatformScanResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_SCAN_PLATFORM_SKILLS, platformId),
+  uninstallPlatformSkill: (
+    platformId: string,
+    platformSkillPath: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_UNINSTALL_PLATFORM_SKILL,
+      platformId,
+      platformSkillPath,
+    ),
   installMd: (skillId: string, skillMdContent: string, platformId: string) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_INSTALL_MD,
@@ -86,6 +101,10 @@ export const skillApi = {
       IPC_CHANNELS.SKILL_GET_MD_INSTALL_STATUS_BATCH,
       skillIds,
     ),
+  getMdInstallStatusDetails: (
+    skillId: string,
+  ): Promise<SkillPlatformInstallStatusMap> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_MD_INSTALL_STATUS_DETAILS, skillId),
   installMdSymlink: (
     skillId: string,
     skillMdContent: string,
@@ -185,6 +204,8 @@ export const skillApi = {
       localPath,
       relativePath,
     ),
+  getLocalPathStatus: (localPath: string): Promise<SkillLocalPathStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_GET_LOCAL_PATH_STATUS, localPath),
   createLocalDir: (skillId: string, relativePath: string) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_CREATE_LOCAL_DIR,

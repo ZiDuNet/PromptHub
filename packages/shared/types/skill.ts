@@ -1,4 +1,5 @@
 import type { AIProtocol } from './ai';
+import type { SkillPlatform } from '../constants/platforms';
 
 export type SkillVisibility = 'private' | 'shared';
 
@@ -288,6 +289,30 @@ export interface SkillPlatformInstallResult {
   fallbackReason?: string;
 }
 
+export interface SkillPlatformInstallStatus {
+  installed: boolean;
+  mode?: SkillInstallMode;
+}
+
+export type SkillPlatformInstallStatusMap = Record<
+  string,
+  SkillPlatformInstallStatus
+>;
+
+export interface SkillDeleteOptions {
+  /**
+   * Symlink distributions are always removed because they point back to the
+   * PromptHub-managed source. Copy distributions can be preserved as detached
+   * snapshots when this is false.
+   */
+  removeCopyInstallations?: boolean;
+}
+
+export interface SkillLocalPathStatus {
+  exists: boolean;
+  mode?: SkillInstallMode;
+}
+
 /**
  * Scanned local skill (not yet imported)
  * 扫描到的本地技能（尚未导入）
@@ -385,4 +410,20 @@ export interface ScannedSkill {
    * of such duplicates, so the UI should warn the user.
    */
   nameConflict?: boolean;
+}
+
+export interface AgentScannedSkill extends ScannedSkill {
+  /** How the skill folder is present in the agent/platform skills directory. */
+  installMode: SkillInstallMode;
+  /**
+   * Absolute path to the concrete platform skill folder that should be removed
+   * when uninstalling this agent-local skill.
+   */
+  platformSkillPath: string;
+}
+
+export interface SkillPlatformScanResult {
+  platform: SkillPlatform;
+  skillsDir: string;
+  scannedSkills: AgentScannedSkill[];
 }

@@ -49,8 +49,6 @@ function normalizeStringArray(value: unknown): string[] {
   return [];
 }
 
-const MAX_STAGGERED_ROWS = 12;
-
 // Estimated row height for the virtualizer. Real heights are measured via
 // `measureElement` once a row is rendered so the scrollbar stays accurate.
 // Rows are intentionally compact; user/source tags share one metadata line.
@@ -197,21 +195,13 @@ export function SkillListView({
       );
       setPlatformStatuses(nextStatuses);
 
-      const missingSkillIds = Array.from(
-        new Set(
-          skills
-            .map((skill) => skill.id)
-            .filter((skillId) => !skillPlatformStatusCache.has(skillId)),
-        ),
+      const skillIdsToRefresh = Array.from(
+        new Set(skills.map((skill) => skill.id)),
       );
-
-      if (missingSkillIds.length === 0) {
-        return;
-      }
 
       try {
         const statusBySkillId = (await window.api.skill.getMdInstallStatusBatch(
-          missingSkillIds,
+          skillIdsToRefresh,
         )) as Record<string, unknown>;
 
         for (const [skillId, status] of Object.entries(statusBySkillId)) {
@@ -284,10 +274,10 @@ export function SkillListView({
         </div>
         <h3 className="text-xl font-semibold text-foreground mb-2">
           {isDistributionView
-            ? t("skill.noSkills", "暂无技能")
+            ? t("skill.noSkills", "暂无 Skill")
             : filterType === "favorites"
-              ? t("skill.noFavorites", "暂无收藏技能")
-              : t("skill.noSkills", "暂无技能")}
+              ? t("skill.noFavorites", "暂无收藏 Skill")
+              : t("skill.noSkills", "暂无 Skill")}
         </h3>
         <p className="text-sm opacity-70 mb-8 max-w-sm text-center">
           {webSkillLibraryMode
@@ -301,10 +291,10 @@ export function SkillListView({
                   "先导入 skill，再在这里安装、同步或卸载到 Claude、Cursor 等平台。",
                 )
               : filterType === "favorites"
-                ? t("skill.noFavoritesHint", "点击技能卡片上的星标添加收藏")
+                ? t("skill.noFavoritesHint", "点击 Skill 卡片上的星标添加收藏")
                 : t(
                     "skill.noSkillsHint",
-                    "从 Skill 商店添加、扫描本地环境或手动创建技能开始使用",
+                    "从 Skill 商店添加、扫描本地环境或手动创建 Skill 开始使用",
                   )}
         </p>
       </div>
@@ -371,9 +361,8 @@ export function SkillListView({
                 left: 0,
                 width: "100%",
                 transform: `translateY(${virtualRow.start}px)`,
-                animationDelay: `${Math.min(virtualRow.index, MAX_STAGGERED_ROWS) * 30}ms`,
               }}
-              className={`group flex min-h-[72px] items-center gap-3 px-5 py-3 cursor-pointer transition-all animate-in fade-in slide-in-from-left-2 ${
+              className={`group flex min-h-[72px] items-center gap-3 px-5 py-3 cursor-pointer transition-colors ${
                 isFirstRow ? "" : "border-t border-border"
               } ${
                 selectionMode && isChecked

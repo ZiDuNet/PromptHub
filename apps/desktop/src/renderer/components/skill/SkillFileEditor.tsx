@@ -250,7 +250,11 @@ export function SkillFileEditor({
   const writeFile = useCallback(
     async (relativePath: string, content: string) => {
       if (localPath) {
-        return window.api.skill.writeLocalFileByPath(localPath, relativePath, content);
+        return window.api.skill.writeLocalFileByPath(
+          localPath,
+          relativePath,
+          content,
+        );
       }
       return window.api.skill.writeLocalFile(skillId, relativePath, content);
     },
@@ -312,10 +316,7 @@ export function SkillFileEditor({
         visibleEntries.find((entry) => !entry.isDirectory)?.path ||
         null;
       setSelectedFile((current) => {
-        if (
-          current &&
-          visibleEntries.some((entry) => entry.path === current)
-        ) {
+        if (current && visibleEntries.some((entry) => entry.path === current)) {
           return current;
         }
         return firstFile;
@@ -415,15 +416,18 @@ export function SkillFileEditor({
     setModifiedFiles({});
   }, []);
 
-  const runWithUnsavedChangesCheck = useCallback((action: () => void) => {
-    if (!hasAnyUnsaved) {
-      action();
-      return;
-    }
+  const runWithUnsavedChangesCheck = useCallback(
+    (action: () => void) => {
+      if (!hasAnyUnsaved) {
+        action();
+        return;
+      }
 
-    setPendingUnsavedAction(() => action);
-    setIsUnsavedDialogOpen(true);
-  }, [hasAnyUnsaved]);
+      setPendingUnsavedAction(() => action);
+      setIsUnsavedDialogOpen(true);
+    },
+    [hasAnyUnsaved],
+  );
 
   const loadSelectedFileContent = useCallback(
     async (path: string) => {
@@ -555,14 +559,7 @@ export function SkillFileEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [
-    modifiedFiles,
-    onSave,
-    selectedFile,
-    showToast,
-    t,
-    writeFile,
-  ]);
+  }, [modifiedFiles, onSave, selectedFile, showToast, t, writeFile]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -638,7 +635,14 @@ export function SkillFileEditor({
       console.error("Failed to create file:", error);
       showToast(`Failed to create file: ${String(error)}`, "error");
     }
-  }, [createDir, createParentPath, dialogInput, loadFiles, showToast, writeFile]);
+  }, [
+    createDir,
+    createParentPath,
+    dialogInput,
+    loadFiles,
+    showToast,
+    writeFile,
+  ]);
 
   // New folder
   const handleNewFolder = useCallback(async () => {
@@ -762,7 +766,8 @@ export function SkillFileEditor({
   // Open in system file manager
   const handleOpenInExplorer = useCallback(async () => {
     try {
-      const repoPath = localPath ?? (await window.api.skill.getRepoPath(skillId));
+      const repoPath =
+        localPath ?? (await window.api.skill.getRepoPath(skillId));
       if (!repoPath) {
         showToast(t("skill.noLocalRepo", "No local repository found"), "error");
         return;
@@ -791,6 +796,8 @@ export function SkillFileEditor({
       return (
         <div key={node.path}>
           <button
+            type="button"
+            aria-expanded={isExpanded}
             className={`skill-file-editor__tree-item skill-file-editor__tree-item--directory ${depthClass}`}
             onClick={() => toggleDir(node.path)}
             onContextMenu={(event) => {
@@ -1217,7 +1224,9 @@ export function SkillFileEditor({
                 className="skill-file-editor__context-item"
                 onClick={() => {
                   const currentName =
-                    contextMenu.path?.split("/").pop() || contextMenu.path || "";
+                    contextMenu.path?.split("/").pop() ||
+                    contextMenu.path ||
+                    "";
                   setDialogInput(currentName);
                   setRenameDialogPath(contextMenu.path);
                   setContextMenu(null);
@@ -1276,7 +1285,9 @@ export function SkillFileEditor({
                 className="skill-file-editor__context-item"
                 onClick={() => {
                   const currentName =
-                    contextMenu.path?.split("/").pop() || contextMenu.path || "";
+                    contextMenu.path?.split("/").pop() ||
+                    contextMenu.path ||
+                    "";
                   setDialogInput(currentName);
                   setRenameDialogPath(contextMenu.path);
                   setContextMenu(null);

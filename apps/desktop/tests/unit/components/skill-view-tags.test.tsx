@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SkillGalleryCard } from "../../../src/renderer/components/skill/SkillGalleryCard";
@@ -225,6 +225,33 @@ describe("skill view tags", () => {
     expect(screen.queryByText("extra")).not.toBeInTheDocument();
   });
 
+  it("does not animate virtualized list rows on mount", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([]),
+          detectPlatforms: vi.fn().mockResolvedValue([]),
+          getMdInstallStatusBatch: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillListView skills={[baseSkill as any]} onQuickInstall={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    const row = screen.getByText("Writer Helper").closest('[data-index="0"]');
+
+    expect(row).not.toBeNull();
+    expect(row).not.toHaveClass("animate-in");
+    expect(row).not.toHaveClass("fade-in");
+    expect(row).not.toHaveClass("slide-in-from-left-2");
+    expect(row).not.toHaveStyle({ animationDelay: "0ms" });
+  });
+
   it("shows local badges in list view rows", async () => {
     installWindowMocks({
       api: {
@@ -252,6 +279,58 @@ describe("skill view tags", () => {
     });
 
     expect(screen.getByText("Local Import")).toBeInTheDocument();
+  });
+
+  it("refreshes stale platform status for an already-rendered skill row", async () => {
+    const getMdInstallStatusBatch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        "skill-status-refresh": { claude: false },
+      })
+      .mockResolvedValueOnce({
+        "skill-status-refresh": { claude: true },
+      });
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi
+            .fn()
+            .mockResolvedValue([{ id: "claude", name: "Claude Code" }]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+          getMdInstallStatusBatch,
+        },
+      },
+    });
+    const rowSkill = {
+      ...baseSkill,
+      id: "skill-status-refresh",
+      name: "Status Refresh",
+    };
+
+    const view = await renderWithI18n(
+      <SkillListView skills={[rowSkill as any]} onQuickInstall={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTitle("Claude Code: Not installed"),
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      view.rerender(
+        <SkillListView
+          skills={[{ ...rowSkill } as any]}
+          onQuickInstall={vi.fn()}
+        />,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Claude Code: Installed")).toBeInTheDocument();
+    });
+    expect(getMdInstallStatusBatch).toHaveBeenCalledTimes(2);
   });
 
   it("distinguishes project imports from local imports", async () => {

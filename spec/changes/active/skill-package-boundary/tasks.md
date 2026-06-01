@@ -24,5 +24,11 @@
 - [x] Add large-package prompt budget and truncation tests.
 - [x] Add real filesystem symlink escape filtering coverage for safety scan.
 - [x] Add batch installed scan test proving renderer store passes `local_repo_path` to main safety scan.
+- [x] Add UI regression tests for official unopened store count/search consistency.
+- [x] Add UI regression test for stale installed platform status in rendered Skill list rows.
+- [x] Add UI regression test for expanding nested synthetic package folders in the Skill file browser.
+- [x] Fix official unopened store count/search consistency across Sidebar, TopBar, and store catalog behavior.
+- [x] Fix rendered Skill list platform status refresh after install state changes.
+- [x] Fix package file browser directory buttons so nested folders expose and toggle expansion state.
 - [x] Strengthen project TDD and coverage rules to require 100% line/function/branch/condition coverage for new and changed production code.
 - [x] Sync final behavior back to stable docs after implementation.

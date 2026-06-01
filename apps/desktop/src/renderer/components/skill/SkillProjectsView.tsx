@@ -1749,6 +1749,20 @@ export function SkillProjectsView() {
                                 {t("skill.addToLibrary", "Import to My Skills")}
                               </button>
                             )}
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveProjectSkill(scannedSkill)}
+                              disabled={isRemovingPath === scannedSkill.localPath}
+                              aria-label={t("skill.removeFromProject", "Remove from Project")}
+                              title={`${t("skill.removeFromProject", "Remove from Project")}: ${scannedSkill.name}`}
+                              className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+                            >
+                              {isRemovingPath === scannedSkill.localPath ? (
+                                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <TrashIcon className="h-3.5 w-3.5" />
+                              )}
+                            </button>
                           </div>
                         </article>
                       );

@@ -32,6 +32,10 @@ export interface SkillStats {
   uniqueUserTags: string[];
 }
 
+function isSkillDeployed(skill: Skill, deployedSkillNames: Set<string>): boolean {
+  return deployedSkillNames.has(skill.id) || deployedSkillNames.has(skill.name);
+}
+
 export function buildSkillStats(
   skills: Skill[],
   deployedSkillNames: Set<string>,
@@ -42,7 +46,7 @@ export function buildSkillStats(
 
   for (const skill of skills) {
     if (skill.is_favorite) favoriteCount++;
-    if (deployedSkillNames.has(skill.id)) {
+    if (isSkillDeployed(skill, deployedSkillNames)) {
       deployedCount++;
     }
 

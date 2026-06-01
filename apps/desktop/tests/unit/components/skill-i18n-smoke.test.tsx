@@ -132,7 +132,9 @@ function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {})
     filterType: "all",
     searchQuery: "",
     viewMode: "gallery",
+    galleryColumns: "auto",
     setViewMode: vi.fn(),
+    setGalleryColumns: vi.fn(),
     storeView: "my-skills",
     setStoreView: vi.fn(),
     storeCategory: "all",
@@ -344,6 +346,22 @@ describe("skill i18n smoke", () => {
     expect(screen.getByRole("button", { name: "Batch Deploy" })).toBeInTheDocument();
   });
 
+  it("lets users choose the skill gallery card column count", async () => {
+    const setGalleryColumns = vi.fn();
+    const skillStoreState = createSkillStoreState({ setGalleryColumns });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+
+    render(<SkillManager />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Skill card columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "6 columns" }));
+
+    expect(setGalleryColumns).toHaveBeenCalledWith("6");
+  });
+
   it("shows an update pulse for store-installed skills when a remote store version is newer", async () => {
     const skillStoreState = createSkillStoreState({
       remoteStoreEntries: {
@@ -537,12 +555,12 @@ describe("skill i18n smoke", () => {
     expect(advancedSettings).not.toBeNull();
     expect(
       within(advancedSettings as HTMLElement).getByRole("button", {
-        name: /^Copy Copy a standalone snapshot/,
+        name: /^Copy$/,
       }),
     ).toBeInTheDocument();
     expect(
       within(advancedSettings as HTMLElement).getByRole("button", {
-        name: /^Symlink Link the project folder/,
+        name: /^Symlink$/,
       }),
     ).toBeInTheDocument();
     expect(

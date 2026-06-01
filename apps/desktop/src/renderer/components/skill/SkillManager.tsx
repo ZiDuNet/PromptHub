@@ -28,7 +28,10 @@ import {
 } from "lucide-react";
 import { SkillGalleryCard } from "./SkillGalleryCard";
 import { SkillRenderBoundary } from "./SkillRenderBoundary";
-import { useSkillStore } from "../../stores/skill.store";
+import {
+  useSkillStore,
+  type SkillGalleryColumnMode,
+} from "../../stores/skill.store";
 import {
   DEFAULT_SKILL_LIST_PAGE_SIZE,
   SKILL_LIST_PAGE_SIZE_OPTIONS,
@@ -37,8 +40,13 @@ import {
 import { SkillQuickInstall } from "./SkillQuickInstall";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { ContextMenu, type ContextMenuItem } from "../ui/ContextMenu";
+import { Select, type SelectOption } from "../ui/Select";
 import { useToast } from "../ui/Toast";
-import type { Skill, ScannedSkill } from "@prompthub/shared/types";
+import type {
+  Skill,
+  ScannedSkill,
+  SkillPlatformInstallStatusMap,
+} from "@prompthub/shared/types";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
 import { getRuntimeCapabilities } from "../../runtime";
@@ -47,6 +55,36 @@ import { deriveSkillScanPathsFromCustomAgents } from "../../services/agent-root-
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
+const SKILL_GALLERY_AUTO_MIN_WIDTH_PX = 280;
+const SKILL_GALLERY_MANUAL_MIN_WIDTH_PX = 240;
+const SKILL_GALLERY_COLUMNS: SkillGalleryColumnMode[] = [
+  "auto",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+];
+
+function getSkillGalleryGridStyle(
+  columns: SkillGalleryColumnMode,
+): React.CSSProperties {
+  if (columns === "auto") {
+    return {
+      gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${SKILL_GALLERY_AUTO_MIN_WIDTH_PX}px), 1fr))`,
+    };
+  }
+
+  const columnCount = Number(columns);
+  const totalGapRem = columnCount - 1;
+
+  return {
+    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, max(${SKILL_GALLERY_MANUAL_MIN_WIDTH_PX}px, calc((100% - ${totalGapRem}rem) / ${columnCount}))), 1fr))`,
+  };
+}
+
 // Lazy load list view for better performance
 // 懒加载列表视图以提升性能
 const SkillListView = lazy(() =>
@@ -63,6 +101,9 @@ const SkillStore = lazy(() =>
 const SkillProjectsView = lazy(() =>
   import("./SkillProjectsView").then((m) => ({ default: m.SkillProjectsView })),
 );
+const SkillAgentsView = lazy(() =>
+  import("./SkillAgentsView").then((m) => ({ default: m.SkillAgentsView })),
+);
 const SkillScanPreview = lazy(() =>
   import("./SkillScanPreview").then((m) => ({ default: m.SkillScanPreview })),
 );
@@ -76,6 +117,18 @@ const SkillBatchTagDialog = lazy(() =>
     default: m.SkillBatchTagDialog,
   })),
 );
+
+interface DeleteDistributionSummary {
+  hasDistribution: boolean;
+  hasCopy: boolean;
+  hasSymlink: boolean;
+}
+
+const EMPTY_DELETE_DISTRIBUTION_SUMMARY: DeleteDistributionSummary = {
+  hasDistribution: false,
+  hasCopy: false,
+  hasSymlink: false,
+};
 
 function normalizeDroppedSkillPath(filePath: string): string {
   const normalizedPath = filePath.replace(/\\/g, "/").trim();
@@ -102,6 +155,30 @@ function hasFileItems(dataTransfer: DataTransfer): boolean {
   return Array.from(dataTransfer.items).some((item) => item.kind === "file");
 }
 
+function summarizeInstallDetails(
+  details: SkillPlatformInstallStatusMap,
+): DeleteDistributionSummary {
+  const installed = Object.values(details).filter((status) => status.installed);
+  return {
+    hasDistribution: installed.length > 0,
+    hasCopy: installed.some((status) => status.mode === "copy" || !status.mode),
+    hasSymlink: installed.some((status) => status.mode === "symlink"),
+  };
+}
+
+function mergeDeleteDistributionSummaries(
+  summaries: DeleteDistributionSummary[],
+): DeleteDistributionSummary {
+  return summaries.reduce(
+    (merged, summary) => ({
+      hasDistribution: merged.hasDistribution || summary.hasDistribution,
+      hasCopy: merged.hasCopy || summary.hasCopy,
+      hasSymlink: merged.hasSymlink || summary.hasSymlink,
+    }),
+    EMPTY_DELETE_DISTRIBUTION_SUMMARY,
+  );
+}
+
 export function SkillManager() {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -116,7 +193,11 @@ export function SkillManager() {
   const filterType = useSkillStore((state) => state.filterType);
   const searchQuery = useSkillStore((state) => state.searchQuery);
   const viewMode = useSkillStore((state) => state.viewMode);
+  const galleryColumns = useSkillStore((state) => state.galleryColumns);
   const setViewMode = useSkillStore((state) => state.setViewMode);
+  const setGalleryColumns = useSkillStore(
+    (state) => state.setGalleryColumns,
+  );
   const storeView = useSkillStore((state) => state.storeView);
   const setStoreView = useSkillStore((state) => state.setStoreView);
   const setFilterType = useSkillStore((state) => state.setFilterType);
@@ -136,6 +217,24 @@ export function SkillManager() {
     ? storedSkillListPageSize
     : DEFAULT_SKILL_LIST_PAGE_SIZE;
   const runtimeCapabilities = getRuntimeCapabilities();
+  const galleryColumnOptions = useMemo<SelectOption[]>(
+    () =>
+      SKILL_GALLERY_COLUMNS.map((columns) => ({
+        value: columns,
+        label:
+          columns === "auto"
+            ? t("skill.galleryColumnsAuto", "Auto")
+            : t("skill.galleryColumnsCount", {
+                count: Number(columns),
+                defaultValue: "{{count}} columns",
+              }),
+      })),
+    [t],
+  );
+  const skillGalleryGridStyle = useMemo(
+    () => getSkillGalleryGridStyle(galleryColumns ?? "auto"),
+    [galleryColumns],
+  );
   const webSkillLibraryMode =
     !runtimeCapabilities.skillDistribution && !runtimeCapabilities.skillStore;
   const effectiveStoreView = webSkillLibraryMode ? "my-skills" : storeView;
@@ -238,7 +337,15 @@ export function SkillManager() {
     isOpen: boolean;
     skillIds: string[];
     skillNames: string[];
-  }>({ isOpen: false, skillIds: [], skillNames: [] });
+    removeCopyInstallations: boolean;
+    distributionSummary: DeleteDistributionSummary;
+  }>({
+    isOpen: false,
+    skillIds: [],
+    skillNames: [],
+    removeCopyInstallations: false,
+    distributionSummary: EMPTY_DELETE_DISTRIBUTION_SUMMARY,
+  });
 
   const handleScanLocal = async (customPaths?: string[]) => {
     if (!runtimeCapabilities.skillLocalScan) {
@@ -459,6 +566,20 @@ export function SkillManager() {
     );
   }
 
+  if (runtimeCapabilities.skillLocalScan && effectiveStoreView === "agents") {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <SkillAgentsView />
+      </Suspense>
+    );
+  }
+
   // If a skill is selected, show full detail page (same behavior for both gallery and list views)
   // 如果选中了技能，显示全宽详情页（画廊和列表视图使用相同交互）
   if (selectedSkillId && !isSelectionMode) {
@@ -532,11 +653,10 @@ export function SkillManager() {
 
   const handleBatchDelete = async () => {
     if (selectedSkills.length === 0) return;
-    setDeleteConfirm({
-      isOpen: true,
-      skillIds: selectedSkills.map((s) => s.id),
-      skillNames: selectedSkills.map((s) => s.name),
-    });
+    await openDeleteConfirm(
+      selectedSkills.map((s) => s.id),
+      selectedSkills.map((s) => s.name),
+    );
   };
 
   const handleBatchDeploy = () => {
@@ -588,6 +708,46 @@ export function SkillManager() {
     setShowBatchTagDialog(true);
   };
 
+  const openDeleteConfirm = async (skillIds: string[], skillNames: string[]) => {
+    const fallbackSummary: DeleteDistributionSummary = {
+      hasDistribution: skillIds.some((id) => deployedSkillNames.has(id)),
+      hasCopy: skillIds.some((id) => deployedSkillNames.has(id)),
+      hasSymlink: false,
+    };
+
+    setDeleteConfirm({
+      isOpen: true,
+      skillIds,
+      skillNames,
+      removeCopyInstallations: false,
+      distributionSummary: fallbackSummary,
+    });
+
+    try {
+      const summaries = await Promise.all(
+        skillIds.map(async (skillId) =>
+          summarizeInstallDetails(
+            await window.api.skill.getMdInstallStatusDetails(skillId),
+          ),
+        ),
+      );
+      setDeleteConfirm((current) => {
+        if (
+          !current.isOpen ||
+          current.skillIds.join("\n") !== skillIds.join("\n")
+        ) {
+          return current;
+        }
+        return {
+          ...current,
+          distributionSummary: mergeDeleteDistributionSummaries(summaries),
+        };
+      });
+    } catch (error) {
+      console.warn("Failed to inspect skill distribution before delete:", error);
+    }
+  };
+
   const handleBatchTagSubmit = async (tag: string, mode: SkillBatchTagMode) => {
     const results = await Promise.allSettled(
       selectedSkills.map(async (skill) => {
@@ -633,9 +793,17 @@ export function SkillManager() {
 
   const confirmDelete = async () => {
     for (const id of deleteConfirm.skillIds) {
-      await deleteSkill(id);
+      await deleteSkill(id, {
+        removeCopyInstallations: deleteConfirm.removeCopyInstallations,
+      });
     }
-    setDeleteConfirm({ isOpen: false, skillIds: [], skillNames: [] });
+    setDeleteConfirm({
+      isOpen: false,
+      skillIds: [],
+      skillNames: [],
+      removeCopyInstallations: false,
+      distributionSummary: EMPTY_DELETE_DISTRIBUTION_SUMMARY,
+    });
     setSelectedSkillIds(new Set());
     setIsSelectionMode(false);
   };
@@ -785,12 +953,7 @@ export function SkillManager() {
         label: t("common.delete", "Delete"),
         icon: <TrashIcon className="w-4 h-4" />,
         variant: "destructive",
-        onClick: () =>
-          setDeleteConfirm({
-            isOpen: true,
-            skillIds: [skill.id],
-            skillNames: [skill.name],
-          }),
+        onClick: () => void openDeleteConfirm([skill.id], [skill.name]),
       },
     ];
   })();
@@ -907,6 +1070,21 @@ export function SkillManager() {
                     <ListIcon className="w-4 h-4" />
                   </button>
                 </div>
+                {viewMode === "gallery" && (
+                  <Select
+                    ariaLabel={t(
+                      "skill.galleryColumnsLabel",
+                      "Skill card columns",
+                    )}
+                    value={galleryColumns ?? "auto"}
+                    onChange={(value) =>
+                      setGalleryColumns(value as SkillGalleryColumnMode)
+                    }
+                    options={galleryColumnOptions}
+                    className="w-[118px]"
+                    triggerClassName="h-10 w-full rounded-lg border border-border app-wallpaper-surface px-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between gap-2"
+                  />
+                )}
                 {runtimeCapabilities.skillLocalScan && (
                   <>
                     <div className="h-4 w-px bg-border" />
@@ -1057,11 +1235,7 @@ export function SkillManager() {
                 onDropTag={(skill, tag) => void handleAddTagToSkill(skill, tag)}
                 onQuickInstall={setQuickInstallSkill}
                 onRequestDelete={(id, name) =>
-                  setDeleteConfirm({
-                    isOpen: true,
-                    skillIds: [id],
-                    skillNames: [name],
-                  })
+                  void openDeleteConfirm([id], [name])
                 }
                 selectionMode={isSelectionMode}
                 selectedSkillIds={selectedSkillIds}
@@ -1086,7 +1260,7 @@ export function SkillManager() {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                <div className="grid gap-4" style={skillGalleryGridStyle}>
                   {visibleSkills.map((skill, index) => {
                     const isSelected = selectedSkillIds.has(skill.id);
 
@@ -1101,11 +1275,10 @@ export function SkillManager() {
                         isSelected={isSelected}
                         isSelectionMode={isSelectionMode}
                         onDelete={(selectedSkill) =>
-                          setDeleteConfirm({
-                            isOpen: true,
-                            skillIds: [selectedSkill.id],
-                            skillNames: [selectedSkill.name],
-                          })
+                          void openDeleteConfirm(
+                            [selectedSkill.id],
+                            [selectedSkill.name],
+                          )
                         }
                         onContextMenu={handleContextMenu}
                         onDropTag={(selectedSkill, tag) =>
@@ -1254,7 +1427,13 @@ export function SkillManager() {
       <ConfirmDialog
         isOpen={deleteConfirm.isOpen}
         onClose={() =>
-          setDeleteConfirm({ isOpen: false, skillIds: [], skillNames: [] })
+          setDeleteConfirm({
+            isOpen: false,
+            skillIds: [],
+            skillNames: [],
+            removeCopyInstallations: false,
+            distributionSummary: EMPTY_DELETE_DISTRIBUTION_SUMMARY,
+          })
         }
         onConfirm={confirmDelete}
         variant="destructive"
@@ -1273,11 +1452,53 @@ export function SkillManager() {
                   })}
             </p>
             <p className="text-xs text-muted-foreground/80">
-              {t(
-                "skill.deleteHint",
-                "This will only remove them from the PromptHub library without deleting the source directory. Any platform distributions will also be uninstalled.",
-              )}
+              {deleteConfirm.distributionSummary.hasDistribution
+                ? t(
+                    "skill.deleteDistributedHint",
+                    "This removes the skill from PromptHub. Source files are preserved. Distributed symlinks will be removed because they point back to PromptHub.",
+                  )
+                : t(
+                    "skill.deleteSourceOnlyHint",
+                    "Only removes this skill from the PromptHub library. Source files are preserved.",
+                  )}
             </p>
+            {deleteConfirm.distributionSummary.hasSymlink ? (
+              <p className="text-xs text-destructive">
+                {t(
+                  "skill.deleteSymlinkInstallationsHint",
+                  "Symlink distributions will be deleted directly.",
+                )}
+              </p>
+            ) : null}
+            {deleteConfirm.distributionSummary.hasCopy ? (
+              <label className="flex items-start gap-2 rounded-xl border border-border bg-accent/30 p-3 text-xs">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                  checked={deleteConfirm.removeCopyInstallations}
+                  onChange={(event) =>
+                    setDeleteConfirm((current) => ({
+                      ...current,
+                      removeCopyInstallations: event.currentTarget.checked,
+                    }))
+                  }
+                />
+                <span>
+                  <span className="block font-medium text-foreground">
+                    {t(
+                      "skill.deleteCopyInstallationsLabel",
+                      "Also delete copied distributions",
+                    )}
+                  </span>
+                  <span className="mt-1 block text-muted-foreground">
+                    {t(
+                      "skill.deleteCopyInstallationsHelp",
+                      "Leave unchecked to keep copied Agent or project folders as detached copies.",
+                    )}
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </div>
         }
         confirmText={t("common.delete", "Delete")}

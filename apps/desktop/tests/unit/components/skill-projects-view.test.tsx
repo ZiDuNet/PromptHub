@@ -193,6 +193,56 @@ describe("SkillProjectsView", () => {
     expect(screen.getByText("novel-builder")).toBeInTheDocument();
   });
 
+  it("removes a project skill folder directly from the project skill card", async () => {
+    const deleteLocalFileByPath = vi.fn().mockResolvedValue(undefined);
+    const scanProjectSkills = vi.fn().mockResolvedValue([]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          readLocalFileByPath: vi.fn().mockResolvedValue({
+            content: "# novel-auditor\n\nHelp audit fiction.",
+          }),
+          listLocalFilesByPath: vi.fn().mockResolvedValue([]),
+          deleteLocalFileByPath,
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+
+    useSkillStore.setState({
+      scanProjectSkills,
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    expect(screen.queryByText("Source / Content")).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole("button", { name: "Remove from Project" })[0],
+      );
+    });
+
+    await waitFor(() => {
+      expect(deleteLocalFileByPath).toHaveBeenCalledWith(
+        "/tmp/novel/.claude/skills/novel-auditor",
+        ".",
+      );
+      expect(scanProjectSkills).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "project-1" }),
+      );
+      expect(showToastMock).toHaveBeenCalledWith(
+        "Removed from project",
+        "success",
+      );
+    });
+  });
+
   it("prefills project name from the selected root path and auto scans after creation", async () => {
     const selectFolder = vi.fn().mockResolvedValue("/tmp/story-world");
     const addSkillProject = vi.fn().mockReturnValue({

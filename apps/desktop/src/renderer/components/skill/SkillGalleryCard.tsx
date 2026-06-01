@@ -209,7 +209,7 @@ function SkillGalleryCardComponent({
       </h3>
       <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4 leading-relaxed italic opacity-80">
         {skill.description ||
-          t("skill.defaultDescription", "技能描述，帮助 AI 理解何时使用此技能")}
+          t("skill.defaultDescription", "Skill 描述，帮助 AI 理解何时使用此 Skill")}
       </p>
       <SkillVariantBadgeList
         badges={sourceBadges}

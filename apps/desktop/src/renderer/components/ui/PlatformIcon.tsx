@@ -88,6 +88,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   qoderwork: <BotIcon />,
   codebuddy: <BotIcon />,
   hermes: <BotIcon />,
+  "cherry-studio": <BotIcon />,
 };
 
 interface PlatformIconProps {

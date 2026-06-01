@@ -123,9 +123,10 @@ export function gitClone(
 
   const normalizedUrl = normalizeRemoteGitUrl(url);
 
-  const isSshGitUrl = /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
-    normalizedUrl,
-  );
+  const isSshGitUrl =
+    /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
+      normalizedUrl,
+    );
 
   if (!isSshGitUrl) {
     const parsedUrl = new URL(normalizedUrl);
@@ -193,9 +194,10 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
 
   const normalizedUrl = normalizeRemoteGitUrl(url);
 
-  const isSshGitUrl = /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
-    normalizedUrl,
-  );
+  const isSshGitUrl =
+    /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
+      normalizedUrl,
+    );
 
   if (!isSshGitUrl) {
     const parsedUrl = new URL(normalizedUrl);
@@ -240,7 +242,11 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
       settled = true;
       clearTimeout(timeout);
       if (code !== 0) {
-        reject(new Error(`Git remote branch listing failed with code ${code}: ${stderr}`));
+        reject(
+          new Error(
+            `Git remote branch listing failed with code ${code}: ${stderr}`,
+          ),
+        );
         return;
       }
 
@@ -268,17 +274,21 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
 
 export function resolvePlatformPath(template: string): string {
   const home = os.homedir();
+  const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
   return template
     .replace(/^~/, home)
     .replace(/%USERPROFILE%/gi, home)
-    .replace(/%APPDATA%/gi, path.join(home, "AppData", "Roaming"));
+    .replace(/%APPDATA%/gi, appData);
 }
 
 let _customRootPathsCache: Record<string, string> | null = null;
 let _customRootPathsCacheTs = 0;
 const CUSTOM_PATHS_CACHE_TTL = 5000; // 5 seconds
 
-let _builtinAgentOverridesCache: Record<string, BuiltinAgentOverrideConfig> | null = null;
+let _builtinAgentOverridesCache: Record<
+  string,
+  BuiltinAgentOverrideConfig
+> | null = null;
 let _builtinAgentOverridesCacheTs = 0;
 
 function normalizeBuiltinAgentOverrides(
@@ -397,9 +407,9 @@ function readBuiltinAgentOverridesFromSettings(): Record<
 
     const parsedRootPaths = normalizeBuiltinAgentOverrides(
       Object.fromEntries(
-        Object.entries(parseJsonSetting<Record<string, string>>(rootRow?.value, {})).map(
-          ([platformId, rootPath]) => [platformId, { rootPath }],
-        ),
+        Object.entries(
+          parseJsonSetting<Record<string, string>>(rootRow?.value, {}),
+        ).map(([platformId, rootPath]) => [platformId, { rootPath }]),
       ),
     );
     if (Object.keys(parsedRootPaths).length > 0) {
@@ -408,7 +418,10 @@ function readBuiltinAgentOverridesFromSettings(): Record<
       return _builtinAgentOverridesCache;
     }
 
-    const parsedLegacyPaths = parseJsonSetting<Record<string, string>>(legacyRow?.value, {});
+    const parsedLegacyPaths = parseJsonSetting<Record<string, string>>(
+      legacyRow?.value,
+      {},
+    );
     _builtinAgentOverridesCache = normalizeBuiltinAgentOverrides(
       Object.fromEntries(
         Object.entries(parsedLegacyPaths).map(([platformId, value]) => {
@@ -416,7 +429,10 @@ function readBuiltinAgentOverridesFromSettings(): Record<
           if (!platform) {
             return [platformId, { rootPath: value }];
           }
-          return [platformId, { rootPath: migrateLegacySkillPathToRootPath(platform, value) }];
+          return [
+            platformId,
+            { rootPath: migrateLegacySkillPathToRootPath(platform, value) },
+          ];
         }),
       ),
     );
@@ -541,7 +557,8 @@ export function getPlatformSkillsDir(
 ): string {
   const rootDir = getPlatformRootDir(platform, overrides);
   const relativePath =
-    getBuiltinAgentOverride(platform.id)?.skillsRelativePath || platform.skillsRelativePath;
+    getBuiltinAgentOverride(platform.id)?.skillsRelativePath ||
+    platform.skillsRelativePath;
 
   return joinRootRelativePath(rootDir, relativePath);
 }
@@ -551,7 +568,8 @@ export function getPlatformGlobalRulePath(
   overrides?: Record<string, string>,
 ): string | null {
   const relativePath =
-    getBuiltinAgentOverride(platform.id)?.rulesRelativePath || platform.globalRuleFile;
+    getBuiltinAgentOverride(platform.id)?.rulesRelativePath ||
+    platform.globalRuleFile;
 
   if (!relativePath) {
     return null;

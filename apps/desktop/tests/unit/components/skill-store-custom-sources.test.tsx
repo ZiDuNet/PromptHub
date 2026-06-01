@@ -358,21 +358,26 @@ describe("SkillStore custom sources", () => {
 
     useSkillStore.setState({
       storeView: "store",
-      selectedStoreSourceId: "official",
+      selectedStoreSourceId: "empty-custom",
       storeSearchQuery: "missing",
-      registrySkills: [
+      customStoreSources: [
         {
-          slug: "writer-skill",
-          name: "Writer Skill",
-          description: "Write better",
-          category: "office",
-          author: "PromptHub",
-          source_url: "https://example.com/writer-skill",
-          tags: ["writer"],
-          version: "1.0.0",
-          content: "# Writer Skill",
+          id: "empty-custom",
+          name: "Empty Custom Store",
+          type: "marketplace-json",
+          url: "https://example.com/marketplace.json",
+          enabled: true,
+          order: 0,
+          createdAt: Date.now(),
         },
       ],
+      remoteStoreEntries: {
+        "empty-custom": {
+          loadedAt: Date.now(),
+          error: null,
+          skills: [],
+        },
+      },
     } as never);
 
     await act(async () => {

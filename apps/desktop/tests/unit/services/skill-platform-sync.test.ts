@@ -44,7 +44,7 @@ describe("syncSkillsToPlatforms", () => {
     expect(progress).toHaveBeenLastCalledWith({
       current: 4,
       total: 4,
-      skillName: "beta",
+      skillId: "skill-2",
       platformId: "cursor",
     });
   });
@@ -66,7 +66,7 @@ describe("syncSkillsToPlatforms", () => {
     expect(result.totalCount).toBe(2);
     expect(result.failures).toEqual([
       {
-        skillName: "alpha",
+        skillId: "skill-1",
         platformId: "cursor",
         reason: "permission denied",
       },
@@ -98,7 +98,7 @@ describe("syncSkillsToPlatforms", () => {
     expect(result.failures).toEqual([]);
     expect(result.fallbacks).toEqual([
       {
-        skillName: "alpha",
+        skillId: "skill-1",
         platformId: "claude",
         requestedMode: "symlink",
         effectiveMode: "copy",

@@ -7,25 +7,6 @@ import Database from "../../../src/main/database/sqlite";
 import { SCHEMA } from "../../../src/main/database/schema";
 import { SkillDB } from "../../../src/main/database/skill";
 
-const SKILL_SCHEMA_MIGRATIONS = `
-  ALTER TABLE skills ADD COLUMN source_url TEXT;
-  ALTER TABLE skills ADD COLUMN local_repo_path TEXT;
-  ALTER TABLE skills ADD COLUMN icon_url TEXT;
-  ALTER TABLE skills ADD COLUMN icon_emoji TEXT;
-  ALTER TABLE skills ADD COLUMN icon_background TEXT;
-  ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general';
-  ALTER TABLE skills ADD COLUMN is_builtin INTEGER DEFAULT 0;
-  ALTER TABLE skills ADD COLUMN registry_slug TEXT;
-  ALTER TABLE skills ADD COLUMN content_url TEXT;
-  ALTER TABLE skills ADD COLUMN prerequisites TEXT;
-  ALTER TABLE skills ADD COLUMN compatibility TEXT;
-  ALTER TABLE skills ADD COLUMN original_tags TEXT;
-  ALTER TABLE skills ADD COLUMN safety_level TEXT;
-  ALTER TABLE skills ADD COLUMN safety_score INTEGER;
-  ALTER TABLE skills ADD COLUMN safety_report TEXT;
-  ALTER TABLE skills ADD COLUMN safety_scanned_at INTEGER;
-`;
-
 describe("SkillDB versioning", () => {
   let tempDir: string;
   let db: Database.Database;
@@ -35,7 +16,6 @@ describe("SkillDB versioning", () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-skill-db-"));
     db = new Database(path.join(tempDir, "prompthub.db"));
     db.exec(SCHEMA);
-    db.exec(SKILL_SCHEMA_MIGRATIONS);
     skillDb = new SkillDB(db);
   });
 
