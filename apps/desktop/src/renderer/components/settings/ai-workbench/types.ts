@@ -21,6 +21,7 @@ export type ModelType = "chat" | "image";
 export type ModelFormState = {
   type: ModelType;
   name: string;
+  providerId?: string;
   provider: string;
   apiProtocol: AIProtocol;
   apiKey: string;
@@ -65,6 +66,7 @@ export type EndpointGroup = {
 
 export type EndpointDraft = {
   key: string;
+  providerConfigId?: string;
   name: string;
   provider: string;
   apiProtocol: AIProtocol;

@@ -1,16 +1,17 @@
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import {
+  useMemo,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 
 import {
   BrainIcon,
-  DatabaseIcon,
+  CheckIcon,
   EyeIcon,
   ImageIcon,
-  ListFilterIcon,
   Loader2Icon,
-  MessageSquareIcon,
-  SearchIcon,
   SparklesIcon,
-  WrenchIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +27,71 @@ import { PasswordInput } from "../../shared";
 import { PROVIDER_OPTIONS } from "../constants";
 import { getProviderInfo } from "../helpers";
 import type { ModelFormState } from "../types";
+
+function CapabilityCheckbox({
+  checked,
+  ariaLabel,
+  onChange,
+}: {
+  checked: boolean;
+  ariaLabel: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <>
+      <input
+        type="checkbox"
+        aria-label={ariaLabel}
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        className="sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+          checked
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-muted-foreground/70 bg-background"
+        }`}
+      >
+        {checked ? <CheckIcon className="h-3 w-3" strokeWidth={3} /> : null}
+      </span>
+    </>
+  );
+}
+
+function CapabilityCard({
+  checked,
+  ariaLabel,
+  icon,
+  title,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  ariaLabel: string;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm transition-colors hover:border-primary/30 hover:bg-muted/20 focus-within:ring-2 focus-within:ring-primary/20">
+      <CapabilityCheckbox
+        checked={checked}
+        ariaLabel={ariaLabel}
+        onChange={onChange}
+      />
+      {icon}
+      <span className="min-w-0">
+        <span className="block font-medium">{title}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </label>
+  );
+}
 
 export function BaseFields({
   modelForm,
@@ -140,6 +206,7 @@ export function BaseFields({
                   const provider = getProviderInfo(value);
                   setModelForm((prev) => ({
                     ...prev,
+                    providerId: undefined,
                     provider: value,
                     apiProtocol:
                       provider?.recommendedProtocol || prev.apiProtocol,
@@ -304,46 +371,15 @@ export function BaseFields({
           {t("settings.aiWorkbenchModelCapabilities")}
         </div>
         <div className="grid gap-2 lg:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.chatModel")}
-              checked={capabilities.chat === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setModelForm((prev) => ({
-                  ...prev,
-                  type:
-                    checked || prev.capabilities.imageGeneration !== true
-                      ? "chat"
-                      : "image",
-                  capabilities: {
-                    ...prev.capabilities,
-                    chat: checked,
-                    vision: checked ? prev.capabilities.vision : false,
-                  },
-                }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <MessageSquareIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.chatModel")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchRouteMainTextDesc")}
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.imageModel")}
-              checked={capabilities.imageGeneration === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
+          <CapabilityCard
+            checked={capabilities.imageGeneration === true}
+            ariaLabel={t("settings.imageModel")}
+            icon={
+              <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            }
+            title={t("settings.imageModel")}
+            description={t("settings.aiWorkbenchRouteImageGenerationDesc")}
+            onChange={(checked) => {
                 setModelForm((prev) => ({
                   ...prev,
                   type: checked ? "image" : "chat",
@@ -352,27 +388,18 @@ export function BaseFields({
                     imageGeneration: checked,
                   },
                 }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.imageModel")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchRouteImageGenerationDesc")}
-              </span>
-            </span>
-          </label>
+            }}
+          />
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchVisionCapability")}
-              checked={capabilities.vision === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
+          <CapabilityCard
+            checked={capabilities.vision === true}
+            ariaLabel={t("settings.aiWorkbenchVisionCapability")}
+            icon={
+              <EyeIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            }
+            title={t("settings.aiWorkbenchVisionCapability")}
+            description={t("settings.aiWorkbenchVisionCapabilityDesc")}
+            onChange={(checked) => {
                 setModelForm((prev) => ({
                   ...prev,
                   capabilities: {
@@ -381,27 +408,18 @@ export function BaseFields({
                     vision: checked,
                   },
                 }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <EyeIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchVisionCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchVisionCapabilityDesc")}
-              </span>
-            </span>
-          </label>
+            }}
+          />
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchReasoningCapability")}
-              checked={capabilities.reasoning === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
+          <CapabilityCard
+            checked={capabilities.reasoning === true}
+            ariaLabel={t("settings.aiWorkbenchReasoningCapability")}
+            icon={
+              <BrainIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            }
+            title={t("settings.aiWorkbenchReasoningCapability")}
+            description={t("settings.aiWorkbenchReasoningCapabilityDesc")}
+            onChange={(checked) => {
                 setModelForm((prev) => ({
                   ...prev,
                   capabilities: {
@@ -410,134 +428,8 @@ export function BaseFields({
                     reasoning: checked,
                   },
                 }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <BrainIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchReasoningCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchReasoningCapabilityDesc")}
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchToolUseCapability")}
-              checked={capabilities.toolUse === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setModelForm((prev) => ({
-                  ...prev,
-                  capabilities: {
-                    ...prev.capabilities,
-                    chat: true,
-                    toolUse: checked,
-                  },
-                }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <WrenchIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchToolUseCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchToolUseCapabilityDesc")}
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchWebSearchCapability")}
-              checked={capabilities.webSearch === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setModelForm((prev) => ({
-                  ...prev,
-                  type: "chat",
-                  capabilities: {
-                    ...prev.capabilities,
-                    chat: true,
-                    webSearch: checked,
-                  },
-                }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <SearchIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchWebSearchCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchWebSearchCapabilityDesc")}
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchEmbeddingCapability")}
-              checked={capabilities.embedding === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setModelForm((prev) => ({
-                  ...prev,
-                  capabilities: {
-                    ...prev.capabilities,
-                    embedding: checked,
-                  },
-                }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <DatabaseIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchEmbeddingCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchEmbeddingCapabilityDesc")}
-              </span>
-            </span>
-          </label>
-
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
-            <input
-              type="checkbox"
-              aria-label={t("settings.aiWorkbenchRerankCapability")}
-              checked={capabilities.rerank === true}
-              onChange={(event) => {
-                const checked = event.currentTarget.checked;
-                setModelForm((prev) => ({
-                  ...prev,
-                  capabilities: {
-                    ...prev.capabilities,
-                    rerank: checked,
-                  },
-                }));
-              }}
-              className="mt-1 h-4 w-4 rounded border-border"
-            />
-            <ListFilterIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0">
-              <span className="block font-medium">
-                {t("settings.aiWorkbenchRerankCapability")}
-              </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">
-                {t("settings.aiWorkbenchRerankCapabilityDesc")}
-              </span>
-            </span>
-          </label>
+            }}
+          />
         </div>
       </div>
     </>

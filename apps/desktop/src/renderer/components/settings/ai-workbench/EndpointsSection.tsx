@@ -2,22 +2,26 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   AlertCircleIcon,
+  BrainIcon,
   CheckCircle2Icon,
+  EyeIcon,
+  ImageIcon,
   KeyRoundIcon,
   LinkIcon,
   ListPlusIcon,
   ListTreeIcon,
   Loader2Icon,
   PencilIcon,
-  PlayIcon,
   PlusIcon,
   RouteIcon,
   SearchIcon,
   Settings2Icon,
-  ShieldCheckIcon,
   StarIcon,
+  TestTubeIcon,
   Trash2Icon,
+  TypeIcon,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -53,6 +57,37 @@ function maskApiKey(apiKey: string): string {
     return "******";
   }
   return `${trimmed.slice(0, 3)}****${trimmed.slice(-4)}`;
+}
+
+type ModelBadge = {
+  icon: LucideIcon;
+  label: string;
+  primary?: boolean;
+};
+
+function ModelIconBadge({ badge }: { badge: ModelBadge }) {
+  const Icon = badge.icon;
+  return (
+    <span
+      aria-label={badge.label}
+      title={badge.label}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md ${
+        badge.primary
+          ? "bg-primary/10 text-primary"
+          : "border border-border text-muted-foreground"
+      }`}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
+function ModelRouteBadge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex h-7 items-center rounded-md bg-primary/10 px-2 text-[11px] font-medium text-primary">
+      {label}
+    </span>
+  );
 }
 
 export function EndpointsSection({
@@ -472,7 +507,7 @@ export function EndpointsSection({
                       {testingDefault ? (
                         <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <PlayIcon className="h-3.5 w-3.5" />
+                        <TestTubeIcon className="h-3.5 w-3.5" />
                       )}
                       {t("settings.aiWorkbenchTestDefault")}
                     </button>
@@ -485,7 +520,7 @@ export function EndpointsSection({
                       {testingEndpointKey === selectedGroup.key ? (
                         <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <ShieldCheckIcon className="h-3.5 w-3.5" />
+                        <TestTubeIcon className="h-3.5 w-3.5" />
                       )}
                       {t("settings.testConnection")}
                     </button>
@@ -550,6 +585,7 @@ export function EndpointsSection({
                       type="button"
                       onClick={() =>
                         onFetchModels({
+                          providerId: selectedGroup.providerConfigId,
                           provider: selectedGroup.provider,
                           apiProtocol: selectedGroup.apiProtocol,
                           apiKey:
@@ -569,6 +605,7 @@ export function EndpointsSection({
                       onClick={() =>
                         onAddModel(
                           {
+                            providerId: selectedGroup.providerConfigId,
                             provider: selectedGroup.provider,
                             apiProtocol: selectedGroup.apiProtocol,
                             apiKey:
@@ -590,18 +627,23 @@ export function EndpointsSection({
 
                 <div className="divide-y divide-border">
                   {selectedGroup.models.map((model) => {
-                    const badges = [
+                    const capabilityBadges: ModelBadge[] = [
                       {
                         label:
                           (model.type ?? "chat") === "image"
                             ? t("settings.imageModel")
                             : t("settings.chatModel"),
+                        icon:
+                          (model.type ?? "chat") === "image"
+                            ? ImageIcon
+                            : TypeIcon,
                         primary: false,
                       },
                       ...(model.isDefault
                         ? [
                             {
                               label: t("settings.aiWorkbenchTypeDefault"),
+                              icon: StarIcon,
                               primary: true,
                             },
                           ]
@@ -610,17 +652,24 @@ export function EndpointsSection({
                         ? [
                             {
                               label: t("settings.aiWorkbenchVisionCapability"),
+                              icon: EyeIcon,
                               primary: false,
                             },
                           ]
                         : []),
-                      ...(modelScenarioBadges.get(model.id) ?? []).map(
-                        (badge) => ({
-                          label: badge,
-                          primary: true,
-                        }),
-                      ),
+                      ...(hasModelCapability(model, "reasoning")
+                        ? [
+                            {
+                              label: t(
+                                "settings.aiWorkbenchReasoningCapability",
+                              ),
+                              icon: BrainIcon,
+                              primary: false,
+                            },
+                          ]
+                        : []),
                     ];
+                    const routeBadges = modelScenarioBadges.get(model.id) ?? [];
 
                     return (
                       <div
@@ -642,17 +691,17 @@ export function EndpointsSection({
                             ) : null}
                           </div>
                           <div className="flex min-w-0 flex-wrap gap-1.5">
-                            {badges.map((badge) => (
-                              <span
+                            {capabilityBadges.map((badge) => (
+                              <ModelIconBadge
                                 key={`${model.id}-${badge.label}`}
-                                className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                                  badge.primary
-                                    ? "bg-primary/10 text-primary"
-                                    : "border border-border text-muted-foreground"
-                                }`}
-                              >
-                                {badge.label}
-                              </span>
+                                badge={badge}
+                              />
+                            ))}
+                            {routeBadges.map((badge) => (
+                              <ModelRouteBadge
+                                key={`${model.id}-${badge}`}
+                                label={badge}
+                              />
                             ))}
                           </div>
                         </div>
@@ -668,7 +717,7 @@ export function EndpointsSection({
                             {testingModelId === model.id ? (
                               <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                             ) : (
-                              <PlayIcon className="h-3.5 w-3.5" />
+                              <TestTubeIcon className="h-3.5 w-3.5" />
                             )}
                           </button>
                           {!model.isDefault ? (

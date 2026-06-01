@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AISettingsPrototype } from "../../../src/renderer/components/settings/AISettingsPrototype";
+import { buildEndpointGroupKey } from "../../../src/renderer/components/settings/ai-workbench/helpers";
 import {
   fetchAvailableModels,
   testAIConnection,
@@ -65,6 +66,7 @@ function createSettingsState() {
 function createConfiguredModel(
   overrides: Partial<{
     id: string;
+    providerId?: string;
     provider: string;
     apiProtocol: "openai" | "gemini" | "anthropic";
     apiKey: string;
@@ -110,6 +112,29 @@ describe("AISettingsPrototype", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useToastMock.mockReturnValue({ showToast: vi.fn() });
+  });
+
+  it("uses provider instance ids as endpoint grouping keys", () => {
+    expect(
+      buildEndpointGroupKey(
+        createConfiguredModel({
+          id: "model-a",
+          providerId: "provider-a",
+          provider: "custom",
+          apiUrl: "https://gateway.example.com/v1",
+        }),
+      ),
+    ).toBe("provider:provider-a");
+    expect(
+      buildEndpointGroupKey(
+        createConfiguredModel({
+          id: "model-b",
+          providerId: "provider-b",
+          provider: "custom",
+          apiUrl: "https://gateway.example.com/v1",
+        }),
+      ),
+    ).toBe("provider:provider-b");
   });
 
   it("renders translated English copy instead of hard-coded Chinese", async () => {
@@ -197,6 +222,7 @@ describe("AISettingsPrototype", () => {
     fireEvent.change(screen.getByLabelText("Temperature"), {
       target: { value: "1.2" },
     });
+    expect(screen.getByLabelText("Stream Output")).toHaveClass("sr-only");
     fireEvent.click(screen.getByLabelText("Stream Output"));
     fireEvent.change(screen.getByLabelText("Custom Parameters"), {
       target: { value: '{"max_completion_tokens":4096}' },
@@ -264,7 +290,7 @@ describe("AISettingsPrototype", () => {
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-image-2" },
     });
-    fireEvent.click(screen.getByLabelText("Image Model"));
+    fireEvent.click(screen.getByLabelText("Image generation"));
 
     fireEvent.click(
       screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
@@ -295,8 +321,7 @@ describe("AISettingsPrototype", () => {
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-4o-image" },
     });
-    fireEvent.click(screen.getByLabelText("Image Model"));
-    fireEvent.click(screen.getByLabelText("Tool use"));
+    fireEvent.click(screen.getByLabelText("Image generation"));
 
     fireEvent.click(
       screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
@@ -309,7 +334,6 @@ describe("AISettingsPrototype", () => {
         capabilities: expect.objectContaining({
           chat: true,
           imageGeneration: true,
-          toolUse: true,
         }),
         chatParams: expect.any(Object),
         imageParams: expect.any(Object),
@@ -362,7 +386,7 @@ describe("AISettingsPrototype", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.click(screen.getByLabelText("Image Model"));
+    fireEvent.click(screen.getByLabelText("Image generation"));
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-image-1" },
     });
@@ -632,6 +656,83 @@ describe("AISettingsPrototype", () => {
 
     expect(screen.getAllByText("gpt-5.4").length).toBeGreaterThan(0);
     expect(screen.queryByText("claude-opus-4-6")).not.toBeInTheDocument();
+  });
+
+  it("renders model capabilities as icons and route badges as text", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiModels = [
+      createConfiguredModel({
+        id: "routed-vision-model",
+        provider: "openai",
+        model: "gpt-4o",
+        capabilities: {
+          chat: true,
+          vision: true,
+          imageGeneration: false,
+          reasoning: false,
+          toolUse: false,
+          webSearch: false,
+          embedding: false,
+          rerank: false,
+        },
+      }),
+    ];
+    settingsState.modelRouteDefaults = {
+      mainText: "routed-vision-model",
+      fastText: "routed-vision-model",
+      visionText: "routed-vision-model",
+    };
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    const modelRow = screen.getByText("gpt-4o").closest(".group");
+    expect(modelRow).not.toBeNull();
+    const row = within(modelRow!);
+
+    expect(row.getByLabelText("Chat Model")).toBeInTheDocument();
+    expect(row.getByLabelText("Vision input")).toBeInTheDocument();
+    expect(row.queryByText("Chat Model")).not.toBeInTheDocument();
+    expect(row.queryByText("Vision input")).not.toBeInTheDocument();
+    expect(row.getByText("Main text route")).toBeInTheDocument();
+    expect(row.getByText("Fast route")).toBeInTheDocument();
+    expect(row.getByText("Vision route")).toBeInTheDocument();
+  });
+
+  it("uses test tube icons for model test actions", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiModels = [
+      createConfiguredModel({
+        id: "testable-model",
+        provider: "openai",
+        model: "gpt-4o",
+      }),
+    ];
+    settingsState.modelRouteDefaults = {
+      mainText: "testable-model",
+    };
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    const modelRow = screen.getByText("gpt-4o").closest(".group");
+    expect(modelRow).not.toBeNull();
+
+    expect(
+      screen
+        .getByRole("button", { name: "Test Default Model" })
+        .querySelector(".lucide-test-tube"),
+    ).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", { name: "Test Connection" })
+        .querySelector(".lucide-test-tube"),
+    ).toBeInTheDocument();
+    expect(
+      within(modelRow!)
+        .getByRole("button", { name: "Test" })
+        .querySelector(".lucide-test-tube"),
+    ).toBeInTheDocument();
   });
 
   it("locks provider fields without showing provider details when editing an existing model", async () => {

@@ -193,6 +193,7 @@ export const DEFAULT_MODEL_CAPABILITIES: ModelFormState["capabilities"] = {
 export const EMPTY_FORM: ModelFormState = {
   type: "chat",
   name: "",
+  providerId: undefined,
   provider: "openai",
   apiProtocol: "openai",
   apiKey: "",

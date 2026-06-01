@@ -34,3 +34,14 @@
 - [x] 对照主流模型管理工具的能力 schema，补齐推理、工具调用、联网搜索、Embedding、Rerank 能力维度
 - [x] 修复双能力模型保存时只保留单一路由参数的问题
 - [x] 将预制供应商图标从 Lucide 兜底替换为真实品牌图标资产，并补充回归断言
+- [x] 将手动模型编辑的能力区收敛为常用能力，不再显式展示对话、工具调用、联网搜索、Embedding、Rerank
+- [x] 将模型列表标签拆分为能力图标和路由文字，并统一测试动作试管图标
+- [x] 修复 Prompt 生图测试面板仍显示供应商类型的问题，改为显示用户配置的供应商实例名
+- [x] 修复 Prompt 生图测试失败只出 toast 的问题，在测试面板内保留失败原因
+- [x] 修复 OpenAI-compatible / Gemini / FLUX / Ideogram / Recraft / Replicate / Stability 生图请求从 renderer 直连导致 CORS 失败的问题，统一走主进程 AI transport
+- [x] 将所有生图请求超时从 60s 提升到 300s，覆盖 OpenAI-compatible、Gemini、FLUX、Ideogram、Recraft、Replicate polling、Stability
+- [x] 修复服务商返回 HTML/504 网关错误页时前端原样展示整段 HTML 的问题，改为展示简短可读错误
+- [x] 将 GPT Image 单图请求体收敛为 `model + prompt`，避免默认 `n: 1` 影响自定义代理兼容性
+- [x] 为 AI 测试抽屉和自绘 Prompt 弹窗补齐进入动画，并补充 UI 回归断言
+- [x] 将 AI provider / model / route 配置收口为 `config/ai-models.json` 单一持久化源，desktop `settings.set` 不再把 AI 字段写入 SQLite settings
+- [x] 为模型配置补 `providerId`，避免多个同类型/同 URL 自定义供应商被合并成一个端点

@@ -87,11 +87,17 @@
   - 手动添加模型弹窗只展示自定义名称、模型 ID、能力和高级参数，不再展示供应商端点摘要
   - 供应商详情里的获取模型列表按钮打开独立 `ModelFetchModal`，只负责远端模型列表搜索、分类、多选和批量添加
   - 缺少 API Key / API URL 时仍阻止模型发现，并保持手动添加入口不发起网络请求
-- 已将模型类型 UI 收口为模型能力：
+- 已将模型类型 UI 收口为常用模型能力：
   - 手动添加/编辑模型弹窗顶部不再展示“模型类型”单选
-  - “模型能力”区改为可配置 `对话模型`、`图像模型`、`视觉输入`
+  - “模型能力”区改为可配置 `视觉输入`、`生图模型`、`推理`
+  - `对话模型` 不再作为显式勾选项展示，普通文本对话仍作为默认基础能力处理
+  - `工具调用`、`联网搜索`、`Embedding`、`Rerank` 仍保留在底层能力 schema 和自动推断中，但不放在手动模型编辑的常用能力区
   - `AIModelCapabilities` 新增 `chat`、`imageGeneration`，旧的 `type` 字段继续作为兼容和请求参数选择使用
   - 路由筛选现在同时识别 `type` 与能力标记，支持同一个模型按能力进入文本、视觉或生图路由
+- 已优化模型列表标签表达：
+  - 模型能力标签在列表行内改为 icon-only，使用 `aria-label` / `title` 保留可访问说明
+  - 模型路由标签继续使用文字 chip，避免用户无法区分主文本、快速、视觉和生图路由
+  - 模型服务中的默认测试、连接测试、单模型测试、草稿测试等测试动作统一使用试管图标
 - 已对照外部成熟模型管理工具的能力模型继续补齐：
   - 能力维度扩展为 `chat`、`vision`、`imageGeneration`、`reasoning`、`toolUse`、`webSearch`、`embedding`、`rerank`
   - 价格、上下文窗口、最大 token、endpoint type、参数支持仍归为模型元数据 / 请求控制，不混入能力布尔值
@@ -119,6 +125,42 @@
   - 模型服务页的路由/高级入口和供应商列表由 AI 页面自身的中栏渲染，外层设置页不再截获
   - 添加供应商只写入供应商端点，不会创建模型记录
   - 添加模型不会修改供应商端点；供应商 URL 自动补全规则只在供应商弹窗中配置和预览
+- 已修复 Prompt 生图测试面板的供应商展示和错误留存：
+  - 生图测试面板按当前 `imageTest` 模型的 provider / protocol / URL / API key 匹配 `aiProviders`，优先展示用户配置的供应商实例名，避免显示成 `custom` / `openai` 这类供应商类型
+  - 生图请求失败时，错误消息除了 toast 之外会以面板内 alert 保留，用户不用依赖瞬时 toast 判断失败原因
+  - 生图接口返回空图片列表时也会在面板内提示“接口没有返回图片”
+- 已修复生图请求的 CORS 边界：
+  - OpenAI-compatible `/images/generations` 请求改为优先走桌面主进程 `window.api.ai.request`
+  - renderer 不再从 `localhost:5173` 直接请求第三方生图接口，避免浏览器 CORS 阻断
+  - 主进程 transport 返回的 `status: 0` / `error` 会继续作为前端面板内可见错误显示
+  - Gemini、FLUX、Ideogram、Recraft、Replicate、Stability 生图请求也复用同一 request transport helper，保持桌面端网络边界一致
+  - Replicate 的异步 polling 请求也走主进程 transport，避免首个请求修好但轮询阶段仍被 CORS 拦截
+- 已修复生图请求超时边界：
+  - 生图生成不再复用 60s 通用网络超时，统一使用 `IMAGE_GENERATION_TIMEOUT_MS = 300_000`
+  - OpenAI-compatible、Gemini、FLUX、Ideogram、Recraft、Replicate 初始请求、Replicate polling、Stability 均显式透传 300s 超时
+  - 模型发现仍保持 12s 快速失败，避免把短请求和生图长任务混用同一超时策略
+- 已修复服务商错误页展示边界：
+  - 当生图服务商或代理返回 `504 Gateway Time-out` / HTML 错误页时，不再把 `<!DOCTYPE html>...` 原样展示到测试面板
+  - 服务层统一把 504 响应格式化为简短的 provider/proxy timeout 错误
+  - JSON 错误响应仍优先展示结构化 `error.message` / `message` / `detail`
+- 已收敛 GPT Image 请求体：
+  - `gpt-image-*` 单图请求不再发送默认 `n: 1`，与官方 `gpt-image-2` 最小请求示例保持一致：只传 `model` 和 `prompt`
+  - 用户明确请求多图时仍发送 `n > 1`
+  - 该改动用于减少自定义代理 / OpenAI-compatible 聚合接口对可选参数的兼容性问题
+- 已补齐 AI 测试与自绘弹窗动效：
+  - Prompt AI Test 抽屉增加右侧滑入和淡入动画
+  - Quick Add、图片反推、关闭确认等没有走共享 `Modal` 的自绘弹窗增加淡入 / 缩放进入动画
+  - 共享 `Modal` 本身已有 mount / unmount 动效，本次未重复改造
+- 已修复 AI 配置持久化单源问题：
+  - `config/ai-models.json` 作为 provider / model / model route 的唯一持久化源
+  - desktop `settings.get` 继续把 JSON 配置 overlay 到 renderer settings，保持 UI 兼容
+  - desktop `settings.set` 会剥离 `aiProvider`、`aiProviders`、`aiModels`、`modelRouteDefaults` 等 AI 字段，AI 部分写入 JSON，非 AI 设置才写入 SQLite settings 表
+  - `settings.store` 中 provider、model、route 的所有 mutation 都同步完整 AI payload 到 main process
+  - CLI `prompthub ai ...` 与桌面设置页共用 `packages/core/src/ai-config.ts`
+- 已修复 provider 实例身份问题：
+  - 模型记录新增 `providerId`，`provider` 继续表示供应商类型 / 协议预设
+  - AI workbench 端点分组优先使用 provider 实例 id，不再只按 provider + protocol + URL 合并
+  - 新增回归覆盖两个同类型、同 URL、同 API key 的自定义供应商仍可保持不同模型归属
 
 ## Verification
 
@@ -132,6 +174,42 @@
 - `pnpm test -- apps/desktop/tests/unit/components/ai-settings-prototype.test.tsx --run`
 - 后续补充验证（本次 timeout 修复）：
 - `pnpm --filter @prompthub/desktop exec eslint src/main/ipc/ai.ipc.ts src/renderer/services/ai.ts tests/unit/services/ai-transport.test.ts tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-test-workbench.test.tsx`
+  - 结果：通过（7/7），覆盖 Prompt 生图测试面板显示供应商实例名、生图成功后渲染生成图片，以及生图失败原因在面板内保留。
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts`
+  - 结果：通过（16/16），覆盖对话流式、非流式多模态、模型发现，以及 OpenAI-compatible / FLUX / Ideogram / Recraft / Replicate / Stability 生图请求走主进程 request transport，且不会调用 renderer `fetch`。
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai.test.ts`
+  - 结果：通过（30/30），覆盖 Gemini 生图路由和 OpenAI-compatible 生图 endpoint 构造未回退。
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/prompt/AiTestModal.tsx tests/unit/components/ai-test-workbench.test.tsx`
+  - 结果：通过
+- 生图 300s 超时与弹窗动画补充验证：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts tests/unit/services/ai.test.ts tests/unit/components/ai-test-workbench.test.tsx tests/unit/components/quick-add-modal.test.tsx tests/unit/components/image-prompt-reverse-modal.test.tsx tests/unit/components/close-dialog.test.tsx`
+  - 结果：通过（65/65）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts -t "formats provider HTML gateway timeout"`
+  - 结果：通过，覆盖服务商 HTML 504 错误页不会原样展示
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts -t "minimal GPT Image"`
+  - 结果：通过，覆盖 `gpt-image-2` 单图请求不再发送默认 `n: 1`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts tests/unit/services/ai.test.ts tests/unit/components/ai-test-workbench.test.tsx`
+  - 结果：通过（56/56）
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/services/ai.ts src/renderer/components/prompt/AiTestModal.tsx src/renderer/components/prompt/QuickAddModal.tsx src/renderer/components/prompt/ImagePromptReverseModal.tsx src/renderer/components/ui/CloseDialog.tsx tests/unit/services/ai-transport.test.ts tests/unit/services/ai.test.ts tests/unit/components/ai-test-workbench.test.tsx tests/unit/components/quick-add-modal.test.tsx tests/unit/components/image-prompt-reverse-modal.test.tsx tests/unit/components/close-dialog.test.tsx`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/services/ai.ts tests/unit/services/ai-transport.test.ts`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- AI JSON 单源 / providerId 修复补充验证：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/stores/settings-ai-models.test.ts tests/unit/main/settings-ipc-ai-config.test.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+  - 结果：通过（47/47）
+- `pnpm --filter @prompthub/cli test -- tests/ai-config.test.ts`
+  - 结果：通过（3/3）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `pnpm --filter @prompthub/cli typecheck`
+  - 结果：通过
+- `node -e 'for (const f of ["en","zh","zh-TW","ja","fr","de","es"]) JSON.parse(require("fs").readFileSync("apps/desktop/src/renderer/i18n/locales/" + f + ".json", "utf8")); console.log("locale json ok")'`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
 - `pnpm --filter @prompthub/desktop typecheck`
 - `pnpm --filter @prompthub/desktop build`
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/services/ai-url-preview.test.ts tests/unit/services/ai-defaults.test.ts`
@@ -203,6 +281,11 @@
 - 供应商真实品牌图标补齐后重新运行：
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-settings-prototype.test.tsx`
 - `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/ui/ModelIcons.tsx src/renderer/components/settings/ai-workbench/constants.ts tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `git diff --check`
+- 模型列表能力/路由标签和测试图标修正后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/AISettings.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/HeaderSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/model-form/chat-params/ToggleFields.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
 - `pnpm --filter @prompthub/desktop typecheck`
 - `git diff --check`
 - 全量 `pnpm --filter @prompthub/desktop test -- --run` 已尝试，结果为 177 个测试文件通过、7 个测试文件失败；AI 设置、模型路由、MainContent 相关测试通过，但当前工作区仍有非本 change 的失败：

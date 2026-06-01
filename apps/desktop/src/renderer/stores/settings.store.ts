@@ -586,6 +586,7 @@ export interface AIModelConfig {
   id: string;
   type: AIModelType; // Model type: chat model or image generation model
   name?: string; // Custom name (optional), used for display
+  providerId?: string; // Provider instance id
   provider: string; // 供应商 ID
   apiProtocol: AIProtocol;
   apiKey: string;
@@ -1005,6 +1006,58 @@ function stripEphemeralSettings(state: SettingsState): PersistedSettingsState {
   return persistedState;
 }
 
+function findMatchingAIProvider(
+  providers: AIProviderConfig[],
+  config: Pick<
+    AIModelConfig,
+    "provider" | "apiProtocol" | "apiKey" | "apiUrl"
+  > & { providerId?: string },
+): AIProviderConfig | undefined {
+  if (config.providerId?.trim()) {
+    return providers.find((provider) => provider.id === config.providerId);
+  }
+
+  return providers.find(
+    (provider) =>
+      provider.id === config.provider ||
+      (provider.provider === config.provider &&
+        provider.apiProtocol === config.apiProtocol &&
+        provider.apiUrl === config.apiUrl &&
+        provider.apiKey === config.apiKey),
+  );
+}
+
+function buildAISettingsSyncPayload(
+  state: SettingsState,
+): Partial<Settings> {
+  return {
+    aiProvider: state.aiProvider,
+    aiApiProtocol: state.aiApiProtocol,
+    aiApiKey: state.aiApiKey,
+    aiApiUrl: state.aiApiUrl,
+    aiModel: state.aiModel,
+    aiProviders: state.aiProviders,
+    aiModels: state.aiModels,
+    modelRouteDefaults: state.modelRouteDefaults,
+  } as Partial<Settings>;
+}
+
+function syncAISettingsToMain(state: SettingsState): void {
+  void syncSettingsToMain(buildAISettingsSyncPayload(state));
+}
+
+function attachProviderIdsToAIModels(
+  providers: AIProviderConfig[],
+  models: AIModelConfig[],
+): AIModelConfig[] {
+  return models.map((model) => {
+    const providerConfig = findMatchingAIProvider(providers, model);
+    return providerConfig && model.providerId !== providerConfig.id
+      ? { ...model, providerId: providerConfig.id }
+      : model;
+  });
+}
+
 export async function loadSettingsFromMainProcess(): Promise<void> {
   if (typeof window === "undefined") {
     return;
@@ -1014,6 +1067,16 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   if (!settings) {
     return;
   }
+  const aiSettings = settings as Settings & {
+    aiProvider?: string;
+    aiApiProtocol?: AIProtocol;
+    aiApiKey?: string;
+    aiApiUrl?: string;
+    aiModel?: string;
+    aiProviders?: AIProviderConfig[];
+    aiModels?: AIModelConfig[];
+    modelRouteDefaults?: ModelRouteDefaults;
+  };
 
   const state = useSettingsStore.getState();
   const launchAtStartup =
@@ -1057,6 +1120,28 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
           settings.customSkillScanPaths ??
           state.customAgentRootPaths),
   );
+  const aiProviders = Array.isArray(aiSettings.aiProviders)
+    ? aiSettings.aiProviders
+    : state.aiProviders;
+  const aiModels = Array.isArray(aiSettings.aiModels)
+    ? attachProviderIdsToAIModels(aiProviders, aiSettings.aiModels)
+    : state.aiModels;
+  const modelRouteDefaults =
+    aiSettings.modelRouteDefaults &&
+    typeof aiSettings.modelRouteDefaults === "object"
+      ? aiSettings.modelRouteDefaults
+      : state.modelRouteDefaults;
+  const aiProvider =
+    typeof aiSettings.aiProvider === "string"
+      ? aiSettings.aiProvider
+      : state.aiProvider;
+  const aiApiUrl =
+    typeof aiSettings.aiApiUrl === "string" ? aiSettings.aiApiUrl : state.aiApiUrl;
+  const aiApiProtocol = normalizeAIProtocol(
+    aiSettings.aiApiProtocol ?? state.aiApiProtocol,
+    aiProvider,
+    aiApiUrl,
+  );
 
   useSettingsStore.setState({
     customAgents: normalizedCustomAgents,
@@ -1073,6 +1158,18 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
     minimizeOnLaunch,
     githubToken,
     syncProvider,
+    aiProvider,
+    aiApiProtocol,
+    aiApiKey:
+      typeof aiSettings.aiApiKey === "string"
+        ? aiSettings.aiApiKey
+        : state.aiApiKey,
+    aiApiUrl,
+    aiModel:
+      typeof aiSettings.aiModel === "string" ? aiSettings.aiModel : state.aiModel,
+    aiProviders,
+    aiModels,
+    modelRouteDefaults,
   });
 
   if (typeof settings.launchAtStartup !== "boolean") {
@@ -1094,6 +1191,10 @@ export const useSettingsStore = create<SettingsState>()(
       const touch = (): string => new Date().toISOString();
       const setTouched = (partial: Partial<SettingsState>) =>
         set({ ...partial, settingsUpdatedAt: touch() } as SettingsState);
+      const commitAISettings = (partial: Partial<SettingsState>) => {
+        setTouched(partial);
+        syncAISettingsToMain(get());
+      };
       const normalizeProjectScanPaths = (
         scanPaths: string[] | undefined,
         rootPath: string,
@@ -1690,15 +1791,16 @@ export const useSettingsStore = create<SettingsState>()(
 
           setTouched({ desktopHomeModules: normalized });
         },
-        setAiProvider: (provider) => setTouched({ aiProvider: provider }),
-        setAiApiProtocol: (protocol) => setTouched({ aiApiProtocol: protocol }),
-        setAiApiKey: (key) => setTouched({ aiApiKey: key }),
-        setAiApiUrl: (url) => setTouched({ aiApiUrl: url }),
-        setAiModel: (model) => setTouched({ aiModel: model }),
+        setAiProvider: (provider) => commitAISettings({ aiProvider: provider }),
+        setAiApiProtocol: (protocol) =>
+          commitAISettings({ aiApiProtocol: protocol }),
+        setAiApiKey: (key) => commitAISettings({ aiApiKey: key }),
+        setAiApiUrl: (url) => commitAISettings({ aiApiUrl: url }),
+        setAiModel: (model) => commitAISettings({ aiModel: model }),
 
         addAiProvider: (config) => {
           const id = `provider_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-          setTouched({
+          commitAISettings({
             aiProviders: [
               ...get().aiProviders,
               {
@@ -1719,6 +1821,7 @@ export const useSettingsStore = create<SettingsState>()(
         },
 
         updateAiProvider: (id, config) => {
+          let updatedProvider: AIProviderConfig | null = null;
           const providers = get().aiProviders.map((providerConfig) => {
             if (providerConfig.id !== id) {
               return providerConfig;
@@ -1730,7 +1833,7 @@ export const useSettingsStore = create<SettingsState>()(
               provider,
               apiUrl,
             );
-            return {
+            updatedProvider = {
               ...providerConfig,
               ...config,
               name:
@@ -1742,14 +1845,34 @@ export const useSettingsStore = create<SettingsState>()(
               apiKey: (config.apiKey ?? providerConfig.apiKey).trim(),
               apiUrl: apiUrl.trim(),
             };
+            return updatedProvider;
           });
-          setTouched({ aiProviders: providers });
+          const models = updatedProvider
+            ? get().aiModels.map((model) =>
+                model.providerId === id ||
+                (!model.providerId &&
+                  findMatchingAIProvider([updatedProvider!], model))
+                  ? {
+                      ...model,
+                      providerId: updatedProvider!.id,
+                      provider: updatedProvider!.provider,
+                      apiProtocol: updatedProvider!.apiProtocol,
+                      apiKey: updatedProvider!.apiKey,
+                      apiUrl: updatedProvider!.apiUrl,
+                    }
+                  : model,
+              )
+            : get().aiModels;
+          commitAISettings({ aiProviders: providers, aiModels: models });
         },
 
         deleteAiProvider: (id) => {
-          setTouched({
+          commitAISettings({
             aiProviders: get().aiProviders.filter(
               (provider) => provider.id !== id,
+            ),
+            aiModels: get().aiModels.map((model) =>
+              model.providerId === id ? { ...model, providerId: undefined } : model,
             ),
           });
         },
@@ -1760,29 +1883,39 @@ export const useSettingsStore = create<SettingsState>()(
           const models = get().aiModels;
           const isFirst = models.length === 0;
           const type = config.type ?? "chat";
+          const providerConfig = findMatchingAIProvider(get().aiProviders, {
+            providerId: config.providerId,
+            provider: config.provider,
+            apiProtocol: config.apiProtocol,
+            apiKey: config.apiKey,
+            apiUrl: config.apiUrl,
+          });
           const nextModel = {
             ...config,
             id,
             type,
+            providerId: providerConfig?.id ?? config.providerId,
+            provider: providerConfig?.provider ?? config.provider,
+            apiProtocol: providerConfig?.apiProtocol ?? config.apiProtocol,
+            apiKey: providerConfig?.apiKey ?? config.apiKey,
+            apiUrl: providerConfig?.apiUrl ?? config.apiUrl,
             capabilities: normalizeAIModelCapabilities(
               config.capabilities,
               type,
             ),
             isDefault: isFirst,
           };
-          setTouched({
+          const partial: Partial<SettingsState> = {
             aiModels: [...models, nextModel],
-          });
-          // If it's the first model, sync to legacy configuration
+          };
           if (isFirst) {
-            setTouched({
-              aiProvider: config.provider,
-              aiApiProtocol: config.apiProtocol,
-              aiApiKey: config.apiKey,
-              aiApiUrl: config.apiUrl,
-              aiModel: config.model,
-            });
+            partial.aiProvider = nextModel.provider;
+            partial.aiApiProtocol = nextModel.apiProtocol;
+            partial.aiApiKey = nextModel.apiKey;
+            partial.aiApiUrl = nextModel.apiUrl;
+            partial.aiModel = nextModel.model;
           }
+          commitAISettings(partial);
         },
 
         updateAiModel: (id, config) => {
@@ -1790,11 +1923,23 @@ export const useSettingsStore = create<SettingsState>()(
             if (m.id !== id) {
               return m;
             }
+            const merged = { ...m, ...config };
+            const providerConfig = findMatchingAIProvider(get().aiProviders, {
+              providerId: merged.providerId,
+              provider: merged.provider,
+              apiProtocol: merged.apiProtocol,
+              apiKey: merged.apiKey,
+              apiUrl: merged.apiUrl,
+            });
             const type = config.type ?? m.type ?? "chat";
             return {
-              ...m,
-              ...config,
+              ...merged,
               type,
+              providerId: providerConfig?.id ?? merged.providerId,
+              provider: providerConfig?.provider ?? merged.provider,
+              apiProtocol: providerConfig?.apiProtocol ?? merged.apiProtocol,
+              apiKey: providerConfig?.apiKey ?? merged.apiKey,
+              apiUrl: providerConfig?.apiUrl ?? merged.apiUrl,
               capabilities: normalizeAIModelCapabilities(
                 config.capabilities ??
                   (config.type ? undefined : m.capabilities),
@@ -1802,18 +1947,16 @@ export const useSettingsStore = create<SettingsState>()(
               ),
             };
           });
-          setTouched({ aiModels: models });
-          // If updating the default model, sync to legacy configuration
           const updated = models.find((m) => m.id === id);
+          const partial: Partial<SettingsState> = { aiModels: models };
           if (updated?.isDefault) {
-            setTouched({
-              aiProvider: updated.provider,
-              aiApiProtocol: updated.apiProtocol,
-              aiApiKey: updated.apiKey,
-              aiApiUrl: updated.apiUrl,
-              aiModel: updated.model,
-            });
+            partial.aiProvider = updated.provider;
+            partial.aiApiProtocol = updated.apiProtocol;
+            partial.aiApiKey = updated.apiKey;
+            partial.aiApiUrl = updated.apiUrl;
+            partial.aiModel = updated.model;
           }
+          commitAISettings(partial);
         },
 
         deleteAiModel: (id) => {
@@ -1837,19 +1980,20 @@ export const useSettingsStore = create<SettingsState>()(
           // If deleting the default model, set the first one as default
           if (toDelete?.isDefault && remaining.length > 0) {
             remaining[0] = { ...remaining[0], isDefault: true };
-            setTouched({
-              aiProvider: remaining[0].provider,
-              aiApiProtocol: remaining[0].apiProtocol,
-              aiApiKey: remaining[0].apiKey,
-              aiApiUrl: remaining[0].apiUrl,
-              aiModel: remaining[0].model,
-            });
           }
-          setTouched({
+          const partial: Partial<SettingsState> = {
             aiModels: remaining,
             scenarioModelDefaults,
             modelRouteDefaults,
-          });
+          };
+          if (toDelete?.isDefault && remaining.length > 0) {
+            partial.aiProvider = remaining[0].provider;
+            partial.aiApiProtocol = remaining[0].apiProtocol;
+            partial.aiApiKey = remaining[0].apiKey;
+            partial.aiApiUrl = remaining[0].apiUrl;
+            partial.aiModel = remaining[0].model;
+          }
+          commitAISettings(partial);
         },
 
         setDefaultAiModel: (id) => {
@@ -1866,18 +2010,17 @@ export const useSettingsStore = create<SettingsState>()(
             }
             return m;
           });
-          setTouched({ aiModels: models });
+          const partial: Partial<SettingsState> = { aiModels: models };
 
           // Only chat models sync to legacy configuration
           if (targetType === "chat") {
-            setTouched({
-              aiProvider: targetModel.provider,
-              aiApiProtocol: targetModel.apiProtocol,
-              aiApiKey: targetModel.apiKey,
-              aiApiUrl: targetModel.apiUrl,
-              aiModel: targetModel.model,
-            });
+            partial.aiProvider = targetModel.provider;
+            partial.aiApiProtocol = targetModel.apiProtocol;
+            partial.aiApiKey = targetModel.apiKey;
+            partial.aiApiUrl = targetModel.apiUrl;
+            partial.aiModel = targetModel.model;
           }
+          commitAISettings(partial);
         },
 
         setScenarioModelDefault: (scenario, modelId) => {
@@ -1894,7 +2037,7 @@ export const useSettingsStore = create<SettingsState>()(
           } else {
             delete nextRouteDefaults[route];
           }
-          setTouched({
+          commitAISettings({
             scenarioModelDefaults: nextDefaults,
             modelRouteDefaults: nextRouteDefaults,
           });
@@ -1907,7 +2050,7 @@ export const useSettingsStore = create<SettingsState>()(
           } else {
             delete nextDefaults[route];
           }
-          setTouched({ modelRouteDefaults: nextDefaults });
+          commitAISettings({ modelRouteDefaults: nextDefaults });
         },
 
         applyTheme: () => {
@@ -2389,6 +2532,10 @@ export const useSettingsStore = create<SettingsState>()(
             .map((model) => ({
               ...model,
               type: model.type ?? "chat",
+              providerId:
+                typeof model.providerId === "string" && model.providerId.trim()
+                  ? model.providerId.trim()
+                  : undefined,
               apiProtocol: normalizeAIProtocol(
                 model.apiProtocol,
                 model.provider,

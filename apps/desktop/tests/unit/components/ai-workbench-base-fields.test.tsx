@@ -140,7 +140,7 @@ describe("BaseFields", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders Cherry-comparable model capability toggles as independent fields", async () => {
+  it("renders only the common model capability toggles", async () => {
     const setModelForm = vi.fn();
 
     await renderWithI18n(
@@ -154,16 +154,25 @@ describe("BaseFields", () => {
     );
 
     for (const label of [
-      "Chat Model",
-      "Image Model",
+      "Image generation",
       "Vision input",
       "Reasoning",
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+
+    for (const hiddenLabel of [
+      "Chat Model",
       "Tool use",
       "Web search",
       "Embedding",
       "Rerank",
     ]) {
-      expect(screen.getByLabelText(label)).toBeInTheDocument();
+      expect(screen.queryByLabelText(hiddenLabel)).not.toBeInTheDocument();
+    }
+
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox).toHaveClass("sr-only");
     }
 
     expect(setModelForm).not.toHaveBeenCalled();

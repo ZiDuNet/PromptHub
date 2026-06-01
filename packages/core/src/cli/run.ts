@@ -20,6 +20,7 @@ import {
   coreCliSkillService,
   type CliSkillService,
 } from "./skill-cli-service";
+import { handleAIConfigCommand } from "./ai-config-command";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import type {
   CreateFolderDTO,
@@ -43,7 +44,7 @@ import type {
 import { isRuleFileId } from "@prompthub/shared/types";
 
 type CliWriter = (message: string) => void;
-type OutputFormat = "json" | "table";
+export type OutputFormat = "json" | "table";
 
 const EXIT_CODES = {
   OK: 0,
@@ -54,7 +55,7 @@ const EXIT_CODES = {
   INTERNAL: 10,
 } as const;
 
-const CLI_VERSION = "0.5.7-beta.2";
+const CLI_VERSION = "0.5.8-beta.1";
 
 type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 
@@ -184,6 +185,7 @@ const ROOT_HELP = [
   "  rules     管理 rules",
   "  workspace 管理工作区导入导出",
   "  skill     管理 skills",
+  "  ai        管理 AI providers、models 和模型路由",
   "",
   "全局参数:",
   "  --data-dir <dir>        指定 PromptHub userData 目录",
@@ -199,11 +201,13 @@ const ROOT_HELP = [
   "  prompthub rules list",
   "  prompthub skill install ~/.claude/skills/my-skill",
   "  prompthub skill delete my-skill --purge-managed-repo",
+  "  prompthub ai provider-add --provider openai --api-key $OPENAI_API_KEY --api-url https://api.openai.com/v1",
   "",
   "更多帮助:",
   "  prompthub prompt --help",
   "  prompthub rules --help",
   "  prompthub skill --help",
+  "  prompthub ai --help",
 ].join("\n");
 
 const PROMPT_HELP = [
@@ -2724,6 +2728,9 @@ export async function runCli(
     if (resource === "skill") {
       await handleSkillCommand(commandArgs, context, databaseHooks);
       return EXIT_CODES.OK;
+    }
+    if (resource === "ai") {
+      return await handleAIConfigCommand(commandArgs, io, configured.output);
     }
 
     throw new CliError(

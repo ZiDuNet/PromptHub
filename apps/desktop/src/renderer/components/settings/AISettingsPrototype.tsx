@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 
-import { BrainIcon, EyeIcon, ImageIcon, ZapIcon } from "lucide-react";
+import {
+  BrainIcon,
+  EyeIcon,
+  ImageIcon,
+  TestTubeIcon,
+  ZapIcon,
+} from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
@@ -135,6 +141,23 @@ function getFetchModelsFeedback(
         type: "error",
       };
   }
+}
+
+function findProviderForModel(
+  providers: EndpointGroup[],
+  model: AIModelConfig,
+): EndpointGroup | undefined {
+  if (model.providerId?.trim()) {
+    return providers.find((provider) => provider.providerConfigId === model.providerId);
+  }
+
+  return providers.find(
+    (provider) =>
+      provider.provider === model.provider &&
+      provider.apiProtocol === model.apiProtocol &&
+      provider.apiUrl === model.apiUrl &&
+      provider.apiKey === model.apiKey,
+  );
 }
 
 function getConnectionErrorMessage(
@@ -281,10 +304,12 @@ export function AISettingsPrototype() {
     }, {});
 
     for (const model of aiModels) {
-      const key = buildEndpointGroupKey(model);
+      const providerGroup = findProviderForModel(Object.values(grouped), model);
+      const key = providerGroup?.key ?? buildEndpointGroupKey(model);
       if (!grouped[key]) {
         grouped[key] = {
           key,
+          providerConfigId: model.providerId,
           provider: model.provider,
           apiProtocol: model.apiProtocol,
           apiKey: model.apiKey,
@@ -591,6 +616,7 @@ export function AISettingsPrototype() {
     setSavingModel(true);
     const payload = {
       name: modelForm.name.trim(),
+      providerId: modelForm.providerId?.trim() || undefined,
       provider: modelForm.provider.trim(),
       apiProtocol: modelForm.apiProtocol,
       apiKey: modelForm.apiKey.trim(),
@@ -648,6 +674,7 @@ export function AISettingsPrototype() {
     for (const { modelId, attributes } of inferredModels) {
       settings.addAiModel({
         name: "",
+        providerId: modelForm.providerId?.trim() || undefined,
         provider: modelForm.provider.trim(),
         apiProtocol: modelForm.apiProtocol,
         apiKey: modelForm.apiKey.trim(),
@@ -843,6 +870,7 @@ export function AISettingsPrototype() {
     const firstModel = group.models[0];
     setEndpointDraft({
       key: group.key,
+      providerConfigId: group.providerConfigId,
       name: group.name || getEndpointDisplayName(group),
       provider: group.provider,
       apiProtocol: group.apiProtocol,
@@ -856,6 +884,7 @@ export function AISettingsPrototype() {
     const providerInfo = getProviderInfo(EMPTY_FORM.provider);
     setEndpointDraft({
       key: "",
+      providerConfigId: undefined,
       name: providerInfo?.name || EMPTY_FORM.provider,
       provider: EMPTY_FORM.provider,
       apiProtocol: providerInfo?.recommendedProtocol || EMPTY_FORM.apiProtocol,
@@ -902,6 +931,7 @@ export function AISettingsPrototype() {
 
     for (const model of targetGroup.models) {
       settings.updateAiModel(model.id, {
+        providerId: targetGroup.providerConfigId,
         ...providerConfig,
       });
     }
@@ -972,7 +1002,9 @@ export function AISettingsPrototype() {
         >
           {testingDefault ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
-          ) : null}
+          ) : (
+            <TestTubeIcon className="h-4 w-4 text-muted-foreground" />
+          )}
           {t("settings.aiWorkbenchTestDefault")}
         </button>
         <button

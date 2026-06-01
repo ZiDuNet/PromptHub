@@ -321,14 +321,23 @@ export function getModelDisplayName(
 }
 
 export function buildEndpointGroupKey(model: AIModelConfig): string {
+  if (model.providerId?.trim()) {
+    return `provider:${model.providerId.trim()}`;
+  }
   return buildEndpointKey(model);
 }
 
 export function buildEndpointKey(input: {
+  id?: string;
+  providerId?: string;
   provider: string;
   apiProtocol: string;
   apiUrl: string;
 }): string {
+  const providerId = input.providerId?.trim() || input.id?.trim();
+  if (providerId) {
+    return `provider:${providerId}`;
+  }
   return `${input.provider}::${input.apiProtocol}::${input.apiUrl}`;
 }
 
@@ -475,6 +484,7 @@ export function createFormFromModel(model: AIModelConfig): ModelFormState {
   return {
     type: model.type ?? "chat",
     name: model.name || "",
+    providerId: model.providerId,
     provider: model.provider,
     apiProtocol: model.apiProtocol,
     apiKey: model.apiKey,
