@@ -1,11 +1,6 @@
 import { useMemo, useState } from "react";
 
-import {
-  BrainIcon,
-  ImageIcon,
-  LanguagesIcon,
-  WandSparklesIcon,
-} from "lucide-react";
+import { BrainIcon, EyeIcon, ImageIcon, ZapIcon } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
@@ -20,31 +15,36 @@ import {
 import {
   getModelsByType,
   isConfiguredModel,
-  resolveScenarioModel,
+  resolveRouteModel,
 } from "../../services/ai-defaults";
 import {
   useSettingsStore,
   type AIModelConfig,
-  type AIUsageScenario,
+  type AIModelRoute,
 } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
 import { AdvancedSection } from "./ai-workbench/AdvancedSection";
-import { EMPTY_FORM, SCENARIO_DEFINITIONS } from "./ai-workbench/constants";
+import { EMPTY_FORM, MODEL_ROUTE_DEFINITIONS } from "./ai-workbench/constants";
 import { EndpointFormModal } from "./ai-workbench/EndpointFormModal";
 import { EndpointsSection } from "./ai-workbench/EndpointsSection";
-import { HeaderSection } from "./ai-workbench/HeaderSection";
 import {
   buildChatParams,
+  buildEndpointKey,
   buildEndpointGroupKey,
   buildImageParams,
+  cloneDefaultCapabilities,
   cloneDefaultChatParams,
   cloneDefaultImageParams,
   createFormFromModel,
   getModelDisplayName,
+  getEndpointDisplayName,
   getProviderInfo,
+  inferModelAttributes,
 } from "./ai-workbench/helpers";
+import { ModelFetchModal } from "./ai-workbench/ModelFetchModal";
 import { ModelFormModal } from "./ai-workbench/ModelFormModal";
 import { ScenarioDefaultsSection } from "./ai-workbench/ScenarioDefaultsSection";
+import { StatusCard } from "./ai-workbench/shared";
 import type {
   EndpointDraft,
   EndpointGroup,
@@ -67,13 +67,16 @@ function buildVerifiedEndpointStatus(
     return null;
   }
 
-  const latestVerifiedAt = verifiedModels.reduce((latest, model) => {
-    const current = Date.parse(model.lastVerifiedAt || "");
-    if (!Number.isFinite(current)) {
-      return latest;
-    }
-    return latest === null || current > latest ? current : latest;
-  }, null as number | null);
+  const latestVerifiedAt = verifiedModels.reduce(
+    (latest, model) => {
+      const current = Date.parse(model.lastVerifiedAt || "");
+      if (!Number.isFinite(current)) {
+        return latest;
+      }
+      return latest === null || current > latest ? current : latest;
+    },
+    null as number | null,
+  );
 
   const verifiedModel = verifiedModels[0];
   const detailPrefix = verifiedModel?.model?.trim()
@@ -205,6 +208,7 @@ export function AISettingsPrototype() {
   const [modelForm, setModelForm] = useState<ModelFormState>(EMPTY_FORM);
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [showModelForm, setShowModelForm] = useState(false);
+  const [showModelFetch, setShowModelFetch] = useState(false);
   const [showEndpointForm, setShowEndpointForm] = useState(false);
   const [endpointDraft, setEndpointDraft] = useState<EndpointDraft | null>(
     null,
@@ -215,6 +219,7 @@ export function AISettingsPrototype() {
     null,
   );
   const [savingModel, setSavingModel] = useState(false);
+  const [modelEndpointLocked, setModelEndpointLocked] = useState(false);
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [endpointStatuses, setEndpointStatuses] = useState<
@@ -231,59 +236,69 @@ export function AISettingsPrototype() {
     [aiModels],
   );
 
-  const resolvedScenarioModels = useMemo(
+  const resolvedRouteModels = useMemo(
     () => ({
-      quickAdd: resolveScenarioModel(
+      mainText: resolveRouteModel(
         aiModels,
-        settings.scenarioModelDefaults,
-        "quickAdd",
-        "chat",
+        settings.modelRouteDefaults,
+        "mainText",
       ),
-      promptTest: resolveScenarioModel(
+      fastText: resolveRouteModel(
         aiModels,
-        settings.scenarioModelDefaults,
-        "promptTest",
-        "chat",
+        settings.modelRouteDefaults,
+        "fastText",
       ),
-      imageTest: resolveScenarioModel(
+      visionText: resolveRouteModel(
         aiModels,
-        settings.scenarioModelDefaults,
-        "imageTest",
-        "image",
+        settings.modelRouteDefaults,
+        "visionText",
       ),
-      translation: resolveScenarioModel(
+      imageGeneration: resolveRouteModel(
         aiModels,
-        settings.scenarioModelDefaults,
-        "translation",
-        "chat",
+        settings.modelRouteDefaults,
+        "imageGeneration",
       ),
     }),
-    [aiModels, settings.scenarioModelDefaults],
+    [aiModels, settings.modelRouteDefaults],
   );
 
   const endpointGroups = useMemo(() => {
-    const grouped = aiModels.reduce<Record<string, EndpointGroup>>(
-      (acc, model) => {
-        const key = buildEndpointGroupKey(model);
-        if (!acc[key]) {
-          acc[key] = {
-            key,
-            provider: model.provider,
-            apiProtocol: model.apiProtocol,
-            apiUrl: model.apiUrl,
-            models: [],
-          };
-        }
-        acc[key].models.push(model);
-        return acc;
-      },
-      {},
-    );
+    const grouped = (settings.aiProviders ?? []).reduce<
+      Record<string, EndpointGroup>
+    >((acc, providerConfig) => {
+      const key = buildEndpointKey(providerConfig);
+      acc[key] = {
+        key,
+        providerConfigId: providerConfig.id,
+        name: providerConfig.name,
+        provider: providerConfig.provider,
+        apiProtocol: providerConfig.apiProtocol,
+        apiKey: providerConfig.apiKey,
+        apiUrl: providerConfig.apiUrl,
+        models: [],
+      };
+      return acc;
+    }, {});
+
+    for (const model of aiModels) {
+      const key = buildEndpointGroupKey(model);
+      if (!grouped[key]) {
+        grouped[key] = {
+          key,
+          provider: model.provider,
+          apiProtocol: model.apiProtocol,
+          apiKey: model.apiKey,
+          apiUrl: model.apiUrl,
+          models: [],
+        };
+      }
+      grouped[key].models.push(model);
+    }
 
     return Object.values(grouped).sort((left, right) =>
       left.provider.localeCompare(right.provider),
     );
-  }, [aiModels]);
+  }, [aiModels, settings.aiProviders]);
 
   const hasLegacyOnlyConfig = useMemo(
     () =>
@@ -303,69 +318,19 @@ export function AISettingsPrototype() {
     ],
   );
 
-  const statusCards = useMemo<StatusCardData[]>(
-    () => [
-      {
-        title: t("settings.chatModels"),
-        value: String(chatModels.length),
-        detail: `${t("settings.aiWorkbenchDefaultLabel")}: ${getModelDisplayName(
-          resolvedScenarioModels.promptTest,
-          t("settings.aiWorkbenchNotConfigured"),
-        )}`,
-        tone: chatModels.length > 0 ? "ready" : "warning",
-        icon: BrainIcon,
-      },
-      {
-        title: t("settings.imageModels"),
-        value: String(imageModels.length),
-        detail: `${t("settings.aiWorkbenchDefaultLabel")}: ${getModelDisplayName(
-          resolvedScenarioModels.imageTest,
-          t("settings.aiWorkbenchNotConfigured"),
-        )}`,
-        tone: imageModels.length > 0 ? "ready" : "warning",
-        icon: ImageIcon,
-      },
-      {
-        title: t("settings.aiWorkbenchTranslationCapability"),
-        value: resolvedScenarioModels.translation
-          ? t("settings.aiWorkbenchEnabled")
-          : t("settings.aiWorkbenchNotConfigured"),
-        detail: `${t("settings.aiWorkbenchUsingLabel")}: ${getModelDisplayName(
-          resolvedScenarioModels.translation,
-          t("settings.aiWorkbenchNotConfigured"),
-        )}`,
-        tone: resolvedScenarioModels.translation ? "ready" : "warning",
-        icon: LanguagesIcon,
-      },
-      {
-        title: t("settings.aiWorkbenchScenarioQuickAdd"),
-        value: resolvedScenarioModels.quickAdd
-          ? t("settings.aiWorkbenchEnabled")
-          : t("settings.aiWorkbenchPending"),
-        detail: `${t("settings.aiWorkbenchUsingLabel")}: ${getModelDisplayName(
-          resolvedScenarioModels.quickAdd,
-          t("settings.aiWorkbenchNotConfigured"),
-        )}`,
-        tone: resolvedScenarioModels.quickAdd ? "ready" : "warning",
-        icon: WandSparklesIcon,
-      },
-    ],
-    [chatModels.length, imageModels.length, resolvedScenarioModels, t],
-  );
-
   const modelScenarioBadges = useMemo(() => {
-    const entries = Object.entries(resolvedScenarioModels) as Array<
-      [AIUsageScenario, AIModelConfig | null]
+    const entries = Object.entries(resolvedRouteModels) as Array<
+      [AIModelRoute, AIModelConfig | null]
     >;
     const mapping = new Map<string, string[]>();
 
-    for (const [scenario, model] of entries) {
+    for (const [route, model] of entries) {
       if (!model) {
         continue;
       }
 
-      const badgeKey = SCENARIO_DEFINITIONS.find(
-        (item) => item.key === scenario,
+      const badgeKey = MODEL_ROUTE_DEFINITIONS.find(
+        (item) => item.key === route,
       )?.badgeKey;
       const badge = badgeKey ? t(badgeKey) : null;
       if (!badge) {
@@ -378,68 +343,72 @@ export function AISettingsPrototype() {
     }
 
     return mapping;
-  }, [resolvedScenarioModels, t]);
+  }, [resolvedRouteModels, t]);
 
-  const openAddModel = (preset?: Partial<ModelFormState>) => {
-    const provider = preset?.provider || EMPTY_FORM.provider;
-    const providerInfo = getProviderInfo(provider);
-    const apiProtocol =
-      preset?.apiProtocol ?? providerInfo?.recommendedProtocol ?? EMPTY_FORM.apiProtocol;
+  const statusCards = useMemo<StatusCardData[]>(
+    () => [
+      {
+        title: t("settings.aiWorkbenchMainTextModel"),
+        value: getModelDisplayName(
+          resolvedRouteModels.mainText,
+          t("settings.aiWorkbenchNotConfigured"),
+        ),
+        detail: t("settings.aiWorkbenchRouteMainTextDesc"),
+        tone: resolvedRouteModels.mainText ? "ready" : "warning",
+        icon: BrainIcon,
+      },
+      {
+        title: t("settings.imageModels"),
+        value: getModelDisplayName(
+          resolvedRouteModels.imageGeneration,
+          t("settings.aiWorkbenchNotConfigured"),
+        ),
+        detail: t("settings.aiWorkbenchRouteImageGenerationDesc"),
+        tone: resolvedRouteModels.imageGeneration ? "ready" : "warning",
+        icon: ImageIcon,
+      },
+      {
+        title: t("settings.aiWorkbenchFastModels"),
+        value: getModelDisplayName(
+          resolvedRouteModels.fastText,
+          t("settings.aiWorkbenchNotConfigured"),
+        ),
+        detail: t("settings.aiWorkbenchRouteFastTextDesc"),
+        tone: resolvedRouteModels.fastText ? "ready" : "warning",
+        icon: ZapIcon,
+      },
+      {
+        title: t("settings.aiWorkbenchVisionModels"),
+        value: getModelDisplayName(
+          resolvedRouteModels.visionText,
+          t("settings.aiWorkbenchNotConfigured"),
+        ),
+        detail: t("settings.aiWorkbenchRouteVisionTextDesc"),
+        tone: resolvedRouteModels.visionText ? "ready" : "warning",
+        icon: EyeIcon,
+      },
+    ],
+    [resolvedRouteModels, t],
+  );
 
-    setEditingModelId(null);
-    setAvailableModels([]);
-    setModelForm({
-      ...EMPTY_FORM,
-      ...preset,
-      provider,
-      apiProtocol,
-      apiUrl: preset?.apiUrl ?? providerInfo?.defaultUrl ?? EMPTY_FORM.apiUrl,
-      chatParams: preset?.chatParams
-        ? { ...cloneDefaultChatParams(), ...preset.chatParams }
-        : cloneDefaultChatParams(),
-      imageParams: preset?.imageParams
-        ? { ...cloneDefaultImageParams(), ...preset.imageParams }
-        : cloneDefaultImageParams(),
-    });
-    setShowModelForm(true);
-  };
-
-  const openEditModel = (model: AIModelConfig) => {
-    setEditingModelId(model.id);
-    setAvailableModels([]);
-    setModelForm(createFormFromModel(model));
-    setShowModelForm(true);
-  };
-
-  const closeModelForm = () => {
-    setEditingModelId(null);
-    setAvailableModels([]);
-    setShowModelForm(false);
-    setModelForm({
-      ...EMPTY_FORM,
-      chatParams: cloneDefaultChatParams(),
-      imageParams: cloneDefaultImageParams(),
-    });
-  };
-
-  const handleFetchModels = async () => {
-    if (!modelForm.apiKey.trim() || !modelForm.apiUrl.trim()) {
+  const fetchModelsForForm = async (form: ModelFormState) => {
+    if (!form.apiKey.trim() || !form.apiUrl.trim()) {
       showToast(t("settings.fillApiFirst"), "error");
-      return;
+      return false;
     }
 
     setFetchingModels(true);
     const result = await fetchAvailableModels(
-      modelForm.apiUrl,
-      modelForm.apiKey,
-      modelForm.apiProtocol,
+      form.apiUrl,
+      form.apiKey,
+      form.apiProtocol,
     );
     setFetchingModels(false);
 
     if (!result.success || result.models.length === 0) {
-      const feedback = getFetchModelsFeedback(result, t, modelForm.apiUrl);
+      const feedback = getFetchModelsFeedback(result, t, form.apiUrl);
       showToast(feedback.message, feedback.type);
-      return;
+      return false;
     }
 
     setAvailableModels(result.models);
@@ -447,6 +416,94 @@ export function AISettingsPrototype() {
       t("settings.modelsLoaded", { count: result.models.length }),
       "success",
     );
+    return true;
+  };
+
+  const createModelFormState = (preset?: Partial<ModelFormState>) => {
+    const provider = preset?.provider || EMPTY_FORM.provider;
+    const providerInfo = getProviderInfo(provider);
+    const apiProtocol =
+      preset?.apiProtocol ??
+      providerInfo?.recommendedProtocol ??
+      EMPTY_FORM.apiProtocol;
+    const nextForm = {
+      ...EMPTY_FORM,
+      ...preset,
+      provider,
+      apiProtocol,
+      apiUrl: preset?.apiUrl ?? providerInfo?.defaultUrl ?? EMPTY_FORM.apiUrl,
+      capabilities: preset?.capabilities
+        ? { ...cloneDefaultCapabilities(), ...preset.capabilities }
+        : cloneDefaultCapabilities(),
+      chatParams: preset?.chatParams
+        ? { ...cloneDefaultChatParams(), ...preset.chatParams }
+        : cloneDefaultChatParams(),
+      imageParams: preset?.imageParams
+        ? { ...cloneDefaultImageParams(), ...preset.imageParams }
+        : cloneDefaultImageParams(),
+    };
+
+    return nextForm;
+  };
+
+  const openAddModel = (
+    preset?: Partial<ModelFormState>,
+    options?: { lockEndpoint?: boolean },
+  ) => {
+    const nextForm = createModelFormState(preset);
+
+    setEditingModelId(null);
+    setAvailableModels([]);
+    setModelEndpointLocked(options?.lockEndpoint === true);
+    setModelForm(nextForm);
+    setShowModelForm(true);
+  };
+
+  const openFetchModels = async (preset?: Partial<ModelFormState>) => {
+    const nextForm = createModelFormState(preset);
+
+    setEditingModelId(null);
+    setAvailableModels([]);
+    setModelEndpointLocked(true);
+    setModelForm(nextForm);
+    setShowModelFetch(true);
+
+    const loaded = await fetchModelsForForm(nextForm);
+    if (!loaded) {
+      setShowModelFetch(false);
+    }
+  };
+
+  const openEditModel = (model: AIModelConfig) => {
+    setEditingModelId(model.id);
+    setAvailableModels([]);
+    setModelEndpointLocked(true);
+    setModelForm(createFormFromModel(model));
+    setShowModelForm(true);
+  };
+
+  const closeModelForm = () => {
+    setEditingModelId(null);
+    setAvailableModels([]);
+    setModelEndpointLocked(false);
+    setShowModelForm(false);
+    setModelForm({
+      ...EMPTY_FORM,
+      chatParams: cloneDefaultChatParams(),
+      imageParams: cloneDefaultImageParams(),
+      capabilities: cloneDefaultCapabilities(),
+    });
+  };
+
+  const closeModelFetch = () => {
+    setShowModelFetch(false);
+    setAvailableModels([]);
+    setModelForm({
+      ...EMPTY_FORM,
+      chatParams: cloneDefaultChatParams(),
+      imageParams: cloneDefaultImageParams(),
+      capabilities: cloneDefaultCapabilities(),
+    });
   };
 
   const handleTestDraft = async () => {
@@ -498,7 +555,10 @@ export function AISettingsPrototype() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      showToast(formatModelTestFailureToast(modelName, message, t, modelForm.apiUrl), "error");
+      showToast(
+        formatModelTestFailureToast(modelName, message, t, modelForm.apiUrl),
+        "error",
+      );
     } finally {
       setTestingModelId(null);
     }
@@ -515,12 +575,15 @@ export function AISettingsPrototype() {
       return;
     }
 
-    const nextChatParams =
-      modelForm.type === "chat" ? buildChatParams(modelForm) : undefined;
-    const nextImageParams =
-      modelForm.type === "image" ? buildImageParams(modelForm) : undefined;
+    const supportsChat = modelForm.capabilities.chat === true;
+    const supportsImageGeneration =
+      modelForm.capabilities.imageGeneration === true;
+    const nextChatParams = supportsChat ? buildChatParams(modelForm) : undefined;
+    const nextImageParams = supportsImageGeneration
+      ? buildImageParams(modelForm)
+      : undefined;
 
-    if (modelForm.type === "chat" && !nextChatParams) {
+    if (supportsChat && !nextChatParams) {
       showToast(t("settings.aiWorkbenchInvalidCustomParams"), "error");
       return;
     }
@@ -534,8 +597,12 @@ export function AISettingsPrototype() {
       apiUrl: normalizeApiUrlInput(modelForm.apiUrl),
       model: modelForm.model.trim(),
       type: modelForm.type,
-      chatParams: modelForm.type === "chat" ? nextChatParams : undefined,
-      imageParams: modelForm.type === "image" ? nextImageParams : undefined,
+      capabilities: {
+        ...cloneDefaultCapabilities(),
+        ...modelForm.capabilities,
+      },
+      chatParams: nextChatParams,
+      imageParams: nextImageParams,
     };
 
     if (editingModelId) {
@@ -560,18 +627,25 @@ export function AISettingsPrototype() {
       return;
     }
 
-    const nextChatParams =
-      modelForm.type === "chat" ? buildChatParams(modelForm) : undefined;
-    const nextImageParams =
-      modelForm.type === "image" ? buildImageParams(modelForm) : undefined;
+    const inferredModels = selectedIds.map((modelId) => ({
+      modelId,
+      attributes: inferModelAttributes(modelId),
+    }));
+    const hasChatModel = inferredModels.some(
+      (item) => item.attributes.type === "chat",
+    );
+    const nextChatParams = hasChatModel
+      ? buildChatParams(modelForm)
+      : undefined;
+    const nextImageParams = buildImageParams(modelForm);
 
-    if (modelForm.type === "chat" && !nextChatParams) {
+    if (hasChatModel && !nextChatParams) {
       showToast(t("settings.aiWorkbenchInvalidCustomParams"), "error");
       return;
     }
 
     setSavingModel(true);
-    for (const modelId of selectedIds) {
+    for (const { modelId, attributes } of inferredModels) {
       settings.addAiModel({
         name: "",
         provider: modelForm.provider.trim(),
@@ -579,19 +653,42 @@ export function AISettingsPrototype() {
         apiKey: modelForm.apiKey.trim(),
         apiUrl: normalizeApiUrlInput(modelForm.apiUrl),
         model: modelId,
-        type: modelForm.type,
-        chatParams: modelForm.type === "chat" ? nextChatParams : undefined,
-        imageParams: modelForm.type === "image" ? nextImageParams : undefined,
+        type: attributes.type,
+        capabilities: {
+          ...cloneDefaultCapabilities(),
+          ...attributes.capabilities,
+        },
+        chatParams:
+          attributes.capabilities.chat === true ? nextChatParams : undefined,
+        imageParams:
+          attributes.capabilities.imageGeneration === true
+            ? nextImageParams
+            : undefined,
       });
     }
     setSavingModel(false);
     showToast(t("settings.modelAdded") + ` (${selectedIds.length})`, "success");
     closeModelForm();
+    closeModelFetch();
   };
 
   const handleDeleteModel = (model: AIModelConfig) => {
     if (!confirm(t("settings.confirmDelete"))) {
       return;
+    }
+
+    const group = endpointGroups.find((item) =>
+      item.models.some((groupModel) => groupModel.id === model.id),
+    );
+    if (group && !group.providerConfigId && group.models.length === 1) {
+      settings.addAiProvider({
+        name: group.name || getEndpointDisplayName(group),
+        provider: group.provider,
+        apiProtocol: group.apiProtocol,
+        apiKey: group.apiKey,
+        apiUrl: group.apiUrl,
+        lastVerifiedAt: undefined,
+      });
     }
 
     settings.deleteAiModel(model.id);
@@ -643,7 +740,10 @@ export function AISettingsPrototype() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      showToast(formatModelTestFailureToast(modelName, message, t, model.apiUrl), "error");
+      showToast(
+        formatModelTestFailureToast(modelName, message, t, model.apiUrl),
+        "error",
+      );
     } finally {
       setTestingModelId(null);
     }
@@ -743,10 +843,24 @@ export function AISettingsPrototype() {
     const firstModel = group.models[0];
     setEndpointDraft({
       key: group.key,
-      provider: firstModel.provider,
-      apiProtocol: firstModel.apiProtocol,
-      apiKey: firstModel.apiKey,
-      apiUrl: firstModel.apiUrl,
+      name: group.name || getEndpointDisplayName(group),
+      provider: group.provider,
+      apiProtocol: group.apiProtocol,
+      apiKey: group.apiKey || firstModel?.apiKey || "",
+      apiUrl: group.apiUrl,
+    });
+    setShowEndpointForm(true);
+  };
+
+  const openAddEndpoint = () => {
+    const providerInfo = getProviderInfo(EMPTY_FORM.provider);
+    setEndpointDraft({
+      key: "",
+      name: providerInfo?.name || EMPTY_FORM.provider,
+      provider: EMPTY_FORM.provider,
+      apiProtocol: providerInfo?.recommendedProtocol || EMPTY_FORM.apiProtocol,
+      apiKey: "",
+      apiUrl: providerInfo?.defaultUrl || EMPTY_FORM.apiUrl,
     });
     setShowEndpointForm(true);
   };
@@ -761,20 +875,34 @@ export function AISettingsPrototype() {
       return;
     }
 
+    const providerConfig = {
+      name:
+        endpointDraft.name.trim() ||
+        getEndpointDisplayName({ provider: endpointDraft.provider }),
+      provider: endpointDraft.provider.trim(),
+      apiProtocol: endpointDraft.apiProtocol,
+      apiKey: endpointDraft.apiKey.trim(),
+      apiUrl: normalizeApiUrlInput(endpointDraft.apiUrl),
+      lastVerifiedAt: undefined,
+    };
+
     const targetGroup = endpointGroups.find(
       (group) => group.key === endpointDraft.key,
     );
     if (!targetGroup) {
+      settings.addAiProvider(providerConfig);
+      closeEndpointForm();
+      showToast(t("settings.aiWorkbenchProviderAdded"), "success");
       return;
+    }
+
+    if (targetGroup.providerConfigId) {
+      settings.updateAiProvider(targetGroup.providerConfigId, providerConfig);
     }
 
     for (const model of targetGroup.models) {
       settings.updateAiModel(model.id, {
-        provider: endpointDraft.provider.trim(),
-        apiProtocol: endpointDraft.apiProtocol,
-        apiKey: endpointDraft.apiKey.trim(),
-        apiUrl: normalizeApiUrlInput(endpointDraft.apiUrl),
-        lastVerifiedAt: undefined,
+        ...providerConfig,
       });
     }
 
@@ -789,9 +917,9 @@ export function AISettingsPrototype() {
 
   const handleTestDefaultModel = async () => {
     const model =
-      resolvedScenarioModels.promptTest ||
-      resolvedScenarioModels.imageTest ||
-      resolvedScenarioModels.translation;
+      resolvedRouteModels.mainText ||
+      resolvedRouteModels.imageGeneration ||
+      resolvedRouteModels.fastText;
 
     if (!model || !isConfiguredModel(model)) {
       showToast(t("settings.aiWorkbenchNoDefaultModel"), "error");
@@ -812,67 +940,155 @@ export function AISettingsPrototype() {
       apiUrl: settings.aiApiUrl,
       model: settings.aiModel,
       type: "chat",
+      capabilities: cloneDefaultCapabilities(),
     });
     showToast(t("settings.aiWorkbenchLegacyImported"), "success");
   };
 
-  return (
-    <div className="mx-auto max-w-5xl space-y-10 pb-10">
-      <HeaderSection
-        testingDefault={testingDefault}
-        hasLegacyOnlyConfig={hasLegacyOnlyConfig}
-        statusCards={statusCards}
-        onTestDefault={() => void handleTestDefaultModel()}
-        onAddModel={() => openAddModel()}
-        onImportLegacy={importLegacyConfig}
-      />
+  const resolvedEndpointStatuses = Object.fromEntries(
+    endpointGroups
+      .map((group) => {
+        const runtimeStatus = endpointStatuses[group.key];
+        if (runtimeStatus) {
+          return [group.key, runtimeStatus] as const;
+        }
+
+        const persistedStatus = buildVerifiedEndpointStatus(group, t);
+        return persistedStatus ? ([group.key, persistedStatus] as const) : null;
+      })
+      .filter(
+        (entry): entry is readonly [string, EndpointStatus] => entry !== null,
+      ),
+  );
+
+  const routingContent = (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => void handleTestDefaultModel()}
+          disabled={testingDefault}
+          className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg border border-border bg-background px-4 text-sm font-medium leading-none shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+        >
+          {testingDefault ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+          ) : null}
+          {t("settings.aiWorkbenchTestDefault")}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const group = endpointGroups[0];
+            if (!group) {
+              openAddEndpoint();
+              return;
+            }
+            openAddModel(
+              {
+                provider: group.provider,
+                apiProtocol: group.apiProtocol,
+                apiKey: group.apiKey,
+                apiUrl: group.apiUrl,
+                type: group.models[0]?.type ?? "chat",
+              },
+              { lockEndpoint: true },
+            );
+          }}
+          className="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-primary px-4 text-sm font-medium leading-none text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          {t("settings.addModel")}
+        </button>
+      </div>
+
+      <div>
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">
+          {t("settings.aiWorkbenchStatusOverview")}
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {statusCards.map((card) => (
+            <StatusCard key={card.title} {...card} />
+          ))}
+        </div>
+      </div>
 
       <ScenarioDefaultsSection
         chatModels={chatModels}
         imageModels={imageModels}
-        scenarioModelDefaults={settings.scenarioModelDefaults}
-        onScenarioChange={(scenario, value) =>
-          settings.setScenarioModelDefault(scenario, value)
+        modelRouteDefaults={settings.modelRouteDefaults}
+        onRouteChange={(route, value) =>
+          settings.setModelRouteDefault(route, value)
         }
       />
+    </div>
+  );
+
+  const advancedContent = (
+    <AdvancedSection
+      translationMode={settings.translationMode}
+      onTranslationModeChange={(value) => settings.setTranslationMode(value)}
+      onConfigure={() => {
+        const group = endpointGroups[0];
+        if (!group) {
+          openAddEndpoint();
+          return;
+        }
+        openAddModel(
+          {
+            provider: group.provider,
+            apiProtocol: group.apiProtocol,
+            apiKey: group.apiKey,
+            apiUrl: group.apiUrl,
+            type: group.models[0]?.type ?? "chat",
+          },
+          { lockEndpoint: true },
+        );
+      }}
+    />
+  );
+
+  return (
+    <div className="h-full min-h-0 min-w-0">
+      {hasLegacyOnlyConfig ? (
+        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium">
+                {t("settings.aiWorkbenchLegacyBannerTitle")}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {t("settings.aiWorkbenchLegacyBannerDesc")}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={importLegacyConfig}
+              className="inline-flex h-8 shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-primary px-3 text-xs font-medium leading-none text-primary-foreground"
+            >
+              {t("settings.aiWorkbenchImportLegacy")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <EndpointsSection
+        routingContent={routingContent}
+        advancedContent={advancedContent}
+        testingDefault={testingDefault}
+        onTestDefault={() => void handleTestDefaultModel()}
         endpointGroups={endpointGroups}
-        endpointStatuses={Object.fromEntries(
-          endpointGroups
-            .map((group) => {
-              const runtimeStatus = endpointStatuses[group.key];
-              if (runtimeStatus) {
-                return [group.key, runtimeStatus] as const;
-              }
-
-              const persistedStatus = buildVerifiedEndpointStatus(group, t);
-              return persistedStatus
-                ? ([group.key, persistedStatus] as const)
-                : null;
-            })
-            .filter(
-              (
-                entry,
-              ): entry is readonly [string, EndpointStatus] => entry !== null,
-            ),
-        )}
+        endpointStatuses={resolvedEndpointStatuses}
         testingEndpointKey={testingEndpointKey}
         testingModelId={testingModelId}
         modelScenarioBadges={modelScenarioBadges}
         onTestEndpoint={(group) => void handleTestEndpoint(group)}
         onEditEndpoint={openEditEndpoint}
+        onAddProvider={openAddEndpoint}
         onAddModel={openAddModel}
+        onFetchModels={(preset) => void openFetchModels(preset)}
         onSetDefaultModel={(modelId) => settings.setDefaultAiModel(modelId)}
         onTestModel={(model) => void handleTestModel(model)}
         onEditModel={openEditModel}
         onDeleteModel={handleDeleteModel}
-      />
-
-      <AdvancedSection
-        translationMode={settings.translationMode}
-        onTranslationModeChange={(value) => settings.setTranslationMode(value)}
-        onConfigure={() => openAddModel()}
       />
 
       {showModelForm ? (
@@ -880,14 +1096,22 @@ export function AISettingsPrototype() {
           editingModelId={editingModelId}
           modelForm={modelForm}
           setModelForm={setModelForm}
-          availableModels={availableModels}
-          fetchingModels={fetchingModels}
           testingModelId={testingModelId}
           savingModel={savingModel}
+          lockEndpointFields={modelEndpointLocked}
           onClose={closeModelForm}
-          onFetchModels={() => void handleFetchModels()}
           onTestDraft={() => void handleTestDraft()}
           onSave={handleSaveModel}
+        />
+      ) : null}
+
+      {showModelFetch ? (
+        <ModelFetchModal
+          setModelForm={setModelForm}
+          availableModels={availableModels}
+          fetchingModels={fetchingModels}
+          savingModel={savingModel}
+          onClose={closeModelFetch}
           onBatchAdd={handleBatchAddModels}
         />
       ) : null}

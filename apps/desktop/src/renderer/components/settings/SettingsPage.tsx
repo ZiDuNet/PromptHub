@@ -70,7 +70,7 @@ const WEB_SETTINGS_MENU = [
 ] as const;
 
 interface SettingsSubmenuItem {
-  id: DataSettingsSubsectionId;
+  id: string;
   labelKey: string;
   fallback: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -79,7 +79,7 @@ interface SettingsSubmenuItem {
 const DATA_SETTINGS_SUBMENU_GROUPS: Array<{
   labelKey: string;
   fallback: string;
-  items: SettingsSubmenuItem[];
+  items: Array<SettingsSubmenuItem & { id: DataSettingsSubsectionId }>;
 }> = [
   {
     labelKey: "settings.dataSubmenuBasic",
@@ -188,7 +188,11 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
   };
   const activeSubmenu =
     !webRuntime && activeSection === "data"
-      ? DATA_SETTINGS_SUBMENU_GROUPS
+      ? {
+          groups: DATA_SETTINGS_SUBMENU_GROUPS,
+          activeId: activeDataSubsection,
+          onSelect: (id: string) => setActiveDataSubsection(id as DataSettingsSubsectionId),
+        }
       : null;
   const enabledSubsections = useMemo(
     () => ({
@@ -236,33 +240,33 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
       {activeSubmenu ? (
         <div className="w-56 app-wallpaper-panel border-r border-border flex flex-col">
           <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-            {activeSubmenu.map((group) => (
+            {activeSubmenu.groups.map((group) => (
               <section key={group.labelKey} className="space-y-1 pb-3">
                 <div className="flex items-center gap-2 px-2 py-1.5 text-[12px] text-muted-foreground">
                   <span className="shrink-0">
-                    {t(group.labelKey, group.fallback)}
+                    {String(t(group.labelKey, group.fallback))}
                   </span>
                   <div className="h-px flex-1 bg-border" />
                 </div>
                 {group.items.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setActiveDataSubsection(item.id)}
-                    aria-label={`${t(item.labelKey, item.fallback)}${
+                    onClick={() => activeSubmenu.onSelect(item.id)}
+                    aria-label={`${String(t(item.labelKey, item.fallback))}${
                       item.id in enabledSubsections &&
                       enabledSubsections[item.id as keyof typeof enabledSubsections]
                         ? ` ${t("common.enabled")}`
                         : ""
                     }`}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-quick ${
-                      activeDataSubsection === item.id
+                      activeSubmenu.activeId === item.id
                         ? "bg-primary text-white shadow-sm"
                         : "text-foreground/80 hover:bg-muted/70"
                     }`}
                   >
                     <item.icon className="w-4 h-4" />
                     <span className="min-w-0 flex-1 text-left">
-                      {t(item.labelKey, item.fallback)}
+                      {String(t(item.labelKey, item.fallback))}
                     </span>
                     {item.id in enabledSubsections &&
                     enabledSubsections[
@@ -274,10 +278,10 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
                           (item.id === "selfHosted"
                             ? "self-hosted"
                             : item.id)
-                            ? activeDataSubsection === item.id
+                            ? activeSubmenu.activeId === item.id
                               ? "bg-white/20 text-white"
                               : "bg-primary/10 text-primary"
-                            : activeDataSubsection === item.id
+                            : activeSubmenu.activeId === item.id
                               ? "bg-white/15 text-white/90"
                               : "bg-muted text-muted-foreground"
                         }`}
@@ -294,16 +298,28 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
       ) : null}
 
       {/* 设置内容区 - 自适应宽度 */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 app-wallpaper-section">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-lg font-semibold mb-4">
-            {t(
-              settingsMenu.find((m) => m.id === activeSection)?.labelKey || "",
-            )}
-          </h1>
+      <div
+        className={
+          activeSection === "ai"
+            ? "flex-1 overflow-hidden app-wallpaper-section"
+            : "flex-1 overflow-y-auto px-6 py-5 app-wallpaper-section"
+        }
+      >
+        <div className={activeSection === "ai" ? "h-full max-w-none" : "max-w-4xl mx-auto"}>
+          {activeSection === "ai" ? null : (
+            <h1 className="text-lg font-semibold mb-4">
+              {t(
+                settingsMenu.find((m) => m.id === activeSection)?.labelKey || "",
+              )}
+            </h1>
+          )}
           <div
             key={activeSection}
-            className="animate-in fade-in slide-in-from-bottom-2 duration-base"
+            className={
+              activeSection === "ai"
+                ? "h-full animate-in fade-in slide-in-from-bottom-2 duration-base"
+                : "animate-in fade-in slide-in-from-bottom-2 duration-base"
+            }
           >
             {renderContent()}
           </div>

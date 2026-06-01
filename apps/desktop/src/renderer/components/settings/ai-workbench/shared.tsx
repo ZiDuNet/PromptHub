@@ -31,7 +31,10 @@ export function StatusCard({
           <Icon className="h-4 w-4" />
           <span className="text-xs font-medium">{title}</span>
         </div>
-        <div className="mt-1.5 text-xl font-semibold tracking-tight text-foreground">
+        <div
+          className="mt-1.5 truncate text-lg font-semibold tracking-tight text-foreground"
+          title={value}
+        >
           {value}
         </div>
       </div>

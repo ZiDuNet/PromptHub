@@ -18,8 +18,23 @@ describe("settings-snapshot", () => {
       PRIMARY_SETTINGS_KEY,
       JSON.stringify({
         state: {
+          aiProviders: [
+            {
+              id: "p1",
+              name: "Work OpenAI",
+              provider: "openai",
+              apiProtocol: "openai",
+              apiKey: "provider-secret",
+              apiUrl: "https://api.openai.com/v1",
+            },
+          ],
           aiModels: [
-            { id: "m1", name: "Model One", apiProtocol: "openai", apiKey: "model-secret" },
+            {
+              id: "m1",
+              name: "Model One",
+              apiProtocol: "openai",
+              apiKey: "model-secret",
+            },
             { id: "m2", name: "Model Two", apiProtocol: "anthropic" },
           ],
           aiProvider: "openai",
@@ -32,11 +47,21 @@ describe("settings-snapshot", () => {
     );
 
     expect(getAiConfigSnapshot()).toEqual({
+      aiProviders: [
+        {
+          id: "p1",
+          name: "Work OpenAI",
+          provider: "openai",
+          apiProtocol: "openai",
+          apiUrl: "https://api.openai.com/v1",
+        },
+      ],
       aiModels: [
         { id: "m1", name: "Model One", apiProtocol: "openai" },
         { id: "m2", name: "Model Two", apiProtocol: "anthropic" },
       ],
       scenarioModelDefaults: {},
+      modelRouteDefaults: {},
       aiProvider: "openai",
       aiApiProtocol: "openai",
       aiApiUrl: "https://api.example.com",
@@ -44,11 +69,21 @@ describe("settings-snapshot", () => {
     });
 
     expect(getAiConfigSnapshot({ includeRootApiKey: true })).toEqual({
+      aiProviders: [
+        {
+          id: "p1",
+          name: "Work OpenAI",
+          provider: "openai",
+          apiProtocol: "openai",
+          apiUrl: "https://api.openai.com/v1",
+        },
+      ],
       aiModels: [
         { id: "m1", name: "Model One", apiProtocol: "openai" },
         { id: "m2", name: "Model Two", apiProtocol: "anthropic" },
       ],
       scenarioModelDefaults: {},
+      modelRouteDefaults: {},
       aiProvider: "openai",
       aiApiProtocol: "openai",
       aiApiKey: "root-secret",
@@ -84,16 +119,16 @@ describe("settings-snapshot", () => {
       },
     );
 
-    expect(JSON.parse(localStorage.getItem(PRIMARY_SETTINGS_KEY) || "{}")).toEqual(
-      {
-        state: {
-          language: "en",
-          webdavPassword: "local-password",
-          aiApiKey: "local-ai-key",
-          theme: "light",
-        },
+    expect(
+      JSON.parse(localStorage.getItem(PRIMARY_SETTINGS_KEY) || "{}"),
+    ).toEqual({
+      state: {
+        language: "en",
+        webdavPassword: "local-password",
+        aiApiKey: "local-ai-key",
+        theme: "light",
       },
-    );
+    });
   });
 
   it("restores AI config into existing settings state", () => {
@@ -112,8 +147,11 @@ describe("settings-snapshot", () => {
       aiApiKey: "restored-key",
       aiApiUrl: "https://restored.example.com",
       aiModel: "claude-test",
-      aiModels: [{ id: "claude-test", name: "Claude Test", apiProtocol: "anthropic" }],
+      aiModels: [
+        { id: "claude-test", name: "Claude Test", apiProtocol: "anthropic" },
+      ],
       scenarioModelDefaults: { translation: "claude-test" },
+      modelRouteDefaults: { fastText: "claude-test" },
     });
 
     expect(getSettingsStateSnapshot()).toEqual({
@@ -124,8 +162,11 @@ describe("settings-snapshot", () => {
         aiApiKey: "restored-key",
         aiApiUrl: "https://restored.example.com",
         aiModel: "claude-test",
-        aiModels: [{ id: "claude-test", name: "Claude Test", apiProtocol: "anthropic" }],
+        aiModels: [
+          { id: "claude-test", name: "Claude Test", apiProtocol: "anthropic" },
+        ],
         scenarioModelDefaults: { translation: "claude-test" },
+        modelRouteDefaults: { fastText: "claude-test" },
       },
       settingsUpdatedAt: undefined,
     });

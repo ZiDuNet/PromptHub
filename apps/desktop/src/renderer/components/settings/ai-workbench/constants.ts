@@ -1,15 +1,43 @@
-import type { AIUsageScenario } from "../../../stores/settings.store";
+import type { AIModelRoute } from "../../../stores/settings.store";
 
-import type { ModelFormState, ProviderOption, ScenarioDefinition } from "./types";
+import type {
+  ModelFormState,
+  ProviderOption,
+  ScenarioDefinition,
+} from "./types";
 
 export const PROVIDER_OPTIONS: ProviderOption[] = [
+  {
+    id: "custom",
+    name: "自定义",
+    defaultUrl: "",
+    recommendedProtocol: "openai",
+    allowsCustomProtocol: true,
+    iconCategory: "Custom",
+  },
   {
     id: "openai",
     name: "OpenAI",
     defaultUrl: "https://api.openai.com",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "overseas",
+    iconCategory: "GPT",
+  },
+  {
+    id: "openai-responses",
+    name: "OpenAI-Response",
+    defaultUrl: "https://api.openai.com",
+    recommendedProtocol: "openai",
+    allowsCustomProtocol: false,
+    iconCategory: "GPT",
+  },
+  {
+    id: "google",
+    name: "Gemini",
+    defaultUrl: "https://generativelanguage.googleapis.com",
+    recommendedProtocol: "gemini",
+    allowsCustomProtocol: false,
+    iconCategory: "Gemini",
   },
   {
     id: "anthropic",
@@ -17,15 +45,31 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://api.anthropic.com",
     recommendedProtocol: "anthropic",
     allowsCustomProtocol: false,
-    group: "overseas",
+    iconCategory: "Claude",
   },
   {
-    id: "google",
-    name: "Google",
-    defaultUrl: "https://generativelanguage.googleapis.com",
-    recommendedProtocol: "gemini",
+    id: "azure-openai",
+    name: "Azure OpenAI",
+    defaultUrl: "",
+    recommendedProtocol: "openai",
+    allowsCustomProtocol: true,
+    iconCategory: "Azure OpenAI",
+  },
+  {
+    id: "new-api",
+    name: "New API",
+    defaultUrl: "",
+    recommendedProtocol: "openai",
+    allowsCustomProtocol: true,
+    iconCategory: "New API",
+  },
+  {
+    id: "ollama",
+    name: "Ollama",
+    defaultUrl: "http://localhost:11434/v1",
+    recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "overseas",
+    iconCategory: "Llama",
   },
   {
     id: "xai",
@@ -33,7 +77,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://api.x.ai",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "overseas",
+    iconCategory: "Grok",
   },
   {
     id: "deepseek",
@@ -41,7 +85,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://api.deepseek.com",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "domestic",
+    iconCategory: "DeepSeek",
   },
   {
     id: "moonshot",
@@ -49,7 +93,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://api.moonshot.cn",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "domestic",
+    iconCategory: "Moonshot",
   },
   {
     id: "zhipu",
@@ -57,7 +101,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://open.bigmodel.cn/api/paas",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "domestic",
+    iconCategory: "GLM",
   },
   {
     id: "qwen",
@@ -65,7 +109,7 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://dashscope.aliyuncs.com/compatible-mode",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "domestic",
+    iconCategory: "Qwen",
   },
   {
     id: "doubao",
@@ -73,53 +117,47 @@ export const PROVIDER_OPTIONS: ProviderOption[] = [
     defaultUrl: "https://ark.cn-beijing.volces.com/api",
     recommendedProtocol: "openai",
     allowsCustomProtocol: false,
-    group: "domestic",
-  },
-  {
-    id: "custom",
-    name: "自定义",
-    defaultUrl: "",
-    recommendedProtocol: "openai",
-    allowsCustomProtocol: true,
-    group: "other",
+    iconCategory: "Doubao",
   },
 ];
 
-export const SCENARIO_DEFINITIONS: ScenarioDefinition[] = [
+export const MODEL_ROUTE_DEFINITIONS: ScenarioDefinition[] = [
   {
-    key: "quickAdd",
-    labelKey: "settings.aiWorkbenchScenarioQuickAdd",
-    descKey: "settings.aiWorkbenchScenarioQuickAddDesc",
+    key: "mainText",
+    labelKey: "settings.aiWorkbenchRouteMainText",
+    descKey: "settings.aiWorkbenchRouteMainTextDesc",
     type: "chat",
-    badgeKey: "settings.aiWorkbenchBadgeQuickAdd",
+    badgeKey: "settings.aiWorkbenchBadgeMainText",
   },
   {
-    key: "promptTest",
-    labelKey: "settings.aiWorkbenchScenarioPromptTest",
-    descKey: "settings.aiWorkbenchScenarioPromptTestDesc",
+    key: "fastText",
+    labelKey: "settings.aiWorkbenchRouteFastText",
+    descKey: "settings.aiWorkbenchRouteFastTextDesc",
     type: "chat",
-    badgeKey: "settings.aiWorkbenchBadgePromptTest",
+    badgeKey: "settings.aiWorkbenchBadgeFastText",
   },
   {
-    key: "imageTest",
-    labelKey: "settings.aiWorkbenchScenarioImageTest",
-    descKey: "settings.aiWorkbenchScenarioImageTestDesc",
+    key: "visionText",
+    labelKey: "settings.aiWorkbenchRouteVisionText",
+    descKey: "settings.aiWorkbenchRouteVisionTextDesc",
+    type: "chat",
+    badgeKey: "settings.aiWorkbenchBadgeVisionText",
+    requiredCapability: "vision",
+  },
+  {
+    key: "imageGeneration",
+    labelKey: "settings.aiWorkbenchRouteImageGeneration",
+    descKey: "settings.aiWorkbenchRouteImageGenerationDesc",
     type: "image",
-    badgeKey: "settings.aiWorkbenchBadgeImageTest",
-  },
-  {
-    key: "translation",
-    labelKey: "settings.aiWorkbenchScenarioTranslation",
-    descKey: "settings.aiWorkbenchScenarioTranslationDesc",
-    type: "chat",
-    badgeKey: "settings.aiWorkbenchBadgeTranslation",
+    badgeKey: "settings.aiWorkbenchBadgeImageGeneration",
   },
 ] satisfies Array<{
-  key: AIUsageScenario;
+  key: AIModelRoute;
   labelKey: string;
   descKey: string;
   type: ModelFormState["type"];
   badgeKey: string;
+  requiredCapability?: keyof ModelFormState["capabilities"];
 }>;
 
 export const DEFAULT_CHAT_PARAMS: ModelFormState["chatParams"] = {
@@ -141,6 +179,17 @@ export const DEFAULT_IMAGE_PARAMS: ModelFormState["imageParams"] = {
   n: 1,
 };
 
+export const DEFAULT_MODEL_CAPABILITIES: ModelFormState["capabilities"] = {
+  chat: true,
+  vision: false,
+  imageGeneration: false,
+  reasoning: false,
+  toolUse: false,
+  webSearch: false,
+  embedding: false,
+  rerank: false,
+};
+
 export const EMPTY_FORM: ModelFormState = {
   type: "chat",
   name: "",
@@ -149,6 +198,7 @@ export const EMPTY_FORM: ModelFormState = {
   apiKey: "",
   apiUrl: "https://api.openai.com",
   model: "",
+  capabilities: DEFAULT_MODEL_CAPABILITIES,
   chatParams: DEFAULT_CHAT_PARAMS,
   imageParams: DEFAULT_IMAGE_PARAMS,
 };

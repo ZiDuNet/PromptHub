@@ -74,7 +74,10 @@ const createProjectRecordId = (): string =>
 const normalizeProjectRecordPath = (value: string): string => value.trim();
 
 function getDefaultProjectDeployTargets(rootPath: string): string[] {
-  const normalizedRoot = normalizeProjectRecordPath(rootPath).replace(/[\\/]+$/, "");
+  const normalizedRoot = normalizeProjectRecordPath(rootPath).replace(
+    /[\\/]+$/,
+    "",
+  );
   if (!normalizedRoot) {
     return [];
   }
@@ -112,12 +115,18 @@ function getCustomAgentRootPaths(agents: CustomAgentConfig[]): string[] {
 function deriveLegacyCustomPlatformRootPaths(
   overrides: Record<string, BuiltinAgentOverrideConfig>,
 ): Record<string, string> {
-  return Object.entries(overrides).reduce<Record<string, string>>((acc, [platformId, value]) => {
-    if (typeof value.rootPath === "string" && value.rootPath.trim().length > 0) {
-      acc[platformId] = value.rootPath.trim();
-    }
-    return acc;
-  }, {});
+  return Object.entries(overrides).reduce<Record<string, string>>(
+    (acc, [platformId, value]) => {
+      if (
+        typeof value.rootPath === "string" &&
+        value.rootPath.trim().length > 0
+      ) {
+        acc[platformId] = value.rootPath.trim();
+      }
+      return acc;
+    },
+    {},
+  );
 }
 
 function isTraeCnLikePath(value: string | undefined): boolean {
@@ -128,13 +137,15 @@ function isTraeCnLikePath(value: string | undefined): boolean {
   return /(?:^|[\\/])\.trae-cn(?:$|[\\/])/i.test(value.trim());
 }
 
-function migrateTraeCnPlatformState(next: Pick<
-  SettingsState,
-  | "builtinAgentOverrides"
-  | "customPlatformRootPaths"
-  | "disabledPlatformIds"
-  | "skillPlatformOrder"
->): void {
+function migrateTraeCnPlatformState(
+  next: Pick<
+    SettingsState,
+    | "builtinAgentOverrides"
+    | "customPlatformRootPaths"
+    | "disabledPlatformIds"
+    | "skillPlatformOrder"
+  >,
+): void {
   const traeBuiltinOverride = next.builtinAgentOverrides.trae;
   const traeCnBuiltinOverride = next.builtinAgentOverrides["trae-cn"];
   const traeRootOverride = next.customPlatformRootPaths.trae;
@@ -157,13 +168,19 @@ function migrateTraeCnPlatformState(next: Pick<
     delete next.customPlatformRootPaths.trae;
   }
 
-  if (next.disabledPlatformIds.includes("trae") && !next.disabledPlatformIds.includes("trae-cn")) {
+  if (
+    next.disabledPlatformIds.includes("trae") &&
+    !next.disabledPlatformIds.includes("trae-cn")
+  ) {
     next.disabledPlatformIds = next.disabledPlatformIds.map((platformId) =>
       platformId === "trae" ? "trae-cn" : platformId,
     );
   }
 
-  if (next.skillPlatformOrder.includes("trae") && !next.skillPlatformOrder.includes("trae-cn")) {
+  if (
+    next.skillPlatformOrder.includes("trae") &&
+    !next.skillPlatformOrder.includes("trae-cn")
+  ) {
     next.skillPlatformOrder = next.skillPlatformOrder.map((platformId) =>
       platformId === "trae" ? "trae-cn" : platformId,
     );
@@ -171,7 +188,8 @@ function migrateTraeCnPlatformState(next: Pick<
 }
 
 function normalizeDesktopHomeModule(value: unknown): DesktopHomeModule | null {
-  return typeof value === "string" && DESKTOP_HOME_MODULES.includes(value as DesktopHomeModule)
+  return typeof value === "string" &&
+    DESKTOP_HOME_MODULES.includes(value as DesktopHomeModule)
     ? (value as DesktopHomeModule)
     : null;
 }
@@ -193,11 +211,17 @@ function normalizeDesktopHomeModules(value: unknown): DesktopHomeModule[] {
   return deduped;
 }
 
-function inferAIProtocol(provider: string | undefined, apiUrl: string | undefined): AIProtocol {
+function inferAIProtocol(
+  provider: string | undefined,
+  apiUrl: string | undefined,
+): AIProtocol {
   const providerLower = (provider || "").trim().toLowerCase();
   const normalizedUrl = (apiUrl || "").trim().toLowerCase();
 
-  if (providerLower === "anthropic" || normalizedUrl.includes("api.anthropic.com")) {
+  if (
+    providerLower === "anthropic" ||
+    normalizedUrl.includes("api.anthropic.com")
+  ) {
     return "anthropic";
   }
 
@@ -212,11 +236,90 @@ function inferAIProtocol(provider: string | undefined, apiUrl: string | undefine
   return "openai";
 }
 
-function normalizeAIProtocol(value: unknown, provider?: string, apiUrl?: string): AIProtocol {
+function normalizeAIProtocol(
+  value: unknown,
+  provider?: string,
+  apiUrl?: string,
+): AIProtocol {
   if (value === "openai" || value === "gemini" || value === "anthropic") {
     return value;
   }
   return inferAIProtocol(provider, apiUrl);
+}
+
+function normalizeAIModelCapabilities(
+  value: unknown,
+  type: AIModelType,
+): AIModelCapabilities {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {
+      chat: type === "chat",
+      vision: false,
+      imageGeneration: type === "image",
+      reasoning: false,
+      toolUse: false,
+      webSearch: false,
+      embedding: false,
+      rerank: false,
+    };
+  }
+
+  const capabilities = value as Partial<
+    Record<keyof AIModelCapabilities, unknown>
+  >;
+  return {
+    chat: type === "chat" || capabilities.chat === true,
+    vision: type === "chat" && capabilities.vision === true,
+    imageGeneration: type === "image" || capabilities.imageGeneration === true,
+    reasoning: capabilities.reasoning === true,
+    toolUse: capabilities.toolUse === true,
+    webSearch: capabilities.webSearch === true,
+    embedding: capabilities.embedding === true,
+    rerank: capabilities.rerank === true,
+  };
+}
+
+function normalizeModelRoute(value: unknown): AIModelRoute | null {
+  return value === "mainText" ||
+    value === "fastText" ||
+    value === "visionText" ||
+    value === "imageGeneration"
+    ? value
+    : null;
+}
+
+function normalizeModelRouteDefaults(value: unknown): ModelRouteDefaults {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<ModelRouteDefaults>(
+    (acc, [route, modelId]) => {
+      const normalizedRoute = normalizeModelRoute(route);
+      if (normalizedRoute && typeof modelId === "string" && modelId.trim()) {
+        acc[normalizedRoute] = modelId;
+      }
+      return acc;
+    },
+    {},
+  );
+}
+
+function deriveModelRouteDefaultsFromScenarios(
+  scenarioDefaults: ScenarioModelDefaults,
+): ModelRouteDefaults {
+  const next: ModelRouteDefaults = {};
+  if (scenarioDefaults.promptTest) next.mainText = scenarioDefaults.promptTest;
+  if (scenarioDefaults.imageTest)
+    next.imageGeneration = scenarioDefaults.imageTest;
+  if (scenarioDefaults.imageReverse)
+    next.visionText = scenarioDefaults.imageReverse;
+  if (scenarioDefaults.quickAdd) {
+    next.fastText = scenarioDefaults.quickAdd;
+  } else if (scenarioDefaults.translation) {
+    next.fastText = scenarioDefaults.translation;
+  }
+  return next;
 }
 
 function normalizeSyncProvider(value: unknown): SyncProviderKind {
@@ -245,7 +348,9 @@ function buildMainProcessSyncSettings(
   };
 }
 
-function inferLegacySyncProvider(state: Partial<SettingsState>): SyncProviderKind {
+function inferLegacySyncProvider(
+  state: Partial<SettingsState>,
+): SyncProviderKind {
   const activeProviders: SyncProviderKind[] = [];
 
   if (
@@ -344,11 +449,17 @@ function normalizeBackgroundImageFileName(value: unknown): string | undefined {
   return fileName;
 }
 
-function normalizeBackgroundImageBlur(value: number, persistedVersion?: number): number {
+function normalizeBackgroundImageBlur(
+  value: number,
+  persistedVersion?: number,
+): number {
   const normalized = clampBackgroundImageBlur(value);
 
   // Migrate older installs that are still using the old heavy default blur.
-  if ((persistedVersion ?? 0) < 6 && normalized === LEGACY_BACKGROUND_IMAGE_BLUR_DEFAULT) {
+  if (
+    (persistedVersion ?? 0) < 6 &&
+    normalized === LEGACY_BACKGROUND_IMAGE_BLUR_DEFAULT
+  ) {
     return DEFAULT_BACKGROUND_IMAGE_BLUR;
   }
 
@@ -438,6 +549,17 @@ export type ThemeMode = "light" | "dark" | "system";
 // AI model type
 export type AIModelType = "chat" | "image";
 
+export interface AIModelCapabilities {
+  chat?: boolean;
+  vision?: boolean;
+  imageGeneration?: boolean;
+  reasoning?: boolean;
+  toolUse?: boolean;
+  webSearch?: boolean;
+  embedding?: boolean;
+  rerank?: boolean;
+}
+
 // Chat model parameters configuration
 export interface ChatModelParams {
   temperature?: number; // 温度 (0-2)，控制随机性 / Temperature, controls randomness
@@ -471,9 +593,20 @@ export interface AIModelConfig {
   model: string; // Model name, such as gpt-4o, dall-e-3
   isDefault?: boolean;
   lastVerifiedAt?: string;
+  capabilities?: AIModelCapabilities;
   // Custom parameters
   chatParams?: ChatModelParams;
   imageParams?: ImageModelParams;
+}
+
+export interface AIProviderConfig {
+  id: string;
+  name?: string;
+  provider: string;
+  apiProtocol: AIProtocol;
+  apiKey: string;
+  apiUrl: string;
+  lastVerifiedAt?: string;
 }
 
 export type CreationMode = "manual" | "quick";
@@ -481,11 +614,26 @@ export type TranslationMode = "immersive" | "full";
 export type TagFilterMode = "single" | "multi";
 export type AIUsageScenario =
   | "quickAdd"
+  | "imageReverse"
   | "promptTest"
   | "imageTest"
   | "translation";
 
 export type ScenarioModelDefaults = Partial<Record<AIUsageScenario, string>>;
+export type AIModelRoute =
+  | "mainText"
+  | "fastText"
+  | "visionText"
+  | "imageGeneration";
+export type ModelRouteDefaults = Partial<Record<AIModelRoute, string>>;
+
+export const AI_SCENARIO_MODEL_ROUTE: Record<AIUsageScenario, AIModelRoute> = {
+  quickAdd: "fastText",
+  translation: "fastText",
+  promptTest: "mainText",
+  imageReverse: "visionText",
+  imageTest: "imageGeneration",
+};
 
 interface ProjectSkillImportPreferences {
   selectedTargetIds: string[];
@@ -623,10 +771,13 @@ interface SettingsState {
   aiModel: string;
 
   // Multi-model configuration (new version)
+  aiProviders: AIProviderConfig[];
   aiModels: AIModelConfig[];
   scenarioModelDefaults: ScenarioModelDefaults;
+  modelRouteDefaults: ModelRouteDefaults;
 
   translationMode: TranslationMode; // immersive=沉浸式, full=全文翻译
+  imageReverseAttachReferenceByDefault: boolean;
 
   sourceHistory: string[];
 
@@ -635,7 +786,10 @@ interface SettingsState {
   customSkillScanPaths: string[];
   skillProjects: SkillProject[];
   projectSkillImportModePreference: "copy" | "symlink";
-  projectSkillImportPreferencesByProjectId: Record<string, ProjectSkillImportPreferences>;
+  projectSkillImportPreferencesByProjectId: Record<
+    string,
+    ProjectSkillImportPreferences
+  >;
 
   builtinAgentOverrides: Record<string, BuiltinAgentOverrideConfig>;
   customPlatformRootPaths: Record<string, string>;
@@ -732,6 +886,9 @@ interface SettingsState {
   setAiApiKey: (key: string) => void;
   setAiApiUrl: (url: string) => void;
   setAiModel: (model: string) => void;
+  addAiProvider: (config: Omit<AIProviderConfig, "id">) => void;
+  updateAiProvider: (id: string, config: Partial<AIProviderConfig>) => void;
+  deleteAiProvider: (id: string) => void;
   addAiModel: (config: Omit<AIModelConfig, "id">) => void;
   updateAiModel: (id: string, config: Partial<AIModelConfig>) => void;
   deleteAiModel: (id: string) => void;
@@ -740,8 +897,10 @@ interface SettingsState {
     scenario: AIUsageScenario,
     modelId: string | null,
   ) => void;
+  setModelRouteDefault: (route: AIModelRoute, modelId: string | null) => void;
   setCreationMode: (mode: CreationMode) => void;
   setTranslationMode: (mode: TranslationMode) => void;
+  setImageReverseAttachReferenceByDefault: (enabled: boolean) => void;
   addSourceHistory: (source: string) => void;
   applyTheme: () => void;
   setCustomAgents: (agents: CustomAgentConfig[]) => void;
@@ -841,9 +1000,7 @@ function sanitizeGithubToken(token: string): string {
 
 type PersistedSettingsState = Omit<SettingsState, "githubToken">;
 
-function stripEphemeralSettings(
-  state: SettingsState,
-): PersistedSettingsState {
+function stripEphemeralSettings(state: SettingsState): PersistedSettingsState {
   const { githubToken: _githubToken, ...persistedState } = state;
   return persistedState;
 }
@@ -880,12 +1037,15 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   );
   const legacyBuiltinAgentOverrides = Object.entries(
     settings.customPlatformRootPaths ?? {},
-  ).reduce<Record<string, BuiltinAgentOverrideConfig>>((acc, [platformId, rootPath]) => {
-    if (typeof rootPath === "string") {
-      acc[platformId] = { rootPath };
-    }
-    return acc;
-  }, {});
+  ).reduce<Record<string, BuiltinAgentOverrideConfig>>(
+    (acc, [platformId, rootPath]) => {
+      if (typeof rootPath === "string") {
+        acc[platformId] = { rootPath };
+      }
+      return acc;
+    },
+    {},
+  );
   const fallbackBuiltinAgentOverrides =
     Object.keys(normalizedBuiltinAgentOverrides).length > 0
       ? normalizedBuiltinAgentOverrides
@@ -893,9 +1053,9 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   const fallbackCustomAgentRootPaths = normalizeAgentRootPaths(
     normalizedCustomAgents.length > 0
       ? normalizedCustomAgents.map((agent) => agent.rootPath)
-      : settings.customAgentRootPaths ??
+      : (settings.customAgentRootPaths ??
           settings.customSkillScanPaths ??
-          state.customAgentRootPaths,
+          state.customAgentRootPaths),
   );
 
   useSettingsStore.setState({
@@ -1047,10 +1207,13 @@ export const useSettingsStore = create<SettingsState>()(
         aiApiKey: "",
         aiApiUrl: "",
         aiModel: "gpt-4o",
+        aiProviders: [],
         aiModels: [],
         scenarioModelDefaults: {},
+        modelRouteDefaults: {},
         creationMode: "manual" as CreationMode,
         translationMode: "immersive" as TranslationMode,
+        imageReverseAttachReferenceByDefault: true,
         sourceHistory: [],
         customAgents: [],
         customAgentRootPaths: [],
@@ -1070,6 +1233,8 @@ export const useSettingsStore = create<SettingsState>()(
 
         setCreationMode: (mode) => setTouched({ creationMode: mode }),
         setTranslationMode: (mode) => setTouched({ translationMode: mode }),
+        setImageReverseAttachReferenceByDefault: (enabled) =>
+          setTouched({ imageReverseAttachReferenceByDefault: enabled }),
 
         addSourceHistory: (source) => {
           if (!source.trim()) return;
@@ -1155,7 +1320,8 @@ export const useSettingsStore = create<SettingsState>()(
           );
         },
         setRenderMarkdown: (enabled) => setTouched({ renderMarkdown: enabled }),
-        setMotionPreference: (preference) => setTouched({ motionPreference: preference }),
+        setMotionPreference: (preference) =>
+          setTouched({ motionPreference: preference }),
         setEditorMarkdownPreview: (enabled) =>
           setTouched({ editorMarkdownPreview: enabled }),
 
@@ -1294,14 +1460,20 @@ export const useSettingsStore = create<SettingsState>()(
           if (current.includes(normalized)) {
             return;
           }
-          const next = [...current, normalized].sort((a, b) => a.localeCompare(b));
+          const next = [...current, normalized].sort((a, b) =>
+            a.localeCompare(b),
+          );
           setTouched({ promptTagCatalog: next });
           syncSettingsToMain({ promptTagCatalog: next });
         },
         renamePromptTagCatalogEntry: (oldTag, newTag) => {
           const normalizedOldTag = oldTag.trim();
           const normalizedNewTag = newTag.trim();
-          if (!normalizedOldTag || !normalizedNewTag || normalizedOldTag === normalizedNewTag) {
+          if (
+            !normalizedOldTag ||
+            !normalizedNewTag ||
+            normalizedOldTag === normalizedNewTag
+          ) {
             return;
           }
           const next = Array.from(
@@ -1316,7 +1488,9 @@ export const useSettingsStore = create<SettingsState>()(
         },
         deletePromptTagCatalogEntry: (tag) => {
           const normalized = tag.trim();
-          const next = get().promptTagCatalog.filter((item) => item !== normalized);
+          const next = get().promptTagCatalog.filter(
+            (item) => item !== normalized,
+          );
           setTouched({ promptTagCatalog: next });
           syncSettingsToMain({ promptTagCatalog: next });
         },
@@ -1334,8 +1508,13 @@ export const useSettingsStore = create<SettingsState>()(
                 ...current,
                 webdavEnabled: enabled,
               });
-          setTouched({ webdavEnabled: enabled, syncProvider: nextSyncProvider });
-          syncSettingsToMain({ sync: buildMainProcessSyncSettings(nextSyncProvider) });
+          setTouched({
+            webdavEnabled: enabled,
+            syncProvider: nextSyncProvider,
+          });
+          syncSettingsToMain({
+            sync: buildMainProcessSyncSettings(nextSyncProvider),
+          });
         },
         setWebdavUrl: (url) => setTouched({ webdavUrl: url }),
         setWebdavUsername: (username) =>
@@ -1374,7 +1553,9 @@ export const useSettingsStore = create<SettingsState>()(
             selfHostedSyncEnabled: enabled,
             syncProvider: nextSyncProvider,
           });
-          syncSettingsToMain({ sync: buildMainProcessSyncSettings(nextSyncProvider) });
+          syncSettingsToMain({
+            sync: buildMainProcessSyncSettings(nextSyncProvider),
+          });
         },
         setSelfHostedSyncUrl: (url) => setTouched({ selfHostedSyncUrl: url }),
         setSelfHostedSyncUsername: (username) =>
@@ -1397,8 +1578,13 @@ export const useSettingsStore = create<SettingsState>()(
                 ...current,
                 s3StorageEnabled: enabled,
               });
-          setTouched({ s3StorageEnabled: enabled, syncProvider: nextSyncProvider });
-          syncSettingsToMain({ sync: buildMainProcessSyncSettings(nextSyncProvider) });
+          setTouched({
+            s3StorageEnabled: enabled,
+            syncProvider: nextSyncProvider,
+          });
+          syncSettingsToMain({
+            sync: buildMainProcessSyncSettings(nextSyncProvider),
+          });
         },
         setS3Endpoint: (endpoint) => setTouched({ s3Endpoint: endpoint }),
         setS3Region: (region) => setTouched({ s3Region: region }),
@@ -1411,7 +1597,9 @@ export const useSettingsStore = create<SettingsState>()(
         setS3SyncOnStartup: (enabled) =>
           setTouched({ s3SyncOnStartup: enabled }),
         setS3SyncOnStartupDelay: (delay) =>
-          setTouched({ s3SyncOnStartupDelay: Math.max(0, Math.min(60, delay)) }),
+          setTouched({
+            s3SyncOnStartupDelay: Math.max(0, Math.min(60, delay)),
+          }),
         setS3AutoSyncInterval: (interval) =>
           setTouched({ s3AutoSyncInterval: Math.max(0, interval) }),
         setS3SyncOnSave: (enabled) => setTouched({ s3SyncOnSave: enabled }),
@@ -1426,7 +1614,9 @@ export const useSettingsStore = create<SettingsState>()(
         setSyncProvider: (provider) => {
           const normalized = clampSyncProvider(provider, get());
           setTouched({ syncProvider: normalized });
-          syncSettingsToMain({ sync: buildMainProcessSyncSettings(normalized) });
+          syncSettingsToMain({
+            sync: buildMainProcessSyncSettings(normalized),
+          });
         },
         setAutoCheckUpdate: (enabled) =>
           setTouched({ autoCheckUpdate: enabled }),
@@ -1506,13 +1696,82 @@ export const useSettingsStore = create<SettingsState>()(
         setAiApiUrl: (url) => setTouched({ aiApiUrl: url }),
         setAiModel: (model) => setTouched({ aiModel: model }),
 
+        addAiProvider: (config) => {
+          const id = `provider_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+          setTouched({
+            aiProviders: [
+              ...get().aiProviders,
+              {
+                ...config,
+                id,
+                name: config.name?.trim() || undefined,
+                provider: config.provider.trim(),
+                apiProtocol: normalizeAIProtocol(
+                  config.apiProtocol,
+                  config.provider,
+                  config.apiUrl,
+                ),
+                apiKey: config.apiKey.trim(),
+                apiUrl: config.apiUrl.trim(),
+              },
+            ],
+          });
+        },
+
+        updateAiProvider: (id, config) => {
+          const providers = get().aiProviders.map((providerConfig) => {
+            if (providerConfig.id !== id) {
+              return providerConfig;
+            }
+            const provider = config.provider ?? providerConfig.provider;
+            const apiUrl = config.apiUrl ?? providerConfig.apiUrl;
+            const apiProtocol = normalizeAIProtocol(
+              config.apiProtocol ?? providerConfig.apiProtocol,
+              provider,
+              apiUrl,
+            );
+            return {
+              ...providerConfig,
+              ...config,
+              name:
+                config.name === undefined
+                  ? providerConfig.name
+                  : config.name.trim() || undefined,
+              provider: provider.trim(),
+              apiProtocol,
+              apiKey: (config.apiKey ?? providerConfig.apiKey).trim(),
+              apiUrl: apiUrl.trim(),
+            };
+          });
+          setTouched({ aiProviders: providers });
+        },
+
+        deleteAiProvider: (id) => {
+          setTouched({
+            aiProviders: get().aiProviders.filter(
+              (provider) => provider.id !== id,
+            ),
+          });
+        },
+
         // Multi-model management methods
         addAiModel: (config) => {
           const id = `model_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
           const models = get().aiModels;
           const isFirst = models.length === 0;
+          const type = config.type ?? "chat";
+          const nextModel = {
+            ...config,
+            id,
+            type,
+            capabilities: normalizeAIModelCapabilities(
+              config.capabilities,
+              type,
+            ),
+            isDefault: isFirst,
+          };
           setTouched({
-            aiModels: [...models, { ...config, id, isDefault: isFirst }],
+            aiModels: [...models, nextModel],
           });
           // If it's the first model, sync to legacy configuration
           if (isFirst) {
@@ -1527,9 +1786,22 @@ export const useSettingsStore = create<SettingsState>()(
         },
 
         updateAiModel: (id, config) => {
-          const models = get().aiModels.map((m) =>
-            m.id === id ? { ...m, ...config } : m,
-          );
+          const models = get().aiModels.map((m) => {
+            if (m.id !== id) {
+              return m;
+            }
+            const type = config.type ?? m.type ?? "chat";
+            return {
+              ...m,
+              ...config,
+              type,
+              capabilities: normalizeAIModelCapabilities(
+                config.capabilities ??
+                  (config.type ? undefined : m.capabilities),
+                type,
+              ),
+            };
+          });
           setTouched({ aiModels: models });
           // If updating the default model, sync to legacy configuration
           const updated = models.find((m) => m.id === id);
@@ -1549,11 +1821,17 @@ export const useSettingsStore = create<SettingsState>()(
           const toDelete = models.find((m) => m.id === id);
           const remaining = models.filter((m) => m.id !== id);
           const scenarioModelDefaults = { ...get().scenarioModelDefaults };
+          const modelRouteDefaults = { ...get().modelRouteDefaults };
           for (const [scenario, modelId] of Object.entries(
             scenarioModelDefaults,
           )) {
             if (modelId === id) {
               delete scenarioModelDefaults[scenario as AIUsageScenario];
+            }
+          }
+          for (const [route, modelId] of Object.entries(modelRouteDefaults)) {
+            if (modelId === id) {
+              delete modelRouteDefaults[route as AIModelRoute];
             }
           }
           // If deleting the default model, set the first one as default
@@ -1567,7 +1845,11 @@ export const useSettingsStore = create<SettingsState>()(
               aiModel: remaining[0].model,
             });
           }
-          setTouched({ aiModels: remaining, scenarioModelDefaults });
+          setTouched({
+            aiModels: remaining,
+            scenarioModelDefaults,
+            modelRouteDefaults,
+          });
         },
 
         setDefaultAiModel: (id) => {
@@ -1605,7 +1887,27 @@ export const useSettingsStore = create<SettingsState>()(
           } else {
             delete nextDefaults[scenario];
           }
-          setTouched({ scenarioModelDefaults: nextDefaults });
+          const route = AI_SCENARIO_MODEL_ROUTE[scenario];
+          const nextRouteDefaults = { ...get().modelRouteDefaults };
+          if (modelId) {
+            nextRouteDefaults[route] = modelId;
+          } else {
+            delete nextRouteDefaults[route];
+          }
+          setTouched({
+            scenarioModelDefaults: nextDefaults,
+            modelRouteDefaults: nextRouteDefaults,
+          });
+        },
+
+        setModelRouteDefault: (route, modelId) => {
+          const nextDefaults = { ...get().modelRouteDefaults };
+          if (modelId) {
+            nextDefaults[route] = modelId;
+          } else {
+            delete nextDefaults[route];
+          }
+          setTouched({ modelRouteDefaults: nextDefaults });
         },
 
         applyTheme: () => {
@@ -1666,7 +1968,8 @@ export const useSettingsStore = create<SettingsState>()(
             throw new Error("Custom agent name and rootPath are required");
           }
           const hasConflict = get().customAgents.some(
-            (agent) => agent.rootPath.toLowerCase() === nextAgent.rootPath.toLowerCase(),
+            (agent) =>
+              agent.rootPath.toLowerCase() === nextAgent.rootPath.toLowerCase(),
           );
           if (hasConflict) {
             throw new Error("Custom agent root path already exists");
@@ -1675,7 +1978,9 @@ export const useSettingsStore = create<SettingsState>()(
         },
         updateCustomAgent: (agentId, updates) => {
           const currentAgents = get().customAgents;
-          const currentAgent = currentAgents.find((agent) => agent.id === agentId);
+          const currentAgent = currentAgents.find(
+            (agent) => agent.id === agentId,
+          );
           if (!currentAgent) {
             return;
           }
@@ -1686,7 +1991,8 @@ export const useSettingsStore = create<SettingsState>()(
             enabled: updates.enabled ?? currentAgent.enabled,
             skillsRelativePath:
               updates.skillsRelativePath ?? currentAgent.skillsRelativePath,
-            rulesRelativePath: updates.rulesRelativePath ?? currentAgent.rulesRelativePath,
+            rulesRelativePath:
+              updates.rulesRelativePath ?? currentAgent.rulesRelativePath,
             agentsRelativePath:
               updates.agentsRelativePath ?? currentAgent.agentsRelativePath,
             commandsRelativePath:
@@ -1731,7 +2037,9 @@ export const useSettingsStore = create<SettingsState>()(
           }),
         removeCustomSkillScanPath: (path) =>
           get()
-            .customAgents.filter((agent) => agent.rootPath === normalizeAgentRootPath(path))
+            .customAgents.filter(
+              (agent) => agent.rootPath === normalizeAgentRootPath(path),
+            )
             .forEach((agent) => get().removeCustomAgent(agent.id)),
         setProjectSkillImportModePreference: (method) => {
           if (get().projectSkillImportModePreference === method) {
@@ -1769,7 +2077,10 @@ export const useSettingsStore = create<SettingsState>()(
               currentPreferences.selectedTargetIds,
               nextPreferences.selectedTargetIds,
             ) &&
-            areStringArraysEqual(currentPreferences.customTargets, nextPreferences.customTargets)
+            areStringArraysEqual(
+              currentPreferences.customTargets,
+              nextPreferences.customTargets,
+            )
           ) {
             return;
           }
@@ -1794,7 +2105,10 @@ export const useSettingsStore = create<SettingsState>()(
             name,
             rootPath,
             scanPaths: normalizeProjectScanPaths(input.scanPaths, rootPath),
-            deployTargets: normalizeProjectDeployPaths(input.deployTargets, rootPath),
+            deployTargets: normalizeProjectDeployPaths(
+              input.deployTargets,
+              rootPath,
+            ),
             createdAt: now,
             updatedAt: now,
           };
@@ -1802,14 +2116,17 @@ export const useSettingsStore = create<SettingsState>()(
           const existingProjects = get().skillProjects;
           const hasConflict = existingProjects.some(
             (project) =>
-              project.rootPath.toLowerCase() === nextProject.rootPath.toLowerCase(),
+              project.rootPath.toLowerCase() ===
+              nextProject.rootPath.toLowerCase(),
           );
           if (hasConflict) {
             throw new Error("Skill project root path already exists");
           }
 
           setTouched({ skillProjects: [nextProject, ...existingProjects] });
-          syncSettingsToMain({ skillProjects: [nextProject, ...existingProjects] });
+          syncSettingsToMain({
+            skillProjects: [nextProject, ...existingProjects],
+          });
           return nextProject;
         },
         updateSkillProject: (projectId, updates) => {
@@ -1858,8 +2175,14 @@ export const useSettingsStore = create<SettingsState>()(
                   : normalizeProjectScanPaths(updates.scanPaths, nextRootPath),
               deployTargets:
                 updates.deployTargets === undefined
-                  ? normalizeProjectDeployPaths(project.deployTargets, nextRootPath)
-                  : normalizeProjectDeployPaths(updates.deployTargets, nextRootPath),
+                  ? normalizeProjectDeployPaths(
+                      project.deployTargets,
+                      nextRootPath,
+                    )
+                  : normalizeProjectDeployPaths(
+                      updates.deployTargets,
+                      nextRootPath,
+                    ),
               lastScannedAt:
                 updates.lastScannedAt === undefined
                   ? project.lastScannedAt
@@ -1890,10 +2213,10 @@ export const useSettingsStore = create<SettingsState>()(
             ...get().builtinAgentOverrides,
             [platformId]: updates,
           };
-          const normalizedOverrides = normalizeBuiltinAgentOverrides(nextOverrides);
-          const nextLegacyRootPaths = deriveLegacyCustomPlatformRootPaths(
-            normalizedOverrides,
-          );
+          const normalizedOverrides =
+            normalizeBuiltinAgentOverrides(nextOverrides);
+          const nextLegacyRootPaths =
+            deriveLegacyCustomPlatformRootPaths(normalizedOverrides);
           setTouched({
             builtinAgentOverrides: normalizedOverrides,
             customPlatformRootPaths: nextLegacyRootPaths,
@@ -1906,10 +2229,10 @@ export const useSettingsStore = create<SettingsState>()(
         resetBuiltinAgentOverride: (platformId) => {
           const nextOverrides = { ...get().builtinAgentOverrides };
           delete nextOverrides[platformId];
-          const normalizedOverrides = normalizeBuiltinAgentOverrides(nextOverrides);
-          const nextLegacyRootPaths = deriveLegacyCustomPlatformRootPaths(
-            normalizedOverrides,
-          );
+          const normalizedOverrides =
+            normalizeBuiltinAgentOverrides(nextOverrides);
+          const nextLegacyRootPaths =
+            deriveLegacyCustomPlatformRootPaths(normalizedOverrides);
           setTouched({
             builtinAgentOverrides: normalizedOverrides,
             customPlatformRootPaths: nextLegacyRootPaths,
@@ -1930,12 +2253,15 @@ export const useSettingsStore = create<SettingsState>()(
             new Set(
               platformIds.filter(
                 (platformId): platformId is string =>
-                  typeof platformId === "string" && platformId.trim().length > 0,
+                  typeof platformId === "string" &&
+                  platformId.trim().length > 0,
               ),
             ),
           );
           setTouched({ disabledPlatformIds: normalized });
-          syncSettingsToMainThenRefreshRules({ disabledPlatformIds: normalized });
+          syncSettingsToMainThenRefreshRules({
+            disabledPlatformIds: normalized,
+          });
         },
         setRulePlatformTracked: (platformId, tracked) => {
           const disabledIds = new Set(get().disabledPlatformIds);
@@ -1946,7 +2272,9 @@ export const useSettingsStore = create<SettingsState>()(
           }
           const normalized = Array.from(disabledIds);
           setTouched({ disabledPlatformIds: normalized });
-          syncSettingsToMainThenRefreshRules({ disabledPlatformIds: normalized });
+          syncSettingsToMainThenRefreshRules({
+            disabledPlatformIds: normalized,
+          });
         },
         setCustomSkillPlatformPath: (platformId, pathValue) => {
           get().setCustomPlatformRootPath(platformId, pathValue);
@@ -2002,17 +2330,15 @@ export const useSettingsStore = create<SettingsState>()(
           // Strip control characters (CR, LF, etc.) to prevent header
           // injection — the main process also validates, but defence in
           // depth is cheap here.
-          const sanitized = token
-            .replace(/[\r\n\x00-\x1f\x7f]/g, "")
-            .trim();
-        setTouched({ githubToken: sanitized });
-        syncSettingsToMain({ githubToken: sanitized });
-      },
+          const sanitized = token.replace(/[\r\n\x00-\x1f\x7f]/g, "").trim();
+          setTouched({ githubToken: sanitized });
+          syncSettingsToMain({ githubToken: sanitized });
+        },
       };
     },
     {
       name: "prompthub-settings",
-      version: 14,
+      version: 16,
       partialize: stripEphemeralSettings,
       merge: (persistedState, currentState) => {
         const next = {
@@ -2054,19 +2380,53 @@ export const useSettingsStore = create<SettingsState>()(
             .filter((model): model is AIModelConfig => {
               return Boolean(
                 model &&
-                  typeof model.id === "string" &&
-                  typeof model.provider === "string" &&
-                  typeof model.apiUrl === "string" &&
-                  typeof model.model === "string",
+                typeof model.id === "string" &&
+                typeof model.provider === "string" &&
+                typeof model.apiUrl === "string" &&
+                typeof model.model === "string",
               );
             })
             .map((model) => ({
               ...model,
+              type: model.type ?? "chat",
               apiProtocol: normalizeAIProtocol(
                 model.apiProtocol,
                 model.provider,
                 model.apiUrl,
               ),
+              capabilities: normalizeAIModelCapabilities(
+                model.capabilities,
+                model.type ?? "chat",
+              ),
+            }));
+        }
+        if (!Array.isArray(next.aiProviders)) {
+          next.aiProviders = [];
+        } else {
+          next.aiProviders = next.aiProviders
+            .filter((provider): provider is AIProviderConfig => {
+              return Boolean(
+                provider &&
+                typeof provider.id === "string" &&
+                typeof provider.provider === "string" &&
+                typeof provider.apiUrl === "string",
+              );
+            })
+            .map((provider) => ({
+              ...provider,
+              name:
+                typeof provider.name === "string"
+                  ? provider.name.trim() || undefined
+                  : undefined,
+              provider: provider.provider.trim(),
+              apiProtocol: normalizeAIProtocol(
+                provider.apiProtocol,
+                provider.provider,
+                provider.apiUrl,
+              ),
+              apiKey:
+                typeof provider.apiKey === "string" ? provider.apiKey : "",
+              apiUrl: provider.apiUrl.trim(),
             }));
         }
         if (
@@ -2081,6 +2441,14 @@ export const useSettingsStore = create<SettingsState>()(
           Array.isArray(next.scenarioModelDefaults)
         ) {
           next.scenarioModelDefaults = {};
+        }
+        next.modelRouteDefaults = normalizeModelRouteDefaults(
+          next.modelRouteDefaults,
+        );
+        if (Object.keys(next.modelRouteDefaults).length === 0) {
+          next.modelRouteDefaults = deriveModelRouteDefaultsFromScenarios(
+            next.scenarioModelDefaults,
+          );
         }
         if (!Array.isArray(next.promptTagCatalog)) {
           next.promptTagCatalog = [];
@@ -2121,7 +2489,10 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.customAgentRootPaths = [...next.customSkillScanPaths];
         }
-        if (next.customAgents.length === 0 && next.customAgentRootPaths.length > 0) {
+        if (
+          next.customAgents.length === 0 &&
+          next.customAgentRootPaths.length > 0
+        ) {
           next.customAgents = next.customAgentRootPaths.map((rootPath, index) =>
             normalizeCustomAgentDraft({
               id: `migrated_agent_${index}`,
@@ -2155,7 +2526,8 @@ export const useSettingsStore = create<SettingsState>()(
           trackedRulePlatformIds?: unknown;
           rulePlatformTrackingInitialized?: unknown;
         };
-        const legacyDisabledPlatformIds = legacyPersistedState.trackedRulePlatformIds;
+        const legacyDisabledPlatformIds =
+          legacyPersistedState.trackedRulePlatformIds;
         if (
           !Array.isArray(next.disabledPlatformIds) ||
           next.disabledPlatformIds.some(
@@ -2164,7 +2536,8 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.disabledPlatformIds = Array.isArray(legacyDisabledPlatformIds)
             ? legacyDisabledPlatformIds.filter(
-                (platformId): platformId is string => typeof platformId === "string",
+                (platformId): platformId is string =>
+                  typeof platformId === "string",
               )
             : [];
         }
@@ -2190,10 +2563,9 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.builtinAgentOverrides = normalizeBuiltinAgentOverrides(
             Object.fromEntries(
-              Object.entries(next.customPlatformRootPaths).map(([platformId, rootPath]) => [
-                platformId,
-                { rootPath },
-              ]),
+              Object.entries(next.customPlatformRootPaths).map(
+                ([platformId, rootPath]) => [platformId, { rootPath }],
+              ),
             ),
           );
         }
@@ -2226,9 +2598,9 @@ export const useSettingsStore = create<SettingsState>()(
             .filter((project): project is SkillProject => {
               return Boolean(
                 project &&
-                  typeof project.id === "string" &&
-                  typeof project.name === "string" &&
-                  typeof project.rootPath === "string",
+                typeof project.id === "string" &&
+                typeof project.name === "string" &&
+                typeof project.rootPath === "string",
               );
             })
             .map((project) => {
@@ -2245,7 +2617,8 @@ export const useSettingsStore = create<SettingsState>()(
                     .filter(
                       (entry) =>
                         entry.length > 0 &&
-                        entry.toLowerCase() !== normalizedRootPath.toLowerCase(),
+                        entry.toLowerCase() !==
+                          normalizedRootPath.toLowerCase(),
                     ),
                 ),
               );
@@ -2278,7 +2651,8 @@ export const useSettingsStore = create<SettingsState>()(
               };
             })
             .filter(
-              (project) => project.name.length > 0 && project.rootPath.length > 0,
+              (project) =>
+                project.name.length > 0 && project.rootPath.length > 0,
             );
         }
         if (typeof next.autoScanInstalledSkills !== "boolean") {
@@ -2287,10 +2661,15 @@ export const useSettingsStore = create<SettingsState>()(
         if (typeof next.autoScanStoreSkillsBeforeInstall !== "boolean") {
           next.autoScanStoreSkillsBeforeInstall = false;
         }
+        if (typeof next.imageReverseAttachReferenceByDefault !== "boolean") {
+          next.imageReverseAttachReferenceByDefault = true;
+        }
         if (typeof next.backgroundImageEnabled !== "boolean") {
           next.backgroundImageEnabled = true;
         }
-        next.desktopHomeModules = normalizeDesktopHomeModules(next.desktopHomeModules);
+        next.desktopHomeModules = normalizeDesktopHomeModules(
+          next.desktopHomeModules,
+        );
         delete (next as Record<string, unknown>).desktopHomeLayout;
         if (typeof next.updateChannelExplicitlySet !== "boolean") {
           next.updateChannelExplicitlySet = false;

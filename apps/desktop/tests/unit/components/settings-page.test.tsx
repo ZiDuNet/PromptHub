@@ -161,4 +161,27 @@ describe("SettingsPage", () => {
 
     expect(screen.getByText("cli-content")).toBeInTheDocument();
   });
+
+  it("lets the model service page own its provider middle column", async () => {
+    useSettingsStoreMock.mockReturnValue({
+      syncProvider: "manual",
+      webdavEnabled: false,
+      selfHostedSyncEnabled: false,
+      s3StorageEnabled: false,
+      desktopHomeModules: ["skill"],
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SettingsPage onBack={vi.fn()} />, {
+        language: "en",
+      });
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "Model Services" }).click();
+    });
+
+    expect(screen.getByText("ai-content")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Model Routing" })).not.toBeInTheDocument();
+  });
 });

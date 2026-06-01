@@ -33,14 +33,28 @@ vi.mock("../../../src/renderer/services/ai", async (importOriginal) => {
 function createSettingsState() {
   return {
     aiModels: [],
+    aiProviders: [
+      {
+        id: "provider-1",
+        provider: "openai",
+        apiProtocol: "openai" as const,
+        apiKey: "test-key",
+        apiUrl: "https://api.example.com/v1",
+      },
+    ],
     scenarioModelDefaults: {},
+    modelRouteDefaults: {},
     aiProvider: "openai",
     aiApiKey: "",
     aiApiUrl: "",
     aiModel: "",
     translationMode: "immersive" as const,
     setScenarioModelDefault: vi.fn(),
+    setModelRouteDefault: vi.fn(),
     setTranslationMode: vi.fn(),
+    addAiProvider: vi.fn(),
+    updateAiProvider: vi.fn(),
+    deleteAiProvider: vi.fn(),
     addAiModel: vi.fn(),
     updateAiModel: vi.fn(),
     deleteAiModel: vi.fn(),
@@ -48,16 +62,28 @@ function createSettingsState() {
   };
 }
 
-function createConfiguredModel(overrides: Partial<{
-  id: string;
-  provider: string;
-  apiProtocol: "openai" | "gemini" | "anthropic";
-  apiKey: string;
-  apiUrl: string;
-  model: string;
-  type: "chat" | "image";
-  lastVerifiedAt?: string;
-}> = {}) {
+function createConfiguredModel(
+  overrides: Partial<{
+    id: string;
+    provider: string;
+    apiProtocol: "openai" | "gemini" | "anthropic";
+    apiKey: string;
+    apiUrl: string;
+    model: string;
+    type: "chat" | "image";
+    capabilities?: {
+      chat?: boolean;
+      vision?: boolean;
+      imageGeneration?: boolean;
+      reasoning?: boolean;
+      toolUse?: boolean;
+      webSearch?: boolean;
+      embedding?: boolean;
+      rerank?: boolean;
+    };
+    lastVerifiedAt?: string;
+  }> = {},
+) {
   return {
     id: "model-1",
     provider: "custom",
@@ -66,6 +92,16 @@ function createConfiguredModel(overrides: Partial<{
     apiUrl: "https://api.example.com/v1",
     model: "gpt-4.1",
     type: "chat" as const,
+    capabilities: {
+      chat: true,
+      vision: false,
+      imageGeneration: false,
+      reasoning: false,
+      toolUse: false,
+      webSearch: false,
+      embedding: false,
+      rerank: false,
+    },
     ...overrides,
   };
 }
@@ -81,16 +117,67 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-    expect(screen.getByText("AI Model Workbench")).toBeInTheDocument();
-    expect(screen.getByText("Status Overview")).toBeInTheDocument();
-    expect(screen.queryByText("AI 模型工作台")).not.toBeInTheDocument();
+    expect(screen.getByText("Provider")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Test Default Model" }),
-    ).toHaveClass("whitespace-nowrap", "shrink-0");
-    expect(screen.getByRole("button", { name: "Add Model" })).toHaveClass(
-      "whitespace-nowrap",
-      "shrink-0",
+      screen.getByRole("button", { name: "Model Routing" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Advanced Parameters" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Search provider or model..."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Status Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI 模型工作台")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Provider" })).toHaveClass(
+      "w-full",
     );
+
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
+
+    expect(screen.getByText("Status Overview")).toBeInTheDocument();
+  });
+
+  it("adds a provider endpoint without creating a model", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
+    expect(
+      screen.getByRole("heading", { name: "Add Provider" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Provider Name")).toHaveValue("OpenAI");
+    expect(screen.getByText("Provider Type")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
+      target: { value: "provider-key" },
+    });
+    fireEvent.change(screen.getByLabelText("API URL"), {
+      target: { value: "https://api.provider.test/v1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(settingsState.addAiProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "OpenAI",
+        provider: "openai",
+        apiKey: "provider-key",
+        apiUrl: "https://api.provider.test/v1",
+      }),
+    );
+    expect(settingsState.addAiModel).not.toHaveBeenCalled();
+  });
+
+  it("uses the provider instance name in the provider list and detail panel", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiProviders[0].name = "Work OpenAI";
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    expect(screen.getAllByText("Work OpenAI").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("api.example.com").length).toBeGreaterThan(0);
   });
 
   it("persists chat parameters when adding a chat model", async () => {
@@ -99,16 +186,13 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-4.1" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /Advanced Parameters/i }),
+      screen.getAllByRole("button", { name: /Advanced Parameters/i }).at(-1)!,
     );
     fireEvent.change(screen.getByLabelText("Temperature"), {
       target: { value: "1.2" },
@@ -139,16 +223,111 @@ describe("AISettingsPrototype", () => {
     );
   });
 
+  it("persists the vision model capability flag", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+    fireEvent.change(screen.getByLabelText("Model Name"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.click(screen.getByLabelText("Vision input"));
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
+    );
+
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-4o",
+        type: "chat",
+        capabilities: expect.objectContaining({
+          chat: true,
+          vision: true,
+          imageGeneration: false,
+        }),
+      }),
+    );
+  });
+
+  it("persists image generation as a model capability from the capability section", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+    fireEvent.change(screen.getByLabelText("Model Name"), {
+      target: { value: "gpt-image-2" },
+    });
+    fireEvent.click(screen.getByLabelText("Image Model"));
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
+    );
+
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-image-2",
+        type: "image",
+        capabilities: expect.objectContaining({
+          chat: true,
+          vision: false,
+          imageGeneration: true,
+        }),
+        imageParams: expect.any(Object),
+      }),
+    );
+  });
+
+  it("preserves both chat and image parameters for dual-capability models", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+    fireEvent.change(screen.getByLabelText("Model Name"), {
+      target: { value: "gpt-4o-image" },
+    });
+    fireEvent.click(screen.getByLabelText("Image Model"));
+    fireEvent.click(screen.getByLabelText("Tool use"));
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
+    );
+
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-4o-image",
+        type: "image",
+        capabilities: expect.objectContaining({
+          chat: true,
+          imageGeneration: true,
+          toolUse: true,
+        }),
+        chatParams: expect.any(Object),
+        imageParams: expect.any(Object),
+      }),
+    );
+  });
+
   it("keeps advanced parameters collapsed by default in the add model modal", async () => {
     useSettingsStoreMock.mockReturnValue(createSettingsState());
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
 
     expect(screen.queryByLabelText("Temperature")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Advanced Parameters/i }),
+      screen.getAllByRole("button", { name: /Advanced Parameters/i }).at(-1)!,
     ).toHaveAttribute("aria-expanded", "false");
   });
 
@@ -157,7 +336,7 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Provider" }));
 
     const apiUrlInput = screen.getByLabelText("API URL");
     fireEvent.change(apiUrlInput, {
@@ -181,18 +360,14 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.click(screen.getByRole("button", { name: "Chat Model" }));
-    fireEvent.click(screen.getByRole("button", { name: "Image Model" }));
-
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "image-key" },
-    });
+    fireEvent.click(screen.getByLabelText("Image Model"));
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-image-1" },
     });
     fireEvent.click(
-      screen.getByRole("button", { name: /Advanced Parameters/i }),
+      screen.getAllByRole("button", { name: /Advanced Parameters/i }).at(-1)!,
     );
     fireEvent.change(screen.getByLabelText("Number of Images"), {
       target: { value: "3" },
@@ -208,7 +383,7 @@ describe("AISettingsPrototype", () => {
     expect(settingsState.addAiModel).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "openai",
-        apiKey: "image-key",
+        apiKey: "test-key",
         model: "gpt-image-1",
         type: "image",
         imageParams: expect.objectContaining({
@@ -233,14 +408,6 @@ describe("AISettingsPrototype", () => {
     });
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.change(screen.getByLabelText("API URL"), {
-      target: { value: "https://api.example.com/v1" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
 
     fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
 
@@ -270,14 +437,6 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.change(screen.getByLabelText("API URL"), {
-      target: { value: "https://api.legeling.xyz" },
-    });
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
-
     fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
 
     await waitFor(() => {
@@ -288,9 +447,7 @@ describe("AISettingsPrototype", () => {
     });
   });
 
-  it(
-    "maps raw network failures to a friendlier connection message",
-    async () => {
+  it("maps raw network failures to a friendlier connection message", async () => {
     const showToast = vi.fn();
     useToastMock.mockReturnValue({ showToast });
     useSettingsStoreMock.mockReturnValue(createSettingsState());
@@ -303,13 +460,8 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
-    fireEvent.change(screen.getByLabelText("API URL"), {
-      target: { value: "https://api.example.com/v1" },
-    });
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-4.1" },
     });
@@ -337,9 +489,7 @@ describe("AISettingsPrototype", () => {
         "error",
       );
     });
-    },
-    15000,
-  );
+  }, 15000);
 
   it("includes the model name in success toasts when testing a draft chat model", async () => {
     const showToast = vi.fn();
@@ -355,18 +505,15 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
-    fireEvent.change(screen.getByLabelText("API URL"), {
-      target: { value: "https://api.example.com/v1" },
-    });
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-4.1" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Test Current Config" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Test Current Config" }),
+    );
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith(
@@ -390,18 +537,15 @@ describe("AISettingsPrototype", () => {
 
     await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Model Routing" }));
     fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-    fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-      target: { value: "test-key" },
-    });
-    fireEvent.change(screen.getByLabelText("API URL"), {
-      target: { value: "https://api.example.com/v1" },
-    });
     fireEvent.change(screen.getByLabelText("Model Name"), {
       target: { value: "gpt-4.1" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Test Current Config" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Test Current Config" }),
+    );
 
     await waitFor(() => {
       expect(showToast).toHaveBeenCalledWith(
@@ -456,6 +600,194 @@ describe("AISettingsPrototype", () => {
     expect(screen.queryByText("Unverified")).not.toBeInTheDocument();
   });
 
+  it("shows providers as a side list and switches the model panel by provider", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiModels = [
+      createConfiguredModel({
+        id: "openai-model",
+        provider: "openai",
+        model: "gpt-5.4",
+      }),
+      createConfiguredModel({
+        id: "anthropic-model",
+        provider: "anthropic",
+        apiProtocol: "anthropic",
+        apiUrl: "https://api.anthropic.com",
+        model: "claude-opus-4-6",
+      }),
+    ];
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    expect(screen.getByText("claude-opus-4-6")).toBeInTheDocument();
+    expect(screen.getByText("API Key")).toBeInTheDocument();
+    expect(screen.getByText("API URL")).toBeInTheDocument();
+    expect(screen.getByText("Protocol")).toBeInTheDocument();
+    expect(screen.getAllByText("Anthropic-compatible").length).toBeGreaterThan(
+      0,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /OpenAI/i }));
+
+    expect(screen.getAllByText("gpt-5.4").length).toBeGreaterThan(0);
+    expect(screen.queryByText("claude-opus-4-6")).not.toBeInTheDocument();
+  });
+
+  it("locks provider fields without showing provider details when editing an existing model", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiModels = [
+      createConfiguredModel({
+        provider: "custom",
+        model: "gpt-4.1",
+      }),
+    ];
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+
+    expect(screen.queryByText("Provider Endpoint")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("API URL")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Enter API Key"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("defaults known image models to image type when selected from fetched models", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+    vi.mocked(fetchAvailableModels).mockResolvedValue({
+      success: true,
+      models: [{ id: "gpt-image-2", owned_by: "openai" }],
+    });
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("gpt-image-2")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^gpt-image-2openai$/ }),
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Add Model" }).at(-1)!,
+    );
+
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "gpt-image-2",
+        type: "image",
+        imageParams: expect.any(Object),
+      }),
+    );
+  });
+
+  it("keeps the provider when deleting the last model from a model-derived provider", async () => {
+    const settingsState = createSettingsState();
+    settingsState.aiProviders = [];
+    settingsState.aiModels = [
+      createConfiguredModel({
+        id: "legacy-model",
+        provider: "openai",
+        apiUrl: "https://api.example.com/v1",
+        model: "gpt-4.1",
+      }),
+    ];
+    useSettingsStoreMock.mockReturnValue(settingsState);
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    try {
+      await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+      expect(settingsState.addAiProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          apiProtocol: "openai",
+          apiKey: "test-key",
+          apiUrl: "https://api.example.com/v1",
+        }),
+      );
+      expect(settingsState.deleteAiModel).toHaveBeenCalledWith("legacy-model");
+      expect(settingsState.deleteAiProvider).not.toHaveBeenCalled();
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
+
+  it("opens manual model add from the provider plus button without fetching models", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
+
+    expect(fetchAvailableModels).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Add Model" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Provider Endpoint")).not.toBeInTheDocument();
+    expect(screen.queryByText("Select Models")).not.toBeInTheDocument();
+  });
+
+  it("fetches models from the provider fetch button and batch-adds selected models", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+    vi.mocked(fetchAvailableModels).mockResolvedValue({
+      success: true,
+      models: [
+        { id: "gpt-4.1", owned_by: "openai" },
+        { id: "gpt-4o-mini", owned_by: "openai" },
+      ],
+    });
+
+    await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
+
+    await waitFor(() => {
+      expect(fetchAvailableModels).toHaveBeenCalledWith(
+        "https://api.example.com/v1",
+        "test-key",
+        "openai",
+      );
+      expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
+      expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^gpt-4\.1openai$/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add 2 Models" }));
+
+    expect(settingsState.addAiModel).toHaveBeenCalledTimes(2);
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "test-key",
+        apiUrl: "https://api.example.com/v1",
+        model: "gpt-4.1",
+      }),
+    );
+    expect(settingsState.addAiModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "openai",
+        apiKey: "test-key",
+        apiUrl: "https://api.example.com/v1",
+        model: "gpt-4o-mini",
+      }),
+    );
+  });
+
   describe("batch model selection", () => {
     const mockModels = [
       { id: "gpt-4.1", owned_by: "openai" },
@@ -474,13 +806,6 @@ describe("AISettingsPrototype", () => {
 
       await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-      fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-      fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-        target: { value: "test-key" },
-      });
-      fireEvent.change(screen.getByLabelText("API URL"), {
-        target: { value: "https://api.openai.com/v1" },
-      });
       fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
 
       await waitFor(() => {
@@ -488,15 +813,15 @@ describe("AISettingsPrototype", () => {
       });
     }
 
-    it(
-      "batch-adds all selected models when multiple are chosen",
-      async () => {
+    it("batch-adds all selected models when multiple are chosen", async () => {
       const settingsState = createSettingsState();
       await openModalWithFetchedModels(settingsState);
 
       // Select two models from the list
       fireEvent.click(screen.getByRole("button", { name: /^gpt-4\.1openai$/ }));
-      fireEvent.click(screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }),
+      );
 
       // Button label should reflect multi-select count
       await waitFor(() => {
@@ -512,26 +837,79 @@ describe("AISettingsPrototype", () => {
         expect.objectContaining({
           model: "gpt-4.1",
           apiKey: "test-key",
-          apiUrl: "https://api.openai.com/v1",
+          apiUrl: "https://api.example.com/v1",
         }),
       );
       expect(settingsState.addAiModel).toHaveBeenCalledWith(
         expect.objectContaining({
           model: "gpt-4o-mini",
           apiKey: "test-key",
-          apiUrl: "https://api.openai.com/v1",
+          apiUrl: "https://api.example.com/v1",
         }),
       );
-      },
-      15000,
-    );
+    }, 15000);
+
+    it("infers each selected model independently when batch-adding mixed model types", async () => {
+      const settingsState = createSettingsState();
+      useSettingsStoreMock.mockReturnValue(settingsState);
+      vi.mocked(fetchAvailableModels).mockResolvedValue({
+        success: true,
+        models: [
+          { id: "gpt-4o", owned_by: "openai" },
+          { id: "gpt-image-2", owned_by: "openai" },
+        ],
+      });
+
+      await renderWithI18n(<AISettingsPrototype />, { language: "en" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("gpt-image-2")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /^gpt-4oopenai$/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^gpt-image-2openai$/ }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Add 2 Models" }));
+
+      expect(settingsState.addAiModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-4o",
+          type: "chat",
+          capabilities: expect.objectContaining({
+            chat: true,
+            vision: true,
+            imageGeneration: false,
+          }),
+          chatParams: expect.any(Object),
+          imageParams: undefined,
+        }),
+      );
+      expect(settingsState.addAiModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-image-2",
+          type: "image",
+          capabilities: expect.objectContaining({
+            chat: false,
+            vision: false,
+            imageGeneration: true,
+          }),
+          chatParams: undefined,
+          imageParams: expect.any(Object),
+        }),
+      );
+    }, 15000);
 
     it("uses the single-add path when only one model is selected", async () => {
       const settingsState = createSettingsState();
       await openModalWithFetchedModels(settingsState);
 
       // Select only one model
-      fireEvent.click(screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }),
+      );
 
       // Button should still say "Add Model" (not batch label)
       expect(
@@ -548,12 +926,11 @@ describe("AISettingsPrototype", () => {
       );
     });
 
-    it(
-      "blocks batch-add and shows error when API key is cleared after fetching",
-      async () => {
+    it("blocks model discovery when the selected provider endpoint has no API key", async () => {
       const showToast = vi.fn();
       useToastMock.mockReturnValue({ showToast });
       const settingsState = createSettingsState();
+      settingsState.aiProviders[0].apiKey = "";
       useSettingsStoreMock.mockReturnValue(settingsState);
       vi.mocked(fetchAvailableModels).mockResolvedValue({
         success: true,
@@ -562,48 +939,22 @@ describe("AISettingsPrototype", () => {
 
       await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-      // Open modal and fill credentials to enable model fetching
-      fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-      fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-        target: { value: "temp-key" },
-      });
-      fireEvent.change(screen.getByLabelText("API URL"), {
-        target: { value: "https://api.openai.com/v1" },
-      });
       fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
 
       await waitFor(() => {
-        expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
+        expect(showToast).toHaveBeenCalledWith(
+          "Please fill in API Key and URL first",
+          "error",
+        );
       });
-
-      // Clear the API key after fetching — simulates key being removed
-      fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-        target: { value: "" },
-      });
-
-      // Select two models
-      fireEvent.click(screen.getByRole("button", { name: /^gpt-4\.1openai$/ }));
-      fireEvent.click(screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole("button", { name: "Add 2 Models" }),
-        ).toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByRole("button", { name: "Add 2 Models" }));
-
-      // addAiModel must NOT be called; toast with error must fire
+      expect(fetchAvailableModels).not.toHaveBeenCalled();
       expect(settingsState.addAiModel).not.toHaveBeenCalled();
-      expect(showToast).toHaveBeenCalledWith(expect.any(String), "error");
-      },
-      15000,
-    );
+    }, 15000);
 
-    it(
-      "batch-adds share the same provider, apiKey, and apiUrl from the form",
-      async () => {
+    it("batch-adds share the same provider, apiKey, and apiUrl from the form", async () => {
       const settingsState = createSettingsState();
+      settingsState.aiProviders[0].apiKey = "shared-key-123";
+      settingsState.aiProviders[0].apiUrl = "https://custom.api.com/v1";
       useSettingsStoreMock.mockReturnValue(settingsState);
       vi.mocked(fetchAvailableModels).mockResolvedValue({
         success: true,
@@ -612,13 +963,6 @@ describe("AISettingsPrototype", () => {
 
       await renderWithI18n(<AISettingsPrototype />, { language: "en" });
 
-      fireEvent.click(screen.getByRole("button", { name: "Add Model" }));
-      fireEvent.change(screen.getByPlaceholderText("Enter API Key"), {
-        target: { value: "shared-key-123" },
-      });
-      fireEvent.change(screen.getByLabelText("API URL"), {
-        target: { value: "https://custom.api.com/v1" },
-      });
       fireEvent.click(screen.getByRole("button", { name: "Fetch Models" }));
 
       await waitFor(() => {
@@ -626,7 +970,9 @@ describe("AISettingsPrototype", () => {
       });
 
       fireEvent.click(screen.getByRole("button", { name: /^gpt-4\.1openai$/ }));
-      fireEvent.click(screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /^gpt-4o-miniopenai$/ }),
+      );
 
       await waitFor(() => {
         expect(
@@ -645,8 +991,6 @@ describe("AISettingsPrototype", () => {
         });
       }
       expect(settingsState.addAiModel).toHaveBeenCalledTimes(2);
-      },
-      15000,
-    );
+    }, 15000);
   });
 });

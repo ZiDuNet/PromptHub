@@ -3,8 +3,6 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronDownIcon, Loader2Icon, PlayIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import type { ModelInfo } from "../../../services/ai";
-import { AvailableModelsList } from "./model-form/AvailableModelsList";
 import { BaseFields } from "./model-form/BaseFields";
 import { ChatParamsSection } from "./model-form/ChatParamsSection";
 import { ImageParamsSection } from "./model-form/ImageParamsSection";
@@ -15,43 +13,26 @@ export function ModelFormModal({
   editingModelId,
   modelForm,
   setModelForm,
-  availableModels,
-  fetchingModels,
   testingModelId,
   savingModel,
+  lockEndpointFields = false,
   onClose,
-  onFetchModels,
   onTestDraft,
   onSave,
-  onBatchAdd,
 }: {
   editingModelId: string | null;
   modelForm: ModelFormState;
   setModelForm: Dispatch<SetStateAction<ModelFormState>>;
-  availableModels: ModelInfo[];
-  fetchingModels: boolean;
   testingModelId: string | null;
   savingModel: boolean;
+  lockEndpointFields?: boolean;
   onClose: () => void;
-  onFetchModels: () => void;
   onTestDraft: () => void;
   onSave: () => void;
-  onBatchAdd?: (ids: string[]) => void;
 }) {
   const { t } = useTranslation();
   const draftTestingKey = editingModelId || "__draft__";
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
-  const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
-
-  const isMultiSelect = selectedModelIds.length > 1;
-
-  const handleSaveOrBatch = () => {
-    if (isMultiSelect && onBatchAdd) {
-      onBatchAdd(selectedModelIds);
-    } else {
-      onSave();
-    }
-  };
 
   return (
     <Modal
@@ -69,17 +50,8 @@ export function ModelFormModal({
         <BaseFields
           modelForm={modelForm}
           setModelForm={setModelForm}
-          fetchingModels={fetchingModels}
-          onFetchModels={onFetchModels}
-        />
-
-        {/* Available models list — shown after fetch, before advanced */}
-        <AvailableModelsList
-          availableModels={availableModels}
-          modelForm={modelForm}
-          setModelForm={setModelForm}
-          selectedIds={selectedModelIds}
-          onSelectionChange={setSelectedModelIds}
+          fetchingModels={false}
+          lockEndpointFields={lockEndpointFields}
         />
 
         {/* Advanced params — moved after model list */}
@@ -150,15 +122,13 @@ export function ModelFormModal({
             </button>
             <button
               type="button"
-              onClick={handleSaveOrBatch}
+              onClick={onSave}
               disabled={savingModel}
               className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
             >
-              {isMultiSelect
-                ? t("settings.addNModels", { count: selectedModelIds.length })
-                : editingModelId
-                  ? t("settings.saveChanges")
-                  : t("settings.addModel")}
+              {editingModelId
+                ? t("settings.saveChanges")
+                : t("settings.addModel")}
             </button>
           </div>
         </div>

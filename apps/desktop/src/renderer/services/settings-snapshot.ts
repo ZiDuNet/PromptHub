@@ -2,8 +2,10 @@ const PRIMARY_SETTINGS_KEY = "prompthub-settings";
 const LEGACY_SETTINGS_KEY = "settings-storage";
 
 export interface AIConfigSnapshot {
+  aiProviders?: any[];
   aiModels?: any[];
   scenarioModelDefaults?: Record<string, string>;
+  modelRouteDefaults?: Record<string, string>;
   aiProvider?: string;
   aiApiProtocol?: string;
   aiApiKey?: string;
@@ -58,14 +60,20 @@ export function getAiConfigSnapshot(options?: {
   if (!state) return undefined;
 
   try {
+    const filteredProviders = (state.aiProviders || []).map((provider: any) => {
+      const { apiKey, ...rest } = provider || {};
+      return rest;
+    });
     const filteredModels = (state.aiModels || []).map((model: any) => {
       const { apiKey, ...rest } = model || {};
       return rest;
     });
 
     return {
+      aiProviders: filteredProviders,
       aiModels: filteredModels,
       scenarioModelDefaults: state.scenarioModelDefaults || {},
+      modelRouteDefaults: state.modelRouteDefaults || {},
       aiProvider: state.aiProvider,
       aiApiProtocol: state.aiApiProtocol,
       ...(options?.includeRootApiKey ? { aiApiKey: state.aiApiKey } : {}),
@@ -113,9 +121,13 @@ export function restoreAiConfigSnapshot(
     const data = stored?.data || { state: {} };
     if (!data.state) data.state = {};
 
+    if (aiConfig.aiProviders) data.state.aiProviders = aiConfig.aiProviders;
     if (aiConfig.aiModels) data.state.aiModels = aiConfig.aiModels;
     if (aiConfig.scenarioModelDefaults) {
       data.state.scenarioModelDefaults = aiConfig.scenarioModelDefaults;
+    }
+    if (aiConfig.modelRouteDefaults) {
+      data.state.modelRouteDefaults = aiConfig.modelRouteDefaults;
     }
     if (aiConfig.aiProvider) data.state.aiProvider = aiConfig.aiProvider;
     if (aiConfig.aiApiProtocol) data.state.aiApiProtocol = aiConfig.aiApiProtocol;

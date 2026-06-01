@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import type { ModelInfo } from "../../../../services/ai";
 import { getCategoryIcon } from "../../../ui/ModelIcons";
-import { getModelCategory } from "../helpers";
+import { applyModelIdToForm, getModelCategory } from "../helpers";
 import type { ModelFormState } from "../types";
 
 const CATEGORY_ORDER = [
@@ -14,15 +14,26 @@ const CATEGORY_ORDER = [
   "Gemini",
   "DeepSeek",
   "Qwen",
+  "StepFun",
+  "MiniMax",
   "Doubao",
   "GLM",
   "Moonshot",
+  "Baichuan",
+  "Grok",
+  "Command",
   "Llama",
+  "Gemma",
   "Mistral",
   "Yi",
   "ERNIE",
   "Spark",
   "Hunyuan",
+  "InternLM",
+  "Phi",
+  "Nova",
+  "Jamba",
+  "Sonar",
   "Embedding",
   "Audio",
   "Image",
@@ -31,14 +42,12 @@ const CATEGORY_ORDER = [
 
 export function AvailableModelsList({
   availableModels,
-  modelForm,
   setModelForm,
   selectedIds,
   onSelectionChange,
 }: {
   availableModels: ModelInfo[];
-  modelForm: ModelFormState;
-  setModelForm: Dispatch<SetStateAction<ModelFormState>>;
+  setModelForm?: Dispatch<SetStateAction<ModelFormState>>;
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
 }) {
@@ -111,7 +120,7 @@ export function AvailableModelsList({
     } else {
       next.add(modelId);
       // Also fill the model name field when only one is selected
-      setModelForm((prev) => ({ ...prev, model: modelId }));
+      setModelForm?.((prev) => applyModelIdToForm(prev, modelId));
     }
     onSelectionChange(Array.from(next));
   };
@@ -196,7 +205,9 @@ export function AvailableModelsList({
                       <span className="shrink-0">
                         {getCategoryIcon(category, 16)}
                       </span>
-                      <span className="text-xs font-medium">{categoryLabel}</span>
+                      <span className="text-xs font-medium">
+                        {categoryLabel}
+                      </span>
                       <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
                         {models.length}
                       </span>

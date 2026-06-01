@@ -31,6 +31,94 @@
   - `tests/unit/components/ai-settings-prototype.test.tsx` 覆盖 AI workbench 在模型发现超时时展示 warning toast
 - 已修复 AI workbench 协议文案 key 误落在 `skill.*` locale 分组的问题，当前协议下拉与端点卡片改为稳定使用 `settings.protocol*` 翻译。
 - 已把 AI workbench provider 分组从混合语言硬编码改为内部 key（`overseas` / `domestic` / `other`），在表单下拉中统一走 `settings.*` 翻译；模型列表里的 `Other` 分类兜底也改为展示层翻译，避免英文界面残留 `International / 国际`、`Other / 其他`。
+- 已修复模型获取后的列表分组优先级：
+  - OpenAI-compatible 聚合接口经常把 `owned_by` 统一返回为 `openai`
+  - 旧逻辑先看 `owned_by`，导致 `deepseek-*`、`qwen-*`、`gemini-*` 等模型被误归到 `GPT`
+  - 新逻辑先按模型 ID 识别明确模型族，再用 `owned_by` 作为兜底
+  - 已补充主流模型族覆盖：`StepFun`、`MiniMax`、`Baichuan`、`Llama`、`Grok`、`Command`、`Gemma`、`InternLM`、`Phi`、`Nova`、`Jamba`、`Sonar`
+- 已把 AI workbench 的模型管理区调整为供应商优先布局：
+  - 页面上方保留状态概览和模型路由配置
+  - 下方使用左侧供应商/端点列表、右侧当前供应商模型列表
+  - 添加模型仍挂在当前供应商/端点配置下
+  - 编辑模型时锁定供应商、协议、API Key、API URL，避免模型编辑误改供应商配置
+- 已加入模型属性推断：
+  - 选择 `gpt-image-*`、`dall-e`、`imagen`、`nano-banana` / `nanobanano`、`flux`、`stable-diffusion`、`recraft`、`ideogram` 等模型时默认设为生图模型
+  - 选择常见视觉对话模型时默认勾选视觉能力
+  - 这些属性仍然可由用户在模型表单中手动调整
+- 已补齐批量添加模型时的混合类型推断：
+  - 批量选择 `gpt-4o` + `gpt-image-2` 这类组合时，每个 modelId 独立推断 `chat` / `image` 和视觉能力
+  - 不再把最后一次选择的模型类型套到所有批量添加项上
+- 已修复模型路由常量引入后的集成测试 mock 漏导出问题：
+  - `MainContent` 相关集成测试的 `settings.store` mock 现在继承真实模块导出，只替换 `useSettingsStore`
+  - 避免 `AI_SCENARIO_MODEL_ROUTE` 等常量在窄 mock 下缺失
+- 已按供应商设置页结构重排 AI workbench 的供应商/模型配置区：
+  - 左侧为供应商/端点列表，显示供应商名称、供应商类型、状态点和模型数量
+  - 右侧为当前供应商详情，固定展示 API Key、API URL、Protocol，并在同一面板下管理模型
+  - 空状态不再渲染第二个同名 `Add Model` 按钮，避免操作入口重复
+- 已进一步将模型服务主视图改为与数据与同步页一致的同层三栏设置结构：
+  - 外层保留应用设置菜单作为第一栏
+  - `SettingsPage` 在模型服务页交出整块右侧区域，由 AI 页面自己渲染独立中栏和右侧内容
+  - `AISettingsPrototype` / `EndpointsSection` 自己拥有模型服务中栏，不再把中栏和右侧包进同一张大卡片
+  - 中栏上方放置 `模型路由`、`高级参数` 入口；中栏下方单开 `供应商` 分区，直接展示供应商/端点列表、搜索框和底部 `添加供应商`
+  - 右侧随中栏选择切换为供应商详情、模型路由或高级参数
+  - 供应商已拆成独立 `aiProviders` 设置记录，可以先添加供应商端点而不创建模型
+  - `添加供应商` 使用独立供应商/端点弹窗；`添加模型` 继续使用模型弹窗，并可从某个供应商详情面板继承端点配置
+  - 模型弹窗在继承供应商端点时只显示只读供应商摘要，不再暴露可编辑的 provider / API Key / API URL 控件
+  - 供应商弹窗补齐与模型配置一致的 API URL 规范化、Base URL 预览、实际请求地址预览和 `#` 禁用自动补全提示
+  - 模型路由页恢复状态总览与路由选择，不再丢失原有路由配置入口
+  - 高级参数页恢复翻译模式和高级参数配置入口
+- 已补充主流供应商类型预设：
+  - 顶部顺序改为 `自定义`、`OpenAI`、`OpenAI-Response`、`Gemini`、`Anthropic`、`Azure OpenAI`、`New API`、`Ollama`
+  - 后续仍保留 `Ollama`、`xAI`、`DeepSeek`、`Moonshot`、`智谱 AI`、`通义千问`、`豆包`
+  - 供应商选择不再按国内/国外/其他分组，避免地域分组影响用户理解
+  - 每个预制供应商都带 `iconCategory`，下拉选项和供应商列表复用现有模型图标系统展示图标
+  - `自定义` 供应商保留在第一位，并允许用户选择 OpenAI-compatible / Gemini-compatible / Anthropic-compatible 协议；`New API` 作为 OpenAI-compatible 预设保留
+  - 修复了 `xAI` 预设重复注册的问题
+- 已修复模型删除与供应商删除边界：
+  - 删除模型只调用 `deleteAiModel`
+  - 如果当前供应商分组是由历史模型数据派生、没有独立 `aiProviders` 记录，并且用户删除该分组最后一个模型，会先把该端点物化为独立供应商记录，再删除模型
+  - 这样删除最后一个模型不会让供应商从中栏消失；供应商删除后续仍应走单独供应商入口
+- 已调整供应商详情面板的模型区操作：
+  - `+` 保持为手动添加模型，只打开模型弹窗，不触发模型列表请求
+  - `+` 旁边新增获取模型列表按钮，点击后以当前供应商端点打开独立模型列表弹窗并拉取模型列表
+  - 拉取成功后弹窗展示全部模型，继续沿用现有搜索、分类、单选/多选和批量添加能力
+  - API Key / API URL 缺失时仍提示用户先补全供应商端点配置
+- 已按手动添加 / 获取模型列表拆分弹窗：
+  - 手动添加模型弹窗只展示自定义名称、模型 ID、能力和高级参数，不再展示供应商端点摘要
+  - 供应商详情里的获取模型列表按钮打开独立 `ModelFetchModal`，只负责远端模型列表搜索、分类、多选和批量添加
+  - 缺少 API Key / API URL 时仍阻止模型发现，并保持手动添加入口不发起网络请求
+- 已将模型类型 UI 收口为模型能力：
+  - 手动添加/编辑模型弹窗顶部不再展示“模型类型”单选
+  - “模型能力”区改为可配置 `对话模型`、`图像模型`、`视觉输入`
+  - `AIModelCapabilities` 新增 `chat`、`imageGeneration`，旧的 `type` 字段继续作为兼容和请求参数选择使用
+  - 路由筛选现在同时识别 `type` 与能力标记，支持同一个模型按能力进入文本、视觉或生图路由
+- 已对照外部成熟模型管理工具的能力模型继续补齐：
+  - 能力维度扩展为 `chat`、`vision`、`imageGeneration`、`reasoning`、`toolUse`、`webSearch`、`embedding`、`rerank`
+  - 价格、上下文窗口、最大 token、endpoint type、参数支持仍归为模型元数据 / 请求控制，不混入能力布尔值
+  - 模型 ID 推断新增 embedding / rerank / reasoning / web search 常见关键词
+  - 保存双能力模型时同时保留 chatParams 与 imageParams，路由解析会按当前业务请求类型生成 AIConfig，避免图像主类型模型被文本路由误当成生图请求
+- 已继续收口供应商/模型边界：
+  - 当前模型拆分为供应商实例、供应商预设/来源、模型列表三层；PromptHub 现在不再把“供应商实例名称”和“供应商类型/协议预设”混在一个下拉里
+  - `AIProviderConfig` 新增可选 `name`，用于保存用户自己的供应商实例名
+  - 添加/编辑供应商弹窗新增“供应商名称”和“供应商类型”两个字段；类型下拉仍负责 OpenAI / New API / Gemini / Anthropic 等协议预设和默认 URL
+  - 中栏供应商列表、右侧详情标题和搜索优先使用实例名，多个同类型供应商不会都显示成同一个 OpenAI/New API
+  - 旧数据没有 `name` 时继续回退到供应商类型标签，保持兼容
+  - `custom`、`New API`、`Ollama/Llama`、`xAI/Grok` 预设图标分类从泛化 `Other` 拆开，避免下拉里都显示同一个兜底字母
+- 已补齐预制供应商图标兜底：
+  - 现有本地 PNG 继续覆盖 OpenAI、Anthropic、Gemini、DeepSeek、Qwen、Doubao、GLM、Moonshot 等品牌
+  - `Custom` 和未知 `Other` 保留通用兜底；其余预制供应商必须尽量使用真实品牌图标
+  - 新增回归断言：`PROVIDER_OPTIONS` 中任一预制供应商如果没有 dedicated icon，会直接测试失败，避免后续又退回首字母圆点
+- 已将预制供应商图标继续收口为真实品牌图标资产：
+  - OpenAI、Anthropic、Azure OpenAI、Gemini、DeepSeek、Qwen、Doubao、GLM、Moonshot、Mistral、Yi、Spark、New API、Ollama/Llama、xAI/Grok 均改为本地品牌 SVG/图片资源
+  - `Custom` 和未知 `Other` 才保留通用 Lucide 兜底
+  - 补充回归断言：Azure OpenAI、New API、Llama、Grok、Qwen 必须渲染为真实图片资源，不能回退成手绘/通用图标
+- 已补充 UI / 预设回归测试：
+  - 供应商预设 ID 必须唯一
+  - 主流供应商预设顺序必须稳定
+  - 供应商详情面板必须展示 API Key、API URL、Protocol
+  - 模型服务页的路由/高级入口和供应商列表由 AI 页面自身的中栏渲染，外层设置页不再截获
+  - 添加供应商只写入供应商端点，不会创建模型记录
+  - 添加模型不会修改供应商端点；供应商 URL 自动补全规则只在供应商弹窗中配置和预览
 
 ## Verification
 
@@ -47,6 +135,81 @@
 - `pnpm --filter @prompthub/desktop typecheck`
 - `pnpm --filter @prompthub/desktop build`
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/ai-transport.test.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/services/ai-url-preview.test.ts tests/unit/services/ai-defaults.test.ts`
+- 模型列表分组回归补充验证：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/available-models-list.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx tests/unit/components/available-models-list.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 主流模型族补充后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/available-models-list.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx tests/unit/components/available-models-list.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 供应商优先布局和模型属性推断补充后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx src/renderer/components/settings/ai-workbench/helpers.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 批量混合模型类型推断修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx -t "infers each selected model independently"`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/services/ai-defaults.test.ts tests/unit/stores/settings-ai-models.test.ts`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx src/renderer/components/settings/ai-workbench/helpers.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/services/ai-defaults.test.ts tests/unit/stores/settings-ai-models.test.ts`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 集成测试 mock 修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/integration/components/main-content-context-move.integration.test.tsx tests/integration/components/main-content-inline-edit.integration.test.tsx tests/integration/components/main-content-large-dataset.integration.test.tsx tests/integration/components/main-content-selection-restore.integration.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx src/renderer/components/settings/ai-workbench/helpers.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/services/ai-defaults.test.ts tests/unit/stores/settings-ai-models.test.ts tests/integration/components/main-content-context-move.integration.test.tsx tests/integration/components/main-content-inline-edit.integration.test.tsx tests/integration/components/main-content-large-dataset.integration.test.tsx tests/integration/components/main-content-selection-restore.integration.test.tsx tests/integration/components/skill-manager-large-dataset.integration.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 供应商设置页结构重排后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/constants.ts src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/available-models-list.test.tsx`
+- 三栏主视图修正后重新运行：
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/constants.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/available-models-list.test.tsx`
+- 中栏菜单修正后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/settings-page.test.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/SettingsPage.tsx src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx tests/unit/components/settings-page.test.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- 供应商不分地域、自定义优先和图标补充后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointFormModal.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/constants.ts src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/types.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `git diff --check`
+- 模型删除/供应商保留和供应商模型区添加/拉取列表拆分后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/settings-page.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `git diff --check`
+- 供应商实例名 / 供应商类型拆分后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/settings-snapshot.test.ts tests/unit/components/settings-page.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointFormModal.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/constants.ts src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/types.ts src/renderer/stores/settings.store.ts tests/unit/components/ai-settings-prototype.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/settings-snapshot.test.ts`
+- `git diff --check`
+- 手动添加 / 获取模型列表弹窗拆分后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/settings-page.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/EndpointsSection.tsx src/renderer/components/settings/ai-workbench/ModelFormModal.tsx src/renderer/components/settings/ai-workbench/ModelFetchModal.tsx src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx src/renderer/components/settings/ai-workbench/model-form/AvailableModelsList.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 模型能力维度改造后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/ai-defaults.test.ts`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/stores/settings.store.ts src/renderer/services/ai-defaults.ts src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/constants.ts src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/ai-defaults.test.ts`
+- `pnpm --filter @prompthub/desktop typecheck`
+- 外部模型管理能力对照与能力补齐后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/ai-defaults.test.ts`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/stores/settings.store.ts src/renderer/services/ai-defaults.ts src/renderer/components/settings/AISettingsPrototype.tsx src/renderer/components/settings/ai-workbench/constants.ts src/renderer/components/settings/ai-workbench/helpers.ts src/renderer/components/settings/ai-workbench/model-form/BaseFields.tsx tests/unit/components/ai-settings-prototype.test.tsx tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/stores/settings-ai-models.test.ts tests/unit/services/ai-defaults.test.ts`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `git diff --check`
+- 供应商真实品牌图标补齐后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/ai-workbench-base-fields.test.tsx tests/unit/components/available-models-list.test.tsx tests/unit/components/ai-settings-prototype.test.tsx`
+- `pnpm --filter @prompthub/desktop exec eslint src/renderer/components/ui/ModelIcons.tsx src/renderer/components/settings/ai-workbench/constants.ts tests/unit/components/ai-workbench-base-fields.test.tsx`
+- `pnpm --filter @prompthub/desktop typecheck`
+- `git diff --check`
+- 全量 `pnpm --filter @prompthub/desktop test -- --run` 已尝试，结果为 177 个测试文件通过、7 个测试文件失败；AI 设置、模型路由、MainContent 相关测试通过，但当前工作区仍有非本 change 的失败：
+  - `skill-i18n-smoke.test.tsx` 里 project deployment action 用例超时
+  - `skill-filter*.test.ts` / `skill-stats.test.ts` / `skill-platform-sync.test.ts` 与当前 skill 分发/过滤改动相关
+  - `skill-store-custom-sources.test.tsx` 空搜索态当前落到官方商店未开放空态
+  - `skill-db-versioning.test.ts` 仍有重复 `source_url` schema 测试问题
 
 - 构建仍保留既有 Vite warning：
 - `EditPromptModal.tsx` 同时动态/静态导入
