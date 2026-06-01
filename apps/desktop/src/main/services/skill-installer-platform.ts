@@ -42,6 +42,11 @@ interface SkillMdInstallOptions {
   legacySkillNames?: string[];
 }
 
+type SkillPlatformIdentity = Pick<
+  Skill,
+  "id" | "name" | "source_id" | "source_url" | "local_repo_path"
+>;
+
 interface PlatformActivationRecord {
   skillId: string;
   skillName: string;
@@ -129,6 +134,65 @@ async function isPlatformActivationCurrent(
     return false;
   }
   return current.skillId === skill.id;
+}
+
+function isRemoteUrl(value: string): boolean {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(value);
+}
+
+function resolveLocalSkillSourceDir(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || isRemoteUrl(trimmed)) {
+    return null;
+  }
+
+  const resolved = path.resolve(trimmed);
+  return path.basename(resolved).toLowerCase() === "skill.md"
+    ? path.dirname(resolved)
+    : resolved;
+}
+
+function getDirectPlatformSkillName(
+  platform: SkillPlatform,
+  sourceDir: string,
+): string | null {
+  const skillsDir = path.resolve(getPlatformSkillsDir(platform));
+  const resolvedSourceDir = path.resolve(sourceDir);
+  const relative = path.relative(skillsDir, resolvedSourceDir);
+
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return null;
+  }
+
+  const segments = relative.split(path.sep).filter(Boolean);
+  return segments.length === 1 ? segments[0] : null;
+}
+
+async function inspectSkillSourcePathInstall(
+  platform: SkillPlatform,
+  skill: SkillPlatformIdentity,
+): Promise<SkillPlatformInstallStatus | null> {
+  const sourceDirs = Array.from(
+    new Set(
+      [skill.source_url, skill.local_repo_path]
+        .map(resolveLocalSkillSourceDir)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  for (const sourceDir of sourceDirs) {
+    const platformSkillName = getDirectPlatformSkillName(platform, sourceDir);
+    if (!platformSkillName) {
+      continue;
+    }
+
+    const status = await inspectPlatformSkillInstall(platform, platformSkillName);
+    if (status.installed) {
+      return status;
+    }
+  }
+
+  return null;
 }
 
 async function removePlatformSkillDir(
@@ -711,7 +775,7 @@ export async function installSkillMdSymlink(
 }
 
 export async function installSkillMdForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skill: SkillPlatformIdentity,
   skillMdContent: string,
   platformId: string,
   canonicalRepoPath?: string,
@@ -729,7 +793,7 @@ export async function installSkillMdForSkill(
 }
 
 export async function installSkillMdSymlinkForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skill: SkillPlatformIdentity,
   skillMdContent: string,
   platformId: string,
   canonicalRepoPath?: string,
@@ -752,7 +816,7 @@ export async function installSkillMdSymlinkForSkill(
 }
 
 export async function uninstallSkillMdForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skill: SkillPlatformIdentity,
   platformId: string,
   legacySkillNames?: string[],
 ): Promise<void> {
@@ -766,22 +830,31 @@ export async function uninstallSkillMdForSkill(
 }
 
 export async function getSkillMdInstallStatusForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skill: SkillPlatformIdentity,
   legacySkillNames?: string[],
 ): Promise<Record<string, boolean>> {
   const baseStatus = await getSkillMdInstallStatus(skill.name, { legacySkillNames });
   const status: Record<string, boolean> = {};
 
   for (const platform of getSupportedPlatforms()) {
-    status[platform.id] =
-      baseStatus[platform.id] && (await isPlatformActivationCurrent(platform, skill));
+    if (
+      baseStatus[platform.id] &&
+      (await isPlatformActivationCurrent(platform, skill))
+    ) {
+      status[platform.id] = true;
+      continue;
+    }
+
+    status[platform.id] = Boolean(
+      await inspectSkillSourcePathInstall(platform, skill),
+    );
   }
 
   return status;
 }
 
 export async function getSkillMdInstallStatusDetailsForSkill(
-  skill: Pick<Skill, "id" | "name" | "source_id">,
+  skill: SkillPlatformIdentity,
   legacySkillNames?: string[],
 ): Promise<SkillPlatformInstallStatusMap> {
   const baseStatus = await getSkillMdInstallStatusDetails(skill.name, {
@@ -791,10 +864,18 @@ export async function getSkillMdInstallStatusDetailsForSkill(
 
   for (const platform of getSupportedPlatforms()) {
     const installStatus = baseStatus[platform.id] ?? { installed: false };
+    if (
+      installStatus.installed &&
+      (await isPlatformActivationCurrent(platform, skill))
+    ) {
+      status[platform.id] = installStatus;
+      continue;
+    }
+
     status[platform.id] =
-      installStatus.installed && (await isPlatformActivationCurrent(platform, skill))
-        ? installStatus
-        : { installed: false };
+      (await inspectSkillSourcePathInstall(platform, skill)) ?? {
+        installed: false,
+      };
   }
 
   return status;

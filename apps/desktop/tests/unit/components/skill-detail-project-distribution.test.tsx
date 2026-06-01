@@ -318,6 +318,35 @@ describe("Skill detail project distribution", () => {
     });
   });
 
+  it("shows the skill and platform name after a global platform install succeeds", async () => {
+    const showToast = vi.fn();
+
+    await renderProjectDistribution({
+      showToast,
+      skipProjectTabClick: true,
+      skillPlatformState: {
+        availablePlatforms: [{ id: "cherry-studio", name: "Cherry Studio" }],
+        batchInstall: vi.fn().mockResolvedValue({
+          successCount: 1,
+          totalCount: 1,
+          failures: [],
+          fallbacks: [],
+        }),
+        selectedPlatforms: new Set(["cherry-studio"]),
+        uninstalledPlatforms: [{ id: "cherry-studio", name: "Cherry Studio" }],
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Install All" }));
+
+    await waitFor(() => {
+      expect(showToast).toHaveBeenCalledWith(
+        "write installed to Cherry Studio successfully",
+        "success",
+      );
+    });
+  });
+
   it("does not mention distributed cleanup when deleting an undistributed skill", async () => {
     await renderProjectDistribution({ skipProjectTabClick: true });
 

@@ -387,6 +387,38 @@ describe("skill-installer-platform symlink install", () => {
     ).toBe(true);
   });
 
+  it("reports an agent-imported Cherry Studio skill as installed from its source path without activation state", async () => {
+    const cherrySkillsDir =
+      "/Users/demo/Library/Application Support/CherryStudio/Data/Skills";
+    utilsMocks.getPlatformSkillsDir.mockImplementation((platform) =>
+      platform.id === "cherry-studio"
+        ? cherrySkillsDir
+        : `/platform/${platform.id}/skills`,
+    );
+    internalMocks.fileExists.mockImplementation(async (target: string) => {
+      return !target.endsWith(".prompthub-platform-activations.json");
+    });
+    cherryStudioMocks.getCherryStudioSkillStatus.mockImplementation(
+      async (_platform, skillName: string) => skillName === "skill-creator",
+    );
+
+    const status = await getSkillMdInstallStatusDetailsForSkill(
+      {
+        id: "prompt-skill",
+        name: "Skill Creator",
+        source_id: "agent-import",
+        source_url: `${cherrySkillsDir}/skill-creator`,
+        local_repo_path: "/prompthub/skills/skill-creator",
+      },
+      ["Skill Creator"],
+    );
+
+    expect(status["cherry-studio"]).toEqual({
+      installed: true,
+      mode: "copy",
+    });
+  });
+
   it("uninstalls the shared logical platform directory and clears activation", async () => {
     internalMocks.fileExists.mockResolvedValue(true);
     fsMocks.readFile = vi.fn(async () =>

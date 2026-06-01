@@ -756,12 +756,32 @@ export function SkillFullDetailPage({
     try {
       const result = await installSelectedPlatforms();
       if (result.successCount > 0) {
-        const modeLabel =
-          installMode === "symlink"
-            ? t("skill.symlink", "Symlink")
-            : t("skill.copyMode", "Copy");
+        const failedPlatformIds = new Set(
+          result.failures.map((failure) => failure.platformId),
+        );
+        const successfulPlatforms = Array.from(selectedPlatforms)
+          .filter((platformId) => !failedPlatformIds.has(platformId))
+          .slice(0, result.successCount)
+          .map(
+            (platformId) =>
+              availablePlatforms.find((entry) => entry.id === platformId)
+                ?.name ?? platformId,
+          );
         showToast(
-          `${t("skill.installSuccess", "Installation successful")} (${modeLabel}) — ${result.successCount}/${result.totalCount}`,
+          successfulPlatforms.length === 1
+            ? t("skill.installToPlatformSuccess", {
+                skill: selectedSkill.name,
+                platform: successfulPlatforms[0],
+                defaultValue:
+                  "{{skill}} installed to {{platform}} successfully",
+              })
+            : t("skill.installToPlatformsSuccess", {
+                skill: selectedSkill.name,
+                count: result.successCount,
+                platforms: successfulPlatforms.join(", "),
+                defaultValue:
+                  "{{skill}} installed to {{count}} platforms successfully: {{platforms}}",
+              }),
           "success",
         );
       }
