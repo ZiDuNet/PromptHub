@@ -8,7 +8,6 @@ import { useState, useMemo, useCallback } from "react";
 import {
   CheckIcon,
   RefreshCwIcon,
-  PlayIcon,
   Loader2Icon,
   PlusIcon,
   TrashIcon,
@@ -18,6 +17,7 @@ import {
   XIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  TestTubeIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -1127,7 +1127,7 @@ export function AISettings() {
                                   {testingModelId === model.id ? (
                                     <Loader2Icon className="w-4 h-4 animate-spin text-muted-foreground" />
                                   ) : (
-                                    <PlayIcon className="w-4 h-4 text-muted-foreground" />
+                                    <TestTubeIcon className="w-4 h-4 text-muted-foreground" />
                                   )}
                                 </button>
                                 {!model.isDefault && (
@@ -1906,7 +1906,7 @@ export function AISettings() {
                                   {testingModelId === model.id ? (
                                     <Loader2Icon className="w-4 h-4 text-primary animate-spin" />
                                   ) : (
-                                    <PlayIcon className="w-4 h-4 text-muted-foreground" />
+                                    <TestTubeIcon className="w-4 h-4 text-muted-foreground" />
                                   )}
                                 </button>
                                 {!model.isDefault && (

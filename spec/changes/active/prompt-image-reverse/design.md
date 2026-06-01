@@ -42,7 +42,11 @@ AI 模型配置分两层：模型自身能力与业务路由必须分开。
 3. Renderer 将图片保存到本地 image store，保留 fileName
 4. Renderer 使用图片 base64 + 用户可选补充说明调用 `chatCompletion`
 5. 模型返回 JSON 草稿
-6. `onCreate()` 创建 image Prompt：
+6. Modal 展示可编辑草稿，不自动创建 Prompt：
+   - 用户可以编辑 title / userPrompt / description / tags
+   - 用户可以复制 `userPrompt`，不落盘
+   - 用户可以重新反推
+7. 只有用户点击创建时，才调用 `onCreate()` 创建 image Prompt：
    - `promptType=image`
    - `userPrompt` 为反推生图 prompt
    - 当用户勾选“同时添加为参考图”时，`images` 包含参考图 fileName
@@ -82,6 +86,8 @@ AI 模型配置分两层：模型自身能力与业务路由必须分开。
 
 - Unit: builder/parser 生成严格 JSON 指令并解析 image draft。
 - Component: 独立 Image Reverse modal 选图后调用 multimodal chat 并创建 image Prompt。
+- Component: 独立 Image Reverse modal 选图后只生成可编辑草稿，不自动创建 image Prompt。
+- Component: 用户可以复制反推草稿而不创建 / 不落盘。
 - Component: 取消“同时添加为参考图”后创建 Prompt 不写入 `images`，且偏好被记住。
 - Component: 没有 vision-capable chat 模型时显示图片反推专用配置错误，不调用 AI，也不创建 Prompt。
 - Component: 视觉模型返回不可解析内容时显示解析错误，不创建 Prompt。

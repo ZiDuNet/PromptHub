@@ -67,6 +67,16 @@ describe("AiTestModal workbench", () => {
       aiApiKey: "legacy-key",
       aiApiUrl: "https://example.com/v1",
       aiModel: "legacy-chat",
+      aiProviders: [
+        {
+          id: "provider-image",
+          name: "我的生图供应商",
+          provider: "openai",
+          apiProtocol: "openai",
+          apiKey: "image-key",
+          apiUrl: "https://example.com/v1",
+        },
+      ],
       aiModels: [
         {
           id: "chat-default",
@@ -156,6 +166,8 @@ describe("AiTestModal workbench", () => {
     expect(screen.getByRole("button", { name: "Add Images" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Test Image" })).not.toBeInTheDocument();
     expect(screen.getByText("{{feature}}")) .toBeInTheDocument();
+    expect(document.querySelector("aside")).toHaveClass("animate-in");
+    expect(document.querySelector("aside")).toHaveClass("slide-in-from-right-8");
   });
 
   it("shows image-only workbench controls for image prompts", async () => {
@@ -203,7 +215,56 @@ describe("AiTestModal workbench", () => {
     expect(screen.getByText("参考图片")).toBeInTheDocument();
     expect(screen.getByText("已选择")).toBeInTheDocument();
     expect(screen.getByText("模型: gpt-image-1")).toBeInTheDocument();
-    expect(screen.getByText("服务提供商: openai")).toBeInTheDocument();
+    expect(screen.getByText("服务提供商: 我的生图供应商")).toBeInTheDocument();
+  });
+
+  it("renders generated images in the image test panel", async () => {
+    const user = userEvent.setup();
+
+    await renderWithI18n(
+      <ToastProvider>
+        <AiTestModal
+          isOpen
+          onClose={vi.fn()}
+          prompt={{
+            ...prompt,
+            id: "image-prompt-success",
+            promptType: "image",
+          }}
+        />
+      </ToastProvider>,
+      { language: "zh" },
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "测试生图" }).at(-1)!);
+
+    const generatedImage = await screen.findByRole("img", { name: "Generated 1" });
+    expect(generatedImage).toHaveAttribute("src", "https://example.com/generated.png");
+  });
+
+  it("keeps image generation failure details visible in the image test panel", async () => {
+    const user = userEvent.setup();
+    generateImageMock.mockRejectedValue(new Error("Failed to fetch"));
+
+    await renderWithI18n(
+      <ToastProvider>
+        <AiTestModal
+          isOpen
+          onClose={vi.fn()}
+          prompt={{
+            ...prompt,
+            id: "image-prompt-error",
+            promptType: "image",
+          }}
+        />
+      </ToastProvider>,
+      { language: "zh" },
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "测试生图" }).at(-1)!);
+
+    expect(await screen.findByText("生图失败")).toBeInTheDocument();
+    expect(screen.getByText("Failed to fetch")).toBeInTheDocument();
   });
 
   it("passes uploaded chat attachments to single-model tests for text prompts", async () => {

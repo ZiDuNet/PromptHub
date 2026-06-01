@@ -11,7 +11,11 @@ import {
   restoreFromBackup,
 } from "./database-backup";
 import type { DatabaseBackup } from "./database-backup-format";
-import { issueSolvedPromptHubCaptcha } from "./self-hosted-auth";
+import {
+  issueSolvedPromptHubCaptcha,
+  isPromptHubCaptchaAuthBoundaryError,
+  normalizePromptHubWebBaseUrl,
+} from "./self-hosted-auth";
 import { useSettingsStore } from "../stores/settings.store";
 
 export interface SelfHostedSyncConfig {
@@ -78,7 +82,7 @@ interface WebSyncPushResult {
 }
 
 function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "");
+  return normalizePromptHubWebBaseUrl(url);
 }
 
 function getOrCreateDesktopDeviceId(): string {
@@ -144,7 +148,18 @@ async function loginToSelfHostedWeb(
   config: SelfHostedSyncConfig,
 ): Promise<{ baseUrl: string; accessToken: string }> {
   const baseUrl = normalizeBaseUrl(config.url);
-  const captcha = await issueSolvedPromptHubCaptcha(baseUrl);
+  let captcha: { captchaId: string; captchaAnswer: string } | undefined;
+  let captchaBoundaryError: Error | undefined;
+
+  try {
+    captcha = await issueSolvedPromptHubCaptcha(baseUrl);
+  } catch (error) {
+    if (!isPromptHubCaptchaAuthBoundaryError(error)) {
+      throw error;
+    }
+    captchaBoundaryError = error;
+  }
+
   const response = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -152,9 +167,20 @@ async function loginToSelfHostedWeb(
     body: JSON.stringify({
       username: config.username,
       password: config.password,
-      ...captcha,
+      ...(captcha ?? {}),
     }),
   });
+
+  if (!response.ok && captchaBoundaryError) {
+    const message = await extractErrorMessage(response, captchaBoundaryError.message);
+    if (message.includes("captcha")) {
+      throw new Error(
+        `${captchaBoundaryError.message} The connected PromptHub Web server still requires captcha during login, so update the self-hosted Web deployment and try again.`,
+      );
+    }
+    throw new Error(message);
+  }
+
   const payload = await readJsonEnvelope<LoginPayload>(response);
   await registerDesktopHeartbeat(baseUrl, payload.accessToken);
   return { baseUrl, accessToken: payload.accessToken };

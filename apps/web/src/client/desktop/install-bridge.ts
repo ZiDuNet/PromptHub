@@ -1,6 +1,7 @@
 import type {
   AITransportRequest,
   AITransportResponse,
+  AgentScannedSkill,
   CreateRuleProjectInput,
   CreateFolderDTO,
   CreatePromptDTO,
@@ -19,6 +20,7 @@ import type {
   Settings,
   Skill,
   SkillLocalFileEntry,
+  SkillPlatformScanResult,
   SkillSafetyScanInput,
   SkillSafetyReport,
   SkillVersion,
@@ -26,12 +28,16 @@ import type {
   UpdatePromptDTO,
   UpdateSkillParams,
 } from '@prompthub/shared/types';
+import { SKILL_PLATFORMS } from '@prompthub/shared/constants/platforms';
+import rootPackage from '../../../../../package.json';
 import { fetchWithAuthRetry } from '../api/auth-session';
 import i18n from '../i18n';
 
 const JSON_HEADERS = {
   'Content-Type': 'application/json',
 };
+
+const WEB_APP_VERSION = `${rootPackage.version}-web`;
 
 let installed = false;
 
@@ -265,8 +271,9 @@ export function installDesktopBridge(): void {
         return apiJson<Prompt[]>(`/api/prompts?${params.toString()}`);
       },
       copy: (id: string) => apiJsonBody<Prompt>(`/api/prompts/${id}/copy`, 'POST'),
-      insertDirect: async (_prompt: Prompt) => {},
-      syncWorkspace: async () => {},
+      insertDirect: (prompt: Prompt) =>
+        apiJsonBody<Prompt>('/api/prompts/direct-insert', 'POST', prompt).then(() => true),
+      syncWorkspace: () => apiOk('/api/prompts/workspace/sync', 'POST'),
     },
     rules: {
       list: () => apiJson<RuleFileDescriptor[]>('/api/rules'),
@@ -307,8 +314,9 @@ export function installDesktopBridge(): void {
         apiJsonBody<PromptVersion>(`/api/prompts/${promptId}/versions`, 'POST', { note }),
       rollback: (promptId: string, version: number) =>
         apiJsonBody<Prompt>(`/api/prompts/${promptId}/versions/${version}/rollback`, 'POST'),
-      delete: (versionId: string) => apiOk(`/api/prompt-versions/${versionId}`, 'DELETE'),
-      insertDirect: async (_version: PromptVersion) => {},
+      delete: (versionId: string) => apiOk(`/api/prompts/versions/${versionId}`, 'DELETE'),
+      insertDirect: (version: PromptVersion) =>
+        apiJsonBody<PromptVersion>('/api/prompts/versions/direct-insert', 'POST', version).then(() => true),
     },
     folder: {
       create: (data: CreateFolderDTO) =>
@@ -319,7 +327,8 @@ export function installDesktopBridge(): void {
       delete: (id: string) => apiOk(`/api/folders/${id}`, 'DELETE'),
       reorder: (ids: string[]) =>
         apiOk('/api/folders/reorder', 'PUT', { ids }),
-      insertDirect: async (_folder: Folder) => {},
+      insertDirect: (folder: Folder) =>
+        apiJsonBody<Folder>('/api/folders/direct-insert', 'POST', folder).then(() => true),
     },
     skill: {
       getAll: () => apiJson<Skill[]>('/api/skills?scope=all'),
@@ -350,6 +359,26 @@ export function installDesktopBridge(): void {
       createLocalDir: async (_skillId: string, _path: string) => true,
       renameLocalPath: async (_skillId: string, _path: string, _nextPath: string) => true,
       deleteLocalFile: async (_skillId: string, _path: string) => true,
+      readLocalFileByPath: async (_localPath: string, _path: string) => '',
+      writeLocalFileByPath: async (
+        _localPath: string,
+        _path: string,
+        _content: string,
+      ) => true,
+      createLocalDirByPath: async (_localPath: string, _path: string) => true,
+      renameLocalPathByPath: async (
+        _localPath: string,
+        _path: string,
+        _nextPath: string,
+      ) => true,
+      deleteLocalFileByPath: async (_localPath: string, _path: string) => true,
+      getLocalPathStatus: async (_localPath: string) => ({ exists: false, isDirectory: false }),
+      copyRepoByPathToDirectory: async (
+        _localPath: string,
+        _skillName: string,
+        _targetRootDir: string,
+        _options?: { mode?: 'copy' | 'symlink'; ifExists?: 'overwrite' | 'skip' | 'error' },
+      ) => ({ success: false, skipped: true, targetPath: null }),
       getRepoPath: async (_skillId: string) => null,
       saveToRepo: async (_skillId: string) => null,
       syncFromRepo: async (id: string) => apiJson<Skill>(`/api/skills/${id}`),
@@ -384,8 +413,21 @@ export function installDesktopBridge(): void {
       ) => {},
       uninstallFromPlatform: async (_platform: 'claude' | 'cursor', _name: string) => {},
       getPlatformStatus: async (_name: string) => ({}),
-      getSupportedPlatforms: async () => [],
-      detectPlatforms: async () => [],
+      getSupportedPlatforms: async () => SKILL_PLATFORMS,
+      detectPlatforms: async () => SKILL_PLATFORMS,
+      scanPlatformSkills: async (platformId: string): Promise<SkillPlatformScanResult> => {
+        const platform =
+          SKILL_PLATFORMS.find((item) => item.id === platformId) ?? SKILL_PLATFORMS[0];
+        return {
+          platform,
+          skillsDir: '',
+          scannedSkills: [] as AgentScannedSkill[],
+        };
+      },
+      uninstallPlatformSkill: async (
+        _platformId: string,
+        _platformSkillPath: string,
+      ) => true,
       getMdInstallStatus: async (_name: string) => ({}),
       getMdInstallStatusBatch: async (names: string[]) =>
         Object.fromEntries(names.map((name) => [name, {}])),
@@ -487,7 +529,7 @@ export function installDesktopBridge(): void {
       download: async () => ({ success: false, error: 'Updater is unavailable on web' }),
       install: async () => ({ success: false, manual: true }),
       openDownloadedUpdate: async () => ({ success: false }),
-      getVersion: async () => '0.5.5-web',
+      getVersion: async () => WEB_APP_VERSION,
       getPlatform: async () => getPlatform(),
       openReleases: async () => {},
       onStatus: (_callback: (status: unknown) => void) => () => {},

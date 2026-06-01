@@ -157,6 +157,225 @@ describe("self-hosted-sync", () => {
     );
   });
 
+  it("normalizes pasted /api URLs before issuing captcha and login requests", async () => {
+    const requestedUrls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+
+      if (url === "https://backup.example.com/api/auth/captcha") {
+        return captchaResponse();
+      }
+
+      if (url === "https://backup.example.com/api/auth/login") {
+        return jsonResponse({
+          data: { accessToken: "access-token" },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/devices/heartbeat") {
+        return jsonResponse({
+          data: { ok: true },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/sync/manifest") {
+        return jsonResponse({
+          data: {
+            counts: {
+              prompts: 0,
+              folders: 0,
+              rules: 0,
+              skills: 0,
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      testSelfHostedConnection({
+        url: "https://backup.example.com/api/",
+        username: "owner",
+        password: "secret",
+      }),
+    ).resolves.toEqual({
+      prompts: 0,
+      folders: 0,
+      rules: 0,
+      skills: 0,
+    });
+
+    expect(requestedUrls).toEqual([
+      "https://backup.example.com/api/auth/captcha",
+      "https://backup.example.com/api/auth/login",
+      "https://backup.example.com/api/devices/heartbeat",
+      "https://backup.example.com/api/sync/manifest",
+    ]);
+  });
+
+  it("normalizes pasted auth endpoint URLs before connecting", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "https://backup.example.com/api/auth/captcha") {
+        return captchaResponse();
+      }
+
+      if (url === "https://backup.example.com/api/auth/login") {
+        return jsonResponse({
+          data: { accessToken: "access-token" },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/devices/heartbeat") {
+        return jsonResponse({
+          data: { ok: true },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/sync/manifest") {
+        return jsonResponse({
+          data: {
+            counts: {
+              prompts: 1,
+              folders: 0,
+              rules: 0,
+              skills: 0,
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      testSelfHostedConnection({
+        url: "https://backup.example.com/api/auth/captcha?retry=1",
+        username: "owner",
+        password: "secret",
+      }),
+    ).resolves.toEqual({
+      prompts: 1,
+      folders: 0,
+      rules: 0,
+      skills: 0,
+    });
+  });
+
+  it("falls back to legacy login when an older Web server has no public captcha endpoint", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === "https://backup.example.com/api/auth/captcha") {
+        return jsonResponse(
+          {
+            error: {
+              code: "UNAUTHORIZED",
+              message: "Missing or invalid Authorization header",
+            },
+          },
+          { status: 401 },
+        );
+      }
+
+      if (url === "https://backup.example.com/api/auth/login") {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          username: "owner",
+          password: "secret",
+        });
+        return jsonResponse({
+          data: { accessToken: "legacy-access-token" },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/devices/heartbeat") {
+        return jsonResponse({
+          data: { ok: true },
+        });
+      }
+
+      if (url === "https://backup.example.com/api/sync/manifest") {
+        return jsonResponse({
+          data: {
+            counts: {
+              prompts: 2,
+              folders: 1,
+              rules: 0,
+              skills: 0,
+            },
+          },
+        });
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      testSelfHostedConnection({
+        url: "https://backup.example.com",
+        username: "owner",
+        password: "secret",
+      }),
+    ).resolves.toEqual({
+      prompts: 2,
+      folders: 1,
+      rules: 0,
+      skills: 0,
+    });
+  });
+
+  it("reports protected captcha as a deployment mismatch when login still requires captcha", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "https://backup.example.com/api/auth/captcha") {
+        return jsonResponse(
+          {
+            error: {
+              code: "UNAUTHORIZED",
+              message: "Missing or invalid Authorization header",
+            },
+          },
+          { status: 401 },
+        );
+      }
+
+      if (url === "https://backup.example.com/api/auth/login") {
+        return jsonResponse(
+          {
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "captchaId is required",
+            },
+          },
+          { status: 422 },
+        );
+      }
+
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      testSelfHostedConnection({
+        url: "https://backup.example.com",
+        username: "owner",
+        password: "secret",
+      }),
+    ).rejects.toThrow("update the self-hosted Web deployment");
+  });
+
   it("pushes desktop backup data and uploads media before syncing payload", async () => {
     const backup: DatabaseBackup = {
       version: 1,

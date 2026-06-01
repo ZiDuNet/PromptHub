@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { FolderDB, PromptDB, SkillDB } from '@prompthub/db';
+import rootPackage from '../../../package.json';
 import { getServerDatabase } from './database.js';
 import { logger } from './middleware/logger.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -49,7 +50,7 @@ export function createApp(): Hono {
 
   app.route('/api', protectedApi);
 
-  app.get('/health', (c) => c.json({ status: 'ok', version: process.env.APP_VERSION || 'unknown' }));
+  app.get('/health', (c) => c.json({ status: 'ok', version: process.env.APP_VERSION || rootPackage.version }));
 
   return app;
 }

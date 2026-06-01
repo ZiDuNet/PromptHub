@@ -170,6 +170,31 @@ desktop 与 cli 必须调用同一实现。
   - 首轮只支持扫描已安装 skill 的本地 repo / 内容
   - AI sidecar 配置作为可选参数，保持与 desktop safety scan 的输入契约一致
 
+### AI
+
+- 补齐桌面 AI 模型工作台的最小 CLI 管理面：
+  - `ai providers`
+  - `ai provider-add --provider <id> --api-key <key> --api-url <url> [--protocol openai|gemini|anthropic]`
+  - `ai provider-delete <provider-id>`
+  - `ai models`
+  - `ai model-add --provider <provider-id> --model <model> [--type chat|image] [--vision] [--image-generation] [--reasoning]`
+  - `ai model-delete <model-id>`
+  - `ai routes`
+  - `ai route-set <mainText|fastText|visionText|imageGeneration> <model-id>`
+  - `ai route-clear <mainText|fastText|visionText|imageGeneration>`
+
+- 数据边界：
+  - standalone CLI 先落 `config/ai-models.json`，由 `packages/core/src/ai-config.ts` 管理。
+  - 文件结构按桌面当前模型工作台语义组织：providers / models / modelRouteDefaults。
+  - desktop `settings:get` 会合并这份 shared AI 配置，应用启动后 renderer settings store 会同步 providers / models / routes。
+  - CLI 输出默认会遮蔽 `apiKey`，磁盘配置保留真实 key。
+
+- 能力校验：
+  - `visionText` 只能绑定 `chat + vision` 模型。
+  - `imageGeneration` 只能绑定 image generation 模型。
+  - 删除模型时只清理引用该模型的路由，不删除 provider。
+  - 桌面读取 shared AI 配置时只做合并，不会因为没有 CLI 配置而覆盖已有 renderer 本地设置。
+
 ## Verification Strategy
 
 - 以 `apps/cli/tests/run.test.ts` 为主，优先新增端到端命令级回归，而不是只补内部 helper 单测。

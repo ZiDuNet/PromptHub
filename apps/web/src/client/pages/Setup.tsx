@@ -115,7 +115,7 @@ export function SetupPage() {
         {error && <div className="login-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
+          <div className="form-group web-auth-captcha-group">
             <label
               htmlFor="setup-username"
               className="text-sm font-semibold text-slate-700"
@@ -201,7 +201,7 @@ export function SetupPage() {
               value={captchaAnswer}
               onChange={(event) => setCaptchaAnswer(event.target.value)}
               required
-              className="web-auth-input"
+              className="web-auth-input web-auth-captcha-answer"
               placeholder={t('auth.captchaPlaceholder')}
             />
           </div>

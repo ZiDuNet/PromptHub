@@ -281,6 +281,137 @@ describe('web prompt routes', () => {
     }
   }, TEST_TIMEOUT);
 
+  it('restores prompt folders, prompts, and versions through desktop-compatible direct endpoints', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
+
+    try {
+      const app = await createTestApp(dataDir);
+      const { payload: registerPayload } = await registerUser(app, 'restoreuser', 'debugpass001');
+      const token = registerPayload.data.accessToken;
+      const now = new Date('2026-01-02T03:04:05.000Z').toISOString();
+
+      const folderResponse = await app.request(
+        new Request('http://local/api/folders/direct-insert', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            id: 'folder_restore',
+            name: 'Restored Folder',
+            order: 0,
+            isPrivate: true,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        }),
+      );
+      expect(folderResponse.status).toBe(201);
+
+      const promptResponse = await app.request(
+        new Request('http://local/api/prompts/direct-insert', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            id: 'prompt_restore',
+            visibility: 'private',
+            title: 'Restored Prompt',
+            description: null,
+            promptType: 'text',
+            systemPrompt: null,
+            systemPromptEn: null,
+            userPrompt: 'Restored body',
+            userPromptEn: null,
+            variables: [],
+            tags: ['restore'],
+            folderId: 'folder_restore',
+            images: [],
+            videos: [],
+            isFavorite: true,
+            isPinned: false,
+            version: 2,
+            currentVersion: 2,
+            usageCount: 7,
+            source: null,
+            notes: null,
+            lastAiResponse: null,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        }),
+      );
+      expect(promptResponse.status).toBe(201);
+
+      const versionResponse = await app.request(
+        new Request('http://local/api/prompts/versions/direct-insert', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            id: 'version_restore',
+            promptId: 'prompt_restore',
+            version: 2,
+            systemPrompt: null,
+            systemPromptEn: null,
+            userPrompt: 'Restored body',
+            userPromptEn: null,
+            variables: [],
+            note: 'backup restore',
+            aiResponse: null,
+            createdAt: now,
+          }),
+        }),
+      );
+      expect(versionResponse.status).toBe(201);
+
+      const getPromptResponse = await app.request(
+        new Request('http://local/api/prompts/prompt_restore', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(getPromptResponse.status).toBe(200);
+      const getPromptPayload = await getPromptResponse.json() as {
+        data: { id: string; title: string; folderId?: string; usageCount: number };
+      };
+      expect(getPromptPayload.data).toMatchObject({
+        id: 'prompt_restore',
+        title: 'Restored Prompt',
+        folderId: 'folder_restore',
+        usageCount: 7,
+      });
+
+      const versionsResponse = await app.request(
+        new Request('http://local/api/prompts/prompt_restore/versions', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(versionsResponse.status).toBe(200);
+      const versionsPayload = await versionsResponse.json() as {
+        data: Array<{ id: string; note?: string | null }>;
+      };
+      expect(versionsPayload.data.some((version) => version.id === 'version_restore')).toBe(true);
+
+      const deleteVersionResponse = await app.request(
+        new Request('http://local/api/prompts/versions/version_restore', {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(deleteVersionResponse.status).toBe(200);
+
+      const afterDeleteVersionsResponse = await app.request(
+        new Request('http://local/api/prompts/prompt_restore/versions', {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      );
+      const afterDeleteVersionsPayload = await afterDeleteVersionsResponse.json() as {
+        data: Array<{ id: string }>;
+      };
+      expect(
+        afterDeleteVersionsPayload.data.some((version) => version.id === 'version_restore'),
+      ).toBe(false);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, TEST_TIMEOUT);
+
   it('supports prompt version listing, diff, and rollback', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
 

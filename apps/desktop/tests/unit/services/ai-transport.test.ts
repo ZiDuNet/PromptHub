@@ -4,6 +4,7 @@ import {
   buildMessagesFromPrompt,
   chatCompletion,
   fetchAvailableModels,
+  generateImage,
 } from "../../../src/renderer/services/ai";
 import { installWindowMocks } from "../../helpers/window";
 
@@ -102,6 +103,362 @@ describe("ai transport", () => {
         { id: "gpt-4o", name: "gpt-4o", owned_by: undefined, created: undefined },
       ],
     });
+  });
+
+  it("uses the main-process request transport for OpenAI-compatible image generation", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: JSON.stringify({
+        created: 1,
+        data: [{ url: "https://example.com/generated.png" }],
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const result = await generateImage(
+      {
+        provider: "openai",
+        apiProtocol: "openai",
+        apiKey: "image-key",
+        apiUrl: "https://api.legeling.xyz/v1",
+        model: "gpt-image-1",
+        type: "image",
+      },
+      "a reusable image prompt",
+      { n: 1 },
+    );
+
+    expect(result.data[0]?.url).toBe("https://example.com/generated.png");
+    expect(window.api.ai.request).toHaveBeenCalledWith({
+      method: "POST",
+      url: "https://api.legeling.xyz/v1/images/generations",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer image-key",
+      },
+      body: JSON.stringify({
+        prompt: "a reusable image prompt",
+        model: "gpt-image-1",
+      }),
+      timeoutMs: 300_000,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("sends the minimal GPT Image request body when generating a single image", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: JSON.stringify({
+        created: 1,
+        data: [{ b64_json: "base64imagedata==" }],
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    await generateImage(
+      {
+        provider: "custom",
+        apiProtocol: "openai",
+        apiKey: "image-key",
+        apiUrl: "https://api.legeling.xyz/v1",
+        model: "gpt-image-2",
+        type: "image",
+      },
+      "a reusable image prompt",
+      { n: 1 },
+    );
+
+    const request = window.api.ai.request.mock.calls[0]?.[0];
+    expect(JSON.parse(String(request?.body))).toEqual({
+      prompt: "a reusable image prompt",
+      model: "gpt-image-2",
+    });
+  });
+
+  it("keeps explicit multi-image counts for GPT Image requests", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: JSON.stringify({
+        created: 1,
+        data: [{ b64_json: "base64imagedata==" }],
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    await generateImage(
+      {
+        provider: "custom",
+        apiProtocol: "openai",
+        apiKey: "image-key",
+        apiUrl: "https://api.legeling.xyz/v1",
+        model: "gpt-image-2",
+        type: "image",
+      },
+      "a reusable image prompt",
+      { n: 2 },
+    );
+
+    const request = window.api.ai.request.mock.calls[0]?.[0];
+    expect(JSON.parse(String(request?.body))).toEqual({
+      prompt: "a reusable image prompt",
+      model: "gpt-image-2",
+      n: 2,
+    });
+  });
+
+  it("surfaces main-process image generation network errors", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: false,
+      status: 0,
+      statusText: "",
+      body: "",
+      headers: {},
+      error: "Failed to fetch",
+    });
+
+    await expect(
+      generateImage(
+        {
+          provider: "openai",
+          apiProtocol: "openai",
+          apiKey: "image-key",
+          apiUrl: "https://api.legeling.xyz/v1",
+          model: "gpt-image-1",
+          type: "image",
+        },
+        "a reusable image prompt",
+      ),
+    ).rejects.toThrow("Failed to fetch");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("formats provider HTML gateway timeout pages as a concise image generation error", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: false,
+      status: 504,
+      statusText: "Gateway Time-out",
+      body: '<!DOCTYPE html><html><head><title>legeling.xyz | 504: Gateway time-out</title></head><body><h1>Gateway time-out</h1></body></html>',
+      headers: { "content-type": "text/html; charset=UTF-8" },
+    });
+
+    await expect(
+      generateImage(
+        {
+          provider: "openai",
+          apiProtocol: "openai",
+          apiKey: "image-key",
+          apiUrl: "https://api.legeling.xyz/v1",
+          model: "gpt-image-2",
+          type: "image",
+        },
+        "a reusable image prompt",
+      ),
+    ).rejects.toThrow(
+      "Image generation gateway timed out (504). The provider or proxy did not finish before its own timeout.",
+    );
+    await expect(
+      generateImage(
+        {
+          provider: "openai",
+          apiProtocol: "openai",
+          apiKey: "image-key",
+          apiUrl: "https://api.legeling.xyz/v1",
+          model: "gpt-image-2",
+          type: "image",
+        },
+        "a reusable image prompt",
+      ),
+    ).rejects.not.toThrow("<!DOCTYPE html>");
+  });
+
+  it.each([
+    {
+      name: "FLUX",
+      config: {
+        provider: "flux",
+        apiProtocol: "openai" as const,
+        apiKey: "flux-key",
+        apiUrl: "https://api.bfl.ai/v1",
+        model: "flux-pro-1.1",
+        type: "image" as const,
+      },
+      responseBody: { sample: "https://example.com/flux.png" },
+      expectedUrl: "https://api.bfl.ai/v1/images/generations",
+      expectedHeaders: {
+        "Content-Type": "application/json",
+        "X-Key": "flux-key",
+      },
+      expectedImageUrl: "https://example.com/flux.png",
+    },
+    {
+      name: "Ideogram",
+      config: {
+        provider: "ideogram",
+        apiProtocol: "openai" as const,
+        apiKey: "ideogram-key",
+        apiUrl: "https://api.ideogram.ai",
+        model: "V_3",
+        type: "image" as const,
+      },
+      responseBody: { data: [{ url: "https://example.com/ideogram.png" }] },
+      expectedUrl: "https://api.ideogram.ai/generate",
+      expectedHeaders: {
+        "Content-Type": "application/json",
+        "Api-Key": "ideogram-key",
+      },
+      expectedImageUrl: "https://example.com/ideogram.png",
+    },
+    {
+      name: "Recraft",
+      config: {
+        provider: "recraft",
+        apiProtocol: "openai" as const,
+        apiKey: "recraft-key",
+        apiUrl: "https://external.api.recraft.ai/v1",
+        model: "recraftv3",
+        type: "image" as const,
+      },
+      responseBody: { data: [{ url: "https://example.com/recraft.png" }] },
+      expectedUrl: "https://external.api.recraft.ai/v1/images/generations",
+      expectedHeaders: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer recraft-key",
+      },
+      expectedImageUrl: "https://example.com/recraft.png",
+    },
+  ])(
+    "uses the main-process request transport for $name image generation",
+    async ({ config, responseBody, expectedHeaders, expectedImageUrl, expectedUrl }) => {
+      window.api.ai.request.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        body: JSON.stringify(responseBody),
+        headers: { "content-type": "application/json" },
+      });
+
+      const result = await generateImage(config, "a reusable image prompt");
+
+      expect(result.data[0]?.url).toBe(expectedImageUrl);
+      expect(window.api.ai.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          url: expectedUrl,
+          headers: expectedHeaders,
+          timeoutMs: 300_000,
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses the main-process request transport for Stability image generation", async () => {
+    window.api.ai.request.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      body: JSON.stringify({
+        artifacts: [{ base64: "base64imagedata==" }],
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const result = await generateImage(
+      {
+        provider: "stability",
+        apiProtocol: "openai",
+        apiKey: "stability-key",
+        apiUrl: "https://api.stability.ai/v1",
+        model: "stable-diffusion-xl-1024-v1-0",
+        type: "image",
+      },
+      "a reusable image prompt",
+    );
+
+    expect(result.data[0]?.b64_json).toBe("base64imagedata==");
+    expect(window.api.ai.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer stability-key",
+          Accept: "application/json",
+        },
+        timeoutMs: 300_000,
+      }),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("uses the main-process request transport for Replicate image generation and polling", async () => {
+    vi.useFakeTimers();
+    try {
+      window.api.ai.request
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          body: JSON.stringify({
+            status: "processing",
+            urls: { get: "https://api.replicate.com/v1/predictions/abc" },
+          }),
+          headers: { "content-type": "application/json" },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          body: JSON.stringify({
+            status: "succeeded",
+            output: ["https://example.com/replicate.png"],
+          }),
+          headers: { "content-type": "application/json" },
+        });
+
+      const resultPromise = generateImage(
+        {
+          provider: "replicate",
+          apiProtocol: "openai",
+          apiKey: "replicate-key",
+          apiUrl: "https://api.replicate.com",
+          model: "replicate-version",
+          type: "image",
+        },
+        "a reusable image prompt",
+      );
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await resultPromise;
+
+      expect(result.data[0]?.url).toBe("https://example.com/replicate.png");
+      expect(window.api.ai.request).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          method: "POST",
+          url: "https://api.replicate.com/v1/predictions",
+          timeoutMs: 300_000,
+        }),
+      );
+      expect(window.api.ai.request).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          method: "GET",
+          url: "https://api.replicate.com/v1/predictions/abc",
+          headers: { Authorization: "Bearer replicate-key" },
+          timeoutMs: 300_000,
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("builds text-only prompt messages with the legacy string content shape", () => {

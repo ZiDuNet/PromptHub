@@ -10,6 +10,9 @@ import {
   getPrompt,
   getSettings,
   getSkill,
+  insertFolderDirect,
+  insertPromptDirect,
+  insertPromptVersionDirect,
   copyPrompt,
   createFolder,
   createPrompt,
@@ -33,6 +36,7 @@ import {
   renamePromptTag,
   reorderFolders,
   rollbackPromptVersion,
+  syncPromptWorkspace,
   updateFolder,
   updatePrompt,
 } from "./web-data";
@@ -73,6 +77,10 @@ app.use("/api/prompts", requireAuth);
 app.get("/api/prompts/meta/tags", listPromptTags);
 app.post("/api/prompts/meta/tags/rename", renamePromptTag);
 app.post("/api/prompts/meta/tags/delete", deletePromptTag);
+app.post("/api/prompts/direct-insert", insertPromptDirect);
+app.post("/api/prompts/versions/direct-insert", insertPromptVersionDirect);
+app.delete("/api/prompts/versions/:versionId", deletePromptVersionById);
+app.post("/api/prompts/workspace/sync", syncPromptWorkspace);
 app.get("/api/prompts/:id/versions", listPromptVersions);
 app.get("/api/prompts/:id/versions/diff", diffPromptVersions);
 app.post("/api/prompts/:id/versions", createPromptVersion);
@@ -90,6 +98,7 @@ app.delete("/api/prompt-versions/:versionId", deletePromptVersionById);
 
 app.use("/api/folders/*", requireAuth);
 app.use("/api/folders", requireAuth);
+app.post("/api/folders/direct-insert", insertFolderDirect);
 app.put("/api/folders/reorder", reorderFolders);
 app.get("/api/folders", listFolders);
 app.post("/api/folders", createFolder);

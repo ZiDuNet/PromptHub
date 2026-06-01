@@ -16,6 +16,10 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
+        '@prompthub/shared/constants': path.resolve(
+          __dirname,
+          '../../packages/shared/constants',
+        ),
         '@desktop-renderer-app': path.resolve(
           __dirname,
           '../desktop/src/renderer/App.tsx',

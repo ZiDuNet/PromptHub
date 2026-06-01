@@ -5,7 +5,7 @@ import { PlayIcon, LoaderIcon, CopyIcon, CheckIcon, GitCompareIcon, ImageIcon, P
 import { CollapsibleThinking } from '../ui/CollapsibleThinking';
 import { chatCompletion, buildMessagesFromPrompt, multiModelCompare, AITestResult, generateImage, type ChatImageAttachment } from '../../services/ai';
 import { resolveScenarioModel } from '../../services/ai-defaults';
-import { useSettingsStore } from '../../stores/settings.store';
+import { useSettingsStore, type AIModelConfig, type AIProviderConfig } from '../../stores/settings.store';
 import { useToast } from '../ui/Toast';
 import { LocalImage } from '../ui/LocalImage';
 import type { Prompt } from '@prompthub/shared/types';
@@ -44,6 +44,33 @@ const SUPPORTED_AI_TEST_IMAGE_MIME_TYPES = new Set([
   'image/gif',
 ]);
 
+function getProviderDisplayName(
+  model: AIModelConfig | null,
+  providers: AIProviderConfig[],
+): string | null {
+  if (!model) {
+    return null;
+  }
+
+  const exactMatch = providers.find(
+    (provider) =>
+      provider.provider === model.provider &&
+      provider.apiProtocol === model.apiProtocol &&
+      provider.apiUrl === model.apiUrl &&
+      provider.apiKey === model.apiKey,
+  );
+  const endpointMatch =
+    exactMatch ??
+    providers.find(
+      (provider) =>
+        provider.provider === model.provider &&
+        provider.apiProtocol === model.apiProtocol &&
+        provider.apiUrl === model.apiUrl,
+    );
+
+  return endpointMatch?.name?.trim() || endpointMatch?.provider || model.provider;
+}
+
 export function AiTestModal({
   isOpen,
   onClose,
@@ -68,6 +95,7 @@ export function AiTestModal({
   const [thinkingContent, setThinkingContent] = useState<string | null>(null);
   const [compareResults, setCompareResults] = useState<AITestResult[] | null>(null);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [imageGenerationError, setImageGenerationError] = useState<string | null>(null);
   const [selectedModelIds, setSelectedModelIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   // Variable fill state
@@ -97,6 +125,7 @@ export function AiTestModal({
   const aiApiKey = useSettingsStore((state) => state.aiApiKey);
   const aiApiUrl = useSettingsStore((state) => state.aiApiUrl);
   const aiModel = useSettingsStore((state) => state.aiModel);
+  const aiProviders = useSettingsStore((state) => state.aiProviders);
   const aiModels = useSettingsStore((state) => state.aiModels);
   const scenarioModelDefaults = useSettingsStore((state) => state.scenarioModelDefaults);
   const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
@@ -131,6 +160,11 @@ export function AiTestModal({
       modelRouteDefaults,
     );
   }, [aiModels, modelRouteDefaults, scenarioModelDefaults]);
+
+  const defaultImageProviderName = useMemo(
+    () => getProviderDisplayName(defaultImageModel, aiProviders),
+    [aiProviders, defaultImageModel],
+  );
 
   // Get all image generation models
   // 获取所有生图模型
@@ -465,6 +499,7 @@ export function AiTestModal({
       setThinkingContent(null);
       setCompareResults(null);
       setGeneratedImages([]);
+      setImageGenerationError(null);
       setTestImageAttachments([]);
       setSelectedReferenceImages(isImagePrompt ? (prompt.images || []) : []);
       setIsSingleLoading(false);
@@ -697,6 +732,7 @@ export function AiTestModal({
 
     setIsImageLoading(true);
     setGeneratedImages([]);
+    setImageGenerationError(null);
 
     // 增加使用次数
     if (onUsageIncrement) {
@@ -731,9 +767,13 @@ export function AiTestModal({
       setGeneratedImages(urls);
       if (urls.length > 0) {
         showToast(t('settings.imageGenSuccess'), 'success');
+      } else {
+        setImageGenerationError(t('settings.imageGenEmptyResult'));
       }
     } catch (error) {
-      showToast(`${t('common.error')}: ${error instanceof Error ? error.message : t('common.error')}`, 'error');
+      const message = error instanceof Error ? error.message : t('common.error');
+      setImageGenerationError(message);
+      showToast(`${t('common.error')}: ${message}`, 'error');
     } finally {
       setIsImageLoading(false);
     }
@@ -810,7 +850,7 @@ export function AiTestModal({
         onClick={onClose}
       />
       <aside
-        className={`absolute right-0 top-0 flex h-full flex-col border-l border-border app-wallpaper-panel-strong shadow-[-24px_0_80px_-40px_rgba(0,0,0,0.65)] transition-all duration-base ${isExpanded
+        className={`absolute right-0 top-0 flex h-full flex-col border-l border-border app-wallpaper-panel-strong shadow-[-24px_0_80px_-40px_rgba(0,0,0,0.65)] animate-in slide-in-from-right-8 fade-in duration-base ease-enter transition-all ${isExpanded
           ? 'w-[min(1120px,88vw)]'
           : 'w-[min(640px,100vw)]'
           }`}
@@ -1221,7 +1261,7 @@ export function AiTestModal({
                 </span>
                 {defaultImageModel && (
                   <p className="text-xs text-muted-foreground">
-                    {t('settings.provider')}: {defaultImageModel.provider}
+                    {t('settings.provider')}: {defaultImageProviderName}
                   </p>
                 )}
               </div>
@@ -1238,6 +1278,20 @@ export function AiTestModal({
                 {isImageLoading ? t('prompt.generating', '生成中...') : t('settings.testImage')}
               </button>
             </div>
+
+            {imageGenerationError && (
+              <div
+                role="alert"
+                className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"
+              >
+                <p className="text-sm font-medium text-destructive">
+                  {t('settings.imageGenerationFailed')}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground break-words">
+                  {imageGenerationError}
+                </p>
+              </div>
+            )}
 
             {/* 生成的图片 */}
             {generatedImages.length > 0 && (

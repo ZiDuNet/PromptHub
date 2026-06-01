@@ -78,14 +78,14 @@ export function CloseDialog({ isOpen, onClose }: CloseDialogProps) {
       {/* Background mask */}
       {/* 背景遮罩 */}
       <div
-        className="absolute inset-0 bg-background/60 backdrop-blur-md"
+        className="absolute inset-0 bg-background/60 backdrop-blur-md animate-in fade-in duration-base ease-enter"
         onClick={handleCancel}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
       {/* Dialog content */}
       {/* 对话框内容 */}
-      <div className="relative app-wallpaper-panel-strong shadow-2xl border border-border rounded-2xl overflow-hidden w-full max-w-sm">
+      <div className="relative app-wallpaper-panel-strong shadow-2xl border border-border rounded-2xl overflow-hidden w-full max-w-sm animate-in fade-in zoom-in-95 duration-base ease-enter">
         {/* Title bar */}
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">

@@ -116,7 +116,7 @@ export function LoginPage() {
         {error && <div className="login-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
+          <div className="form-group web-auth-captcha-group">
             <label htmlFor="username" className="text-sm font-semibold text-slate-700">
               {t('auth.username')}
             </label>
@@ -178,7 +178,7 @@ export function LoginPage() {
               value={captchaAnswer}
               onChange={(e) => setCaptchaAnswer(e.target.value)}
               required
-              className="web-auth-input"
+              className="web-auth-input web-auth-captcha-answer"
               placeholder={t('auth.captchaPlaceholder')}
             />
           </div>

@@ -27,6 +27,11 @@ interface FolderRow {
   visibility: 'private' | 'shared';
 }
 
+type DirectFolderInput = Omit<Folder, 'icon' | 'parentId'> & {
+  icon?: string | null;
+  parentId?: string | null;
+};
+
 export class FolderService {
   private readonly folderDb = new FolderDB(getServerDatabase());
   private readonly promptDb = new PromptDB(getServerDatabase());
@@ -118,6 +123,27 @@ export class FolderService {
     }
 
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+  }
+
+  insertDirect(actor: FolderActor, folder: DirectFolderInput): Folder {
+    const visibility = folder.visibility ?? 'private';
+    this.assertCreateVisibilityAllowed(actor, visibility);
+    this.assertParentAllowed(actor, folder.parentId ?? undefined, visibility);
+
+    this.folderDb.insertFolderDirect({
+      ...folder,
+      icon: folder.icon ?? undefined,
+      parentId: folder.parentId ?? undefined,
+      visibility,
+      isPrivate: visibility === 'private',
+    });
+    this.db
+      .prepare('UPDATE folders SET owner_user_id = ?, visibility = ? WHERE id = ?')
+      .run(actor.userId, visibility, folder.id);
+
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+
+    return this.getById(actor, folder.id);
   }
 
   reorder(actor: FolderActor, ids: string[]): void {

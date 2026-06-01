@@ -19,6 +19,10 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@prompthub/shared/constants': path.resolve(
+        __dirname,
+        '../../packages/shared/constants',
+      ),
       '@prompthub/shared': path.resolve(__dirname, '../../packages/shared/types'),
       '@prompthub/db': path.resolve(__dirname, '../../packages/db/src'),
       '@desktop-renderer-app': path.resolve(

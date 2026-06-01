@@ -6,3 +6,9 @@
 - [x] 运行 lint / typecheck / build:web / 相关测试
 - [x] 更新 implementation.md
 - [x] 修复 Docker / SSR bundle 下 `svg-captcha` 字体资源丢失导致的启动失败
+- [x] 复核 issue 159：桌面端连接 Web 时 captcha 401 的 URL/API 边界
+- [x] 归一化桌面端粘贴的 `/api` 或 auth endpoint URL
+- [x] 补充 Node Web 与 Cloudflare Worker 公开 auth endpoint 回归测试
+- [x] 兼容旧版自托管 Web 无公开 captcha 的登录链路
+- [x] 收敛截断 JSON 导入错误提示
+- [x] 移除 Web runtime bridge 的旧版本硬编码

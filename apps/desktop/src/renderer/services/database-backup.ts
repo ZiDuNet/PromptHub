@@ -939,6 +939,13 @@ export function formatBackupImportError(error: unknown): string {
     return "不是 PromptHub 可识别的备份文件，请选择 PromptHub 导出的 JSON、PHUB 或 ZIP 文件。";
   }
 
+  if (
+    normalizedMessage.includes("unexpected end of json input") ||
+    normalizedMessage.includes("unterminated string")
+  ) {
+    return "备份文件不是完整 JSON，可能在导出、复制或上传过程中被截断。请重新从 PromptHub 导出完整的 JSON、PHUB 或 ZIP 文件后再导入。";
+  }
+
   if (normalizedMessage.includes("imported backup is empty")) {
     return "该备份内容为空。为避免覆盖当前数据，PromptHub 已阻止这次导入。";
   }

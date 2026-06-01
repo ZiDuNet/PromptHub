@@ -11,6 +11,14 @@
 - 补齐 `apps/web/src/routes/import-export.test.ts` 的导出 payload 类型字段，消除与 `images` / `videos` 字段不一致导致的 `typecheck` 误报。
 - 修复 `docker compose up -d --build` 下的 Web 启动失败：`apps/web/vite.server.config.ts` 现在将 `svg-captcha` 视为 SSR external dependency，避免 Vite 将其打进 server bundle 后破坏 `../fonts/Comismsh.ttf` 的相对路径读取。
 - 更新 `apps/web/src/build.test.ts`，把 `svg-captcha` 纳入 SSR external regression guard，防止后续再次被打包进 server bundle。
+- 针对 issue 159 复核桌面端连接 Web 的 captcha 401 链路：桌面端现在会把用户粘贴的 `/api` 或 `/api/auth/...` URL 归一化为 Web 站点根地址，避免请求变成 `/api/api/auth/captcha` 后被受保护 API 中间件返回 `Missing or invalid Authorization header`。
+- `apps/desktop/src/renderer/services/self-hosted-auth.ts` 对 captcha 401 的鉴权错误给出更明确的 URL/API 边界提示。
+- 补充 Node Web 与 Cloudflare Worker 路由级测试，验证 `/api/auth/captcha`、`/api/auth/bootstrap` 在无登录态或携带无效 bearer token 时仍保持公开。
+- 修复 Cloudflare Worker captcha 随机字符集包含未实现 SVG glyph 的字符，避免验证码签发偶发 500。
+- 桌面端连接旧版自托管 Web 时，如果 `/api/auth/captcha` 被旧鉴权中间件拦截，会尝试旧版无验证码登录；如果服务端登录仍要求 captcha，则提示用户更新自托管 Web 部署。
+- 导入截断 JSON 时，错误提示从底层 `Unterminated string` / `Unexpected end of JSON input` 收敛为“备份文件可能被截断，请重新导出完整备份”。
+- Web runtime bridge 的 `updater.getVersion()` 不再硬编码 `0.5.5-web`，改为返回构建时注入的 monorepo 版本，例如 `0.5.7-web`。
+- Web `/health` 在没有 `APP_VERSION` 环境变量时，也会回退到 monorepo 版本，避免关于页显示未知或旧版本。
 
 ## Verification
 
@@ -27,6 +35,28 @@
 - `pnpm --filter @prompthub/web build`
   - 结果：通过
 - `pnpm --filter @prompthub/web lint`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/self-hosted-auth.test.ts tests/unit/services/self-hosted-sync.test.ts`
+  - 结果：通过（17/17）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/database-backup.test.ts`
+  - 结果：通过（19/19）
+- `pnpm --filter @prompthub/web exec vitest run src/routes/auth.test.ts`
+  - 结果：通过（17/17）
+- `pnpm --filter @prompthub/web exec vitest run src/client/desktop/install-bridge.test.ts src/routes/auth.test.ts`
+  - 结果：通过（20/20）
+- `pnpm --filter @prompthub/web-cloudflare test -- tests/worker.test.ts tests/auth.test.ts`
+  - 结果：通过（3/3）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `pnpm --filter @prompthub/desktop lint`
+  - 结果：通过
+- `pnpm --filter @prompthub/web typecheck`
+  - 结果：通过
+- `pnpm --filter @prompthub/web lint`
+  - 结果：通过
+- `pnpm --filter @prompthub/web-cloudflare typecheck`
+  - 结果：通过
+- `pnpm --filter @prompthub/web-cloudflare lint`
   - 结果：通过
 
 ## Notes

@@ -145,6 +145,38 @@ describe('web auth routes', () => {
     }
   }, TEST_TIMEOUT);
 
+  it('keeps public auth endpoints outside the protected API middleware', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-auth-test-'));
+
+    try {
+      const app = await createTestApp(dataDir);
+      const headers = { Authorization: 'Bearer malformed-token' };
+
+      const bootstrapResponse = await app.request(
+        new Request('http://local/api/auth/bootstrap', { headers }),
+      );
+      expect(bootstrapResponse.status).toBe(200);
+      const bootstrapPayload = await bootstrapResponse.json() as {
+        data: { initialized: boolean; registrationAllowed: boolean };
+      };
+      expect(bootstrapPayload.data.initialized).toBe(false);
+
+      const captchaResponse = await app.request(
+        new Request('http://local/api/auth/captcha', { headers }),
+      );
+      expect(captchaResponse.status).toBe(200);
+      const captchaPayload = await captchaResponse.json() as {
+        data: { captchaId: string; imageData: string };
+      };
+      expect(captchaPayload.data.captchaId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(captchaPayload.data.imageData).toMatch(/^data:image\/svg\+xml;base64,/);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, TEST_TIMEOUT);
+
   it('registers the first user as admin and allows login afterward', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-auth-test-'));
 

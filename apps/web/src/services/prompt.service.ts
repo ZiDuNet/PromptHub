@@ -146,6 +146,23 @@ export class PromptService {
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
   }
 
+  insertDirect(actor: PromptActor, prompt: Prompt): Prompt {
+    const visibility = prompt.visibility ?? 'private';
+    this.assertCanCreate(actor, visibility);
+
+    this.promptDb.insertPromptDirect({
+      ...prompt,
+      visibility,
+    });
+    this.db
+      .prepare('UPDATE prompts SET owner_user_id = ?, visibility = ? WHERE id = ?')
+      .run(actor.userId, visibility, prompt.id);
+
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+
+    return this.getById(actor, prompt.id);
+  }
+
   duplicate(actor: PromptActor, id: string): Prompt {
     const existing = this.getById(actor, id);
 
@@ -192,6 +209,40 @@ export class PromptService {
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
 
     return version;
+  }
+
+  insertVersionDirect(actor: PromptActor, version: PromptVersion): PromptVersion {
+    const row = this.getRequiredRow(version.promptId);
+    this.assertCanWrite(actor, row);
+
+    this.promptDb.insertVersionDirect(version);
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+
+    return version;
+  }
+
+  deleteVersionById(actor: PromptActor, versionId: string): void {
+    const row = this.db
+      .prepare(
+        `SELECT prompts.id, prompts.owner_user_id, prompts.visibility
+         FROM prompt_versions
+         JOIN prompts ON prompts.id = prompt_versions.prompt_id
+         WHERE prompt_versions.id = ?`,
+      )
+      .get(versionId) as PromptRow | undefined;
+
+    if (!row) {
+      throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt version not found');
+    }
+
+    this.assertCanWrite(actor, row);
+
+    const deleted = this.promptDb.deleteVersion(versionId);
+    if (!deleted) {
+      throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt version not found');
+    }
+
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
   }
 
   deleteVersion(actor: PromptActor, id: string, versionId: string): void {
@@ -254,6 +305,10 @@ export class PromptService {
 
   deleteTag(tag: string): void {
     this.promptDb.deleteTag(tag);
+    syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
+  }
+
+  syncWorkspace(): void {
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
   }
 

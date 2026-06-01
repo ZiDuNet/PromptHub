@@ -194,6 +194,9 @@ describe("image-prompt-reverse-utils", () => {
     expect(prompt).toContain('"promptType": "image"');
     expect(prompt).toContain('"userPrompt"');
     expect(prompt).toContain("不是图片说明或图像 caption");
+    expect(prompt).toContain("3-5 个 PromptHub 变量占位符");
+    expect(prompt).toContain("{{subject}}");
+    expect(prompt).toContain("{{style}}");
     expect(prompt).toContain("主体、动作/姿态、场景、构图");
     expect(prompt).toContain("不要臆测真实姓名、品牌");
     expect(prompt).toContain("Midjourney、Stable Diffusion、Flux");

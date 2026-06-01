@@ -7,7 +7,7 @@ import type { AuthUser, Env, LoginResult } from "./types";
 
 const CAPTCHA_TTL_SECONDS = 5 * 60;
 const CAPTCHA_LENGTH = 5;
-const CAPTCHA_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const CAPTCHA_LETTERS = "ABCDEFGHJKLMNPRTUVWXYZ";
 const CAPTCHA_DIGITS = "23456789";
 const CAPTCHA_CHARS = `${CAPTCHA_LETTERS}${CAPTCHA_DIGITS}`;
 const ACCESS_COOKIE_NAME = "prompthub_access";

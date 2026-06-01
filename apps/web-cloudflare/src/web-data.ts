@@ -261,6 +261,59 @@ export async function createPrompt(c: AppContext): Promise<Response> {
   return success(c, prompt, 201);
 }
 
+export async function insertPromptDirect(c: AppContext): Promise<Response> {
+  const user = getUser(c);
+  const body = await readJson<Prompt>(c);
+  if (
+    typeof body.id !== "string" ||
+    !body.id.trim() ||
+    typeof body.title !== "string" ||
+    !body.title.trim() ||
+    typeof body.userPrompt !== "string"
+  ) {
+    return failure(c, 400, ErrorCode.BAD_REQUEST, "id, title, and userPrompt are required");
+  }
+
+  const visibility = resourceVisibility(body);
+  const visibilityError = assertCanCreateVisibility(c, visibility);
+  if (visibilityError) return visibilityError;
+
+  const snapshot = await loadSnapshot(c.env.DB, user.userId);
+  const prompt: Prompt = {
+    ...body,
+    ownerUserId: user.userId,
+    visibility,
+    description: body.description ?? null,
+    promptType: body.promptType || "text",
+    systemPrompt: body.systemPrompt ?? null,
+    systemPromptEn: body.systemPromptEn ?? null,
+    userPromptEn: body.userPromptEn ?? null,
+    variables: body.variables || [],
+    tags: body.tags || [],
+    folderId: body.folderId ?? null,
+    images: body.images || [],
+    videos: body.videos || [],
+    isFavorite: body.isFavorite === true,
+    isPinned: body.isPinned === true,
+    version: body.version || body.currentVersion || 1,
+    currentVersion: body.currentVersion || body.version || 1,
+    usageCount: body.usageCount || 0,
+    source: body.source ?? null,
+    notes: body.notes ?? null,
+    lastAiResponse: body.lastAiResponse ?? null,
+    createdAt: body.createdAt || nowIso(),
+    updatedAt: body.updatedAt || nowIso(),
+  };
+
+  snapshot.prompts = [
+    prompt,
+    ...snapshot.prompts.filter((item) => item.id !== prompt.id),
+  ];
+  snapshot.exportedAt = prompt.updatedAt;
+  await saveSnapshot(c.env.DB, user.userId, snapshot);
+  return success(c, prompt, 201);
+}
+
 export async function updatePrompt(c: AppContext): Promise<Response> {
   const user = getUser(c);
   const promptId = c.req.param("id");
@@ -444,6 +497,47 @@ export async function createPromptVersion(c: AppContext): Promise<Response> {
   return success(c, version, 201);
 }
 
+export async function insertPromptVersionDirect(c: AppContext): Promise<Response> {
+  const user = getUser(c);
+  const body = await readJson<PromptVersion>(c);
+  if (
+    typeof body.id !== "string" ||
+    !body.id.trim() ||
+    typeof body.promptId !== "string" ||
+    !body.promptId.trim() ||
+    typeof body.userPrompt !== "string" ||
+    !Number.isFinite(body.version)
+  ) {
+    return failure(c, 400, ErrorCode.BAD_REQUEST, "id, promptId, version, and userPrompt are required");
+  }
+
+  const snapshot = await loadSnapshot(c.env.DB, user.userId);
+  const prompt = snapshot.prompts.find((item) => item.id === body.promptId);
+  if (!prompt) {
+    return notFound(c, "Prompt");
+  }
+  const writeError = assertCanWriteResource(c, prompt, "Prompt");
+  if (writeError) return writeError;
+
+  const version: PromptVersion = {
+    ...body,
+    variables: body.variables || [],
+    systemPrompt: body.systemPrompt ?? null,
+    systemPromptEn: body.systemPromptEn ?? null,
+    userPromptEn: body.userPromptEn ?? null,
+    note: body.note ?? null,
+    aiResponse: body.aiResponse ?? null,
+    createdAt: body.createdAt || nowIso(),
+  };
+  setSnapshotVersions(snapshot, [
+    ...getSnapshotVersions(snapshot).filter((item) => item.id !== version.id),
+    version,
+  ]);
+  snapshot.exportedAt = version.createdAt;
+  await saveSnapshot(c.env.DB, user.userId, snapshot);
+  return success(c, version, 201);
+}
+
 export async function rollbackPromptVersion(c: AppContext): Promise<Response> {
   const user = getUser(c);
   const promptId = c.req.param("id");
@@ -524,6 +618,11 @@ export async function deletePromptVersionById(c: AppContext): Promise<Response> 
   setSnapshotVersions(snapshot, getSnapshotVersions(snapshot).filter((item) => item.id !== versionId));
   snapshot.exportedAt = nowIso();
   await saveSnapshot(c.env.DB, user.userId, snapshot);
+  return success(c, { ok: true });
+}
+
+export async function syncPromptWorkspace(c: AppContext): Promise<Response> {
+  getUser(c);
   return success(c, { ok: true });
 }
 
@@ -660,6 +759,53 @@ export async function createFolder(c: AppContext): Promise<Response> {
 
   snapshot.folders = [...snapshot.folders, folder];
   snapshot.exportedAt = timestamp;
+  await saveSnapshot(c.env.DB, user.userId, snapshot);
+  return success(c, folder, 201);
+}
+
+export async function insertFolderDirect(c: AppContext): Promise<Response> {
+  const user = getUser(c);
+  const body = await readJson<Folder>(c);
+  if (
+    typeof body.id !== "string" ||
+    !body.id.trim() ||
+    typeof body.name !== "string" ||
+    !body.name.trim()
+  ) {
+    return failure(c, 400, ErrorCode.BAD_REQUEST, "id and name are required");
+  }
+
+  const visibility = resourceVisibility(body);
+  const visibilityError = assertCanCreateVisibility(c, visibility);
+  if (visibilityError) return visibilityError;
+
+  const snapshot = await loadSnapshot(c.env.DB, user.userId);
+  const parentError = assertParentFolderAllowed(
+    c,
+    snapshot.folders.filter((item) => item.id !== body.id),
+    body.parentId || undefined,
+    visibility,
+  );
+  if (parentError) return parentError;
+
+  const folder: Folder = {
+    ...body,
+    ownerUserId: user.userId,
+    visibility,
+    name: body.name.trim(),
+    icon: body.icon || undefined,
+    parentId: body.parentId || undefined,
+    order: body.order || 0,
+    isPrivate: visibility === "private",
+    createdAt: body.createdAt || nowIso(),
+    updatedAt: body.updatedAt || nowIso(),
+  };
+
+  snapshot.folders = [
+    ...snapshot.folders.filter((item) => item.id !== folder.id),
+    folder,
+  ];
+  snapshot.exportedAt = folder.updatedAt;
   await saveSnapshot(c.env.DB, user.userId, snapshot);
   return success(c, folder, 201);
 }

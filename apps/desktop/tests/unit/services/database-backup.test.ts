@@ -5,6 +5,7 @@ import {
   downloadCompressedBackup,
   downloadSelectiveExport,
   exportDatabase,
+  formatBackupImportError,
   restoreFromBackup,
   restoreFromFile,
 } from "../../../src/renderer/services/database-backup";
@@ -985,6 +986,15 @@ describe("database-backup restore", () => {
 
     expect(clearDatabaseMock).not.toHaveBeenCalled();
     expect(window.api.skill.deleteAll).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "JSON Parse error: Unterminated string",
+    "Unexpected end of JSON input",
+  ])("formats truncated JSON import errors for users: %s", (message) => {
+    expect(formatBackupImportError(new Error(message))).toBe(
+      "备份文件不是完整 JSON，可能在导出、复制或上传过程中被截断。请重新从 PromptHub 导出完整的 JSON、PHUB 或 ZIP 文件后再导入。",
+    );
   });
 
   it("rejects an empty backup payload before clearing existing data", async () => {

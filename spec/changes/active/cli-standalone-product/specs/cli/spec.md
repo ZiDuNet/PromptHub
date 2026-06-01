@@ -48,3 +48,27 @@ PromptHub desktop MUST surface the standalone CLI through a dedicated Settings e
 - **WHEN** the user clicks one-click install with npm or pnpm
 - **THEN** desktop invokes the corresponding global package-manager install command against the GitHub release tarball
 - **AND** it does not require building the CLI from repository source code inside the settings flow
+
+### Requirement: CLI Must Manage AI Providers, Models, And Routes
+
+PromptHub CLI MUST expose the same stable AI configuration concepts used by the desktop model workbench: provider endpoints, model entries, and model routes.
+
+#### Scenario: User configures a vision route from CLI
+
+- **WHEN** the user adds a provider, adds a chat model with `--vision`, and runs `prompthub ai route-set visionText <model-id>`
+- **THEN** the CLI stores the route in the shared AI config file
+- **AND** `prompthub ai routes` reports the configured model.
+- **AND** desktop loads that provider, model, and route through its settings bootstrap.
+
+#### Scenario: User assigns an incompatible model to a route
+
+- **WHEN** the user assigns a non-vision chat model to `visionText`
+- **THEN** the CLI rejects the change with `ROUTE_CAPABILITY_MISMATCH`
+- **AND** it does not write an invalid route.
+
+#### Scenario: User deletes a model
+
+- **WHEN** the user deletes a model that belongs to a provider
+- **THEN** the model is removed
+- **AND** routes referencing that model are cleared
+- **AND** the provider remains configured until explicitly deleted.

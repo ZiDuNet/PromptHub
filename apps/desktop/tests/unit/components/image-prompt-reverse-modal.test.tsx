@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,6 +21,8 @@ vi.mock("../../../src/renderer/services/ai", async (importOriginal) => {
 });
 
 describe("ImagePromptReverseModal", () => {
+  const writeTextMock = vi.fn();
+
   const selectSavedImage = async (user: ReturnType<typeof userEvent.setup>) => {
     window.electron.selectImage = vi.fn().mockResolvedValue(["/tmp/reference.png"]);
     window.electron.saveImage = vi.fn().mockResolvedValue(["saved-reference.png"]);
@@ -32,7 +34,14 @@ describe("ImagePromptReverseModal", () => {
 
   beforeEach(() => {
     chatCompletionMock.mockReset();
+    writeTextMock.mockReset();
     installWindowMocks();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: writeTextMock.mockResolvedValue(undefined),
+      },
+    });
 
     useFolderStore.setState({
       folders: [
@@ -103,7 +112,7 @@ describe("ImagePromptReverseModal", () => {
     } as Partial<ReturnType<typeof useSettingsStore.getState>>);
   });
 
-  it("reverses a selected image into a standalone image prompt draft", async () => {
+  it("reverses a selected image into an editable draft before creating a prompt", async () => {
     const user = userEvent.setup();
     const onCreate = vi.fn().mockResolvedValue({ id: "created-prompt" });
     const onClose = vi.fn();
@@ -134,20 +143,34 @@ describe("ImagePromptReverseModal", () => {
     );
 
     expect(screen.getByRole("heading", { name: "图片反推" })).toBeInTheDocument();
-    expect(screen.getByText("输出类型")).toBeInTheDocument();
-    expect(screen.getByText("同时添加为参考图")).toBeInTheDocument();
+    expect(document.querySelector(".max-w-2xl")).toHaveClass("animate-in");
+    expect(document.querySelector(".max-w-2xl")).toHaveClass("zoom-in-95");
+    expect(screen.queryByText("输出类型")).not.toBeInTheDocument();
+    expect(screen.getByText("绘图")).toBeInTheDocument();
+    expect(screen.getByText("保存为参考图")).toBeInTheDocument();
+    expect(
+      screen.queryByText("开启后，新建的生图 Prompt 会保留这张图片作为参考图。"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen
+        .getByText("拖入图片、粘贴截图，或点击选择")
+        .compareDocumentPosition(
+          screen.getByRole("textbox", { name: "补充说明（可选）" }),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
 
-    const createButton = screen.getByRole("button", { name: "反推并创建" });
-    expect(createButton).toBeDisabled();
+    const reverseButton = screen.getByRole("button", { name: "开始反推" });
+    expect(reverseButton).toBeDisabled();
 
     await user.click(screen.getByText("拖入图片、粘贴截图，或点击选择"));
     expect(await screen.findByText("saved-reference.png")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除" })).toBeInTheDocument();
 
     await user.type(
       screen.getByRole("textbox", { name: "补充说明（可选）" }),
       "更适合写实生图模型",
     );
-    await user.click(createButton);
+    await user.click(reverseButton);
 
     await waitFor(() => {
       expect(chatCompletionMock).toHaveBeenCalledTimes(1);
@@ -177,20 +200,80 @@ describe("ImagePromptReverseModal", () => {
       }),
     ]);
 
+    expect(
+      await screen.findByDisplayValue(
+        "cinematic product photo, soft studio light, shallow depth of field",
+      ),
+    ).toBeInTheDocument();
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.clear(screen.getByLabelText("反推标题"));
+    await user.type(screen.getByLabelText("反推标题"), "确认后的产品图");
+    await user.click(screen.getByRole("button", { name: "创建提示词" }));
+
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: "电影感产品图",
+          title: "确认后的产品图",
           promptType: "image",
           userPrompt:
             "cinematic product photo, soft studio light, shallow depth of field",
           folderId: "folder-1",
           tags: ["image", "product"],
           images: ["saved-reference.png"],
+          variables: [],
         }),
       );
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates prompt variables from reversed PromptHub placeholders", async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn().mockResolvedValue({ id: "created-prompt" });
+    chatCompletionMock.mockResolvedValue({
+      content: JSON.stringify({
+        title: "动漫人像",
+        promptType: "image",
+        systemPrompt: "",
+        userPrompt:
+          "masterpiece anime illustration, {{subject}}, {{pose}}, {{background}}, {{color_palette}}, avoid {{negative_prompt}}",
+        description: "可复用动漫人像生图提示词",
+        suggestedFolder: null,
+        tags: ["image"],
+      }),
+    });
+
+    await renderWithI18n(
+      <ToastProvider>
+        <ImagePromptReverseModal
+          isOpen
+          onClose={vi.fn()}
+          onCreate={onCreate}
+        />
+      </ToastProvider>,
+      { language: "zh" },
+    );
+
+    await selectSavedImage(user);
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
+    await screen.findByDisplayValue(/{{subject}}/);
+    await user.click(screen.getByRole("button", { name: "创建提示词" }));
+
+    await waitFor(() => {
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variables: [
+            expect.objectContaining({ name: "subject", type: "text" }),
+            expect.objectContaining({ name: "pose", type: "text" }),
+            expect.objectContaining({ name: "background", type: "text" }),
+            expect.objectContaining({ name: "color_palette", type: "text" }),
+            expect.objectContaining({ name: "negative_prompt", type: "text" }),
+          ],
+        }),
+      );
+    });
   });
 
   it("remembers when the user disables attaching the source image as a reference", async () => {
@@ -222,7 +305,7 @@ describe("ImagePromptReverseModal", () => {
       { language: "zh" },
     );
 
-    await user.click(screen.getByText("同时添加为参考图"));
+    await user.click(screen.getByText("保存为参考图"));
 
     expect(
       useSettingsStore.getState().imageReverseAttachReferenceByDefault,
@@ -230,7 +313,12 @@ describe("ImagePromptReverseModal", () => {
 
     await user.click(screen.getByText("拖入图片、粘贴截图，或点击选择"));
     await screen.findByText("saved-reference.png");
-    await user.click(screen.getByRole("button", { name: "反推并创建" }));
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
+
+    expect(await screen.findByText("反推草稿")).toBeInTheDocument();
+    expect(onCreate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "创建提示词" }));
 
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalledTimes(1);
@@ -243,6 +331,77 @@ describe("ImagePromptReverseModal", () => {
       tags: ["product"],
     });
     expect(onCreate.mock.calls[0][0].images).toBeUndefined();
+  });
+
+  it("highlights the image drop zone while dragging over it", async () => {
+    await renderWithI18n(
+      <ToastProvider>
+        <ImagePromptReverseModal
+          isOpen
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+        />
+      </ToastProvider>,
+      { language: "zh" },
+    );
+
+    const dropZone = screen.getByRole("button", {
+      name: /拖入图片、粘贴截图，或点击选择/,
+    });
+
+    fireEvent.dragEnter(dropZone);
+    expect(dropZone).toHaveClass("border-primary/70");
+    expect(dropZone).toHaveClass("bg-primary/5");
+
+    fireEvent.dragLeave(dropZone);
+    expect(dropZone).not.toHaveClass("border-primary/70");
+  });
+
+  it("allows copying the reversed prompt without creating a stored prompt", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: writeTextMock.mockResolvedValue(undefined),
+      },
+    });
+    const onCreate = vi.fn().mockResolvedValue({ id: "created-prompt" });
+    chatCompletionMock.mockResolvedValue({
+      content: JSON.stringify({
+        title: "霓虹机器人图",
+        promptType: "image",
+        systemPrompt: "",
+        userPrompt: "neon robot icon, blue glow, dark background",
+        description: "反推图标生图提示词",
+        suggestedFolder: null,
+        tags: ["icon"],
+      }),
+    });
+
+    await renderWithI18n(
+      <ToastProvider>
+        <ImagePromptReverseModal
+          isOpen
+          onClose={vi.fn()}
+          onCreate={onCreate}
+        />
+      </ToastProvider>,
+      { language: "zh" },
+    );
+
+    await selectSavedImage(user);
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
+    await screen.findByDisplayValue(
+      "neon robot icon, blue glow, dark background",
+    );
+    await user.click(screen.getByRole("button", { name: "复制提示词" }));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith(
+        "neon robot icon, blue glow, dark background",
+      );
+    });
+    expect(onCreate).not.toHaveBeenCalled();
   });
 
   it("shows a vision-model setup error instead of using legacy text config", async () => {
@@ -285,7 +444,7 @@ describe("ImagePromptReverseModal", () => {
     );
 
     await selectSavedImage(user);
-    await user.click(screen.getByRole("button", { name: "反推并创建" }));
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
 
     expect(
       await screen.findByText(
@@ -315,7 +474,7 @@ describe("ImagePromptReverseModal", () => {
     );
 
     await selectSavedImage(user);
-    await user.click(screen.getByRole("button", { name: "反推并创建" }));
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
 
     expect(await screen.findByText("无法解析 AI 响应")).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();
@@ -341,7 +500,7 @@ describe("ImagePromptReverseModal", () => {
     );
 
     await selectSavedImage(user);
-    await user.click(screen.getByRole("button", { name: "反推并创建" }));
+    await user.click(screen.getByRole("button", { name: "开始反推" }));
 
     expect(await screen.findByText("图片提示词反推失败")).toBeInTheDocument();
     expect(onCreate).not.toHaveBeenCalled();

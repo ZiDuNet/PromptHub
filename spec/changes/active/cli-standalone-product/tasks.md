@@ -35,3 +35,7 @@
 - [x] 为新增 CLI 命令补充回归测试。
 - [x] 更新 README / 多语言 README 的 CLI 命令表。
 - [x] 更新 implementation.md 与验证记录。
+- [x] 将 CLI package 与运行时 `--version` 同步到 `0.5.8-beta.1`。
+- [x] 补齐 AI provider/model/route CLI 管理命令。
+- [x] 为 AI CLI 增加 TDD 回归：provider/model/route 正常路径、vision 路由能力错误、删除模型不删除 provider。
+- [x] 同步 README / 多语言 README 的 `ai` 命令表。

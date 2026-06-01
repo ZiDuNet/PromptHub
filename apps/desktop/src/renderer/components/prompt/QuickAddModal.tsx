@@ -275,13 +275,13 @@ export function QuickAddModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-base ease-enter">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-base ease-enter"
         onClick={handleCloseRequest}
       />
 
-      <div className="relative w-full max-w-2xl max-h-[min(760px,calc(100vh-32px))] mx-4 app-wallpaper-panel-strong rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-2xl max-h-[min(760px,calc(100vh-32px))] mx-4 app-wallpaper-panel-strong rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-base ease-enter">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <SparklesIcon className="w-5 h-5 text-primary" />

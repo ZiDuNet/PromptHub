@@ -21,6 +21,12 @@ describe("CloseDialog", () => {
       .sendCloseDialogCancel = cancelMock;
 
     const { container } = render(<CloseDialog isOpen onClose={onClose} />);
+    expect(container.ownerDocument.body.querySelector(".max-w-sm")).toHaveClass(
+      "animate-in",
+    );
+    expect(container.ownerDocument.body.querySelector(".max-w-sm")).toHaveClass(
+      "zoom-in-95",
+    );
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(cancelMock).toHaveBeenCalledTimes(1);

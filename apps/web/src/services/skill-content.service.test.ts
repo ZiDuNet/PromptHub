@@ -1,13 +1,28 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   parseRemoteSkill,
   scanSkillContent,
   scanSkillContentWithAI,
 } from './skill-content.service.js';
 
+const { lookupMock } = vi.hoisted(() => ({
+  lookupMock: vi.fn(),
+}));
+
+vi.mock('node:dns/promises', () => ({
+  default: {
+    lookup: lookupMock,
+  },
+}));
+
 describe('skill-content.service', () => {
+  beforeEach(() => {
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
+    lookupMock.mockReset();
   });
 
   describe('scanSkillContent', () => {
@@ -120,6 +135,7 @@ export API_TOKEN=secret
     });
 
     it('blocks internal source URLs before hitting the AI provider', async () => {
+      lookupMock.mockResolvedValue([{ address: '127.0.0.1', family: 4 }]);
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(
         new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
       );

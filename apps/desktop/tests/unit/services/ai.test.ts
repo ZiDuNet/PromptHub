@@ -647,23 +647,27 @@ function makeOpenAIImageResponse(): Response {
   });
 }
 
+async function responseToTransport(response: Response) {
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    body: await response.text(),
+    headers: Object.fromEntries(response.headers.entries()),
+  };
+}
+
 describe("generateImage - Gemini routing", () => {
-  let fetchSpy: any;
+  let requestSpy: any;
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(globalThis, "fetch");
-  });
-
-  afterEach(() => {
-    fetchSpy.mockRestore();
-  });
-
-  afterEach(() => {
-    fetchSpy?.mockRestore();
+    vi.clearAllMocks();
+    installWindowMocks();
+    requestSpy = window.api.ai.request;
   });
 
   it('routes to Gemini when provider is "google"', async () => {
-    fetchSpy.mockResolvedValueOnce(makeGeminiResponse());
+    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
 
     const result = await generateImage(
       {
@@ -676,14 +680,14 @@ describe("generateImage - Gemini routing", () => {
     );
 
     // Should have called the :generateContent endpoint
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
+    const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain(":generateContent");
     expect(result.data).toHaveLength(1);
     expect(result.data[0].b64_json).toBe("base64imagedata==");
   });
 
   it('routes to Gemini when provider is "gemini"', async () => {
-    fetchSpy.mockResolvedValueOnce(makeGeminiResponse());
+    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
 
     await generateImage(
       {
@@ -695,12 +699,12 @@ describe("generateImage - Gemini routing", () => {
       "a dog",
     );
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
+    const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain(":generateContent");
   });
 
   it("routes to Gemini when apiUrl contains generativelanguage.googleapis.com", async () => {
-    fetchSpy.mockResolvedValueOnce(makeGeminiResponse());
+    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
 
     await generateImage(
       {
@@ -712,12 +716,12 @@ describe("generateImage - Gemini routing", () => {
       "a landscape",
     );
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
+    const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain(":generateContent");
   });
 
   it('routes to Gemini when model name contains "gemini" and "image"', async () => {
-    fetchSpy.mockResolvedValueOnce(makeGeminiResponse());
+    requestSpy.mockResolvedValueOnce(await responseToTransport(makeGeminiResponse()));
 
     await generateImage(
       {
@@ -729,12 +733,12 @@ describe("generateImage - Gemini routing", () => {
       "a city",
     );
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
+    const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain(":generateContent");
   });
 
   it("falls back to OpenAI format when no Gemini signals match", async () => {
-    fetchSpy.mockResolvedValueOnce(makeOpenAIImageResponse());
+    requestSpy.mockResolvedValueOnce(await responseToTransport(makeOpenAIImageResponse()));
 
     await generateImage(
       {
@@ -746,7 +750,7 @@ describe("generateImage - Gemini routing", () => {
       "a painting",
     );
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
+    const calledUrl = requestSpy.mock.calls[0][0].url as string;
     expect(calledUrl).toContain("/images/generations");
     expect(calledUrl).not.toContain(":generateContent");
   });

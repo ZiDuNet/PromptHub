@@ -97,12 +97,24 @@
   - `skill` 新增 `scan-safety`
 - `packages/core/src/cli/skill-cli-service.ts` 现在已承接 standalone CLI 的 skill 版本快照、repo 文件管理、平台状态、导出和安全扫描能力，不再只负责安装/扫描。
 - 修正 CLI 文本参数解析：允许 `--content` / `--instruction` / prompt 文本参数接收以 YAML frontmatter `---` 开头的多行内容，避免把合法 `SKILL.md` / prompt 正文误判成缺参。
-- `apps/cli/tests/run.test.ts` 回归扩到 37 条，新增覆盖：
+- `apps/cli/tests/run.test.ts` 回归扩到 40 条，新增覆盖：
   - 根级 `--version`
   - `prompt visibility/scope/copy`
   - `rules versions/version-read/version-restore`
   - `skill` 版本管理、导出、平台状态、repo 写入/同步/回滚与 safety scan
 - README 与 `docs/README.en.md` 的 CLI 命令表已同步更新到当前命令面。
+- 将 standalone CLI release 版本同步到 `0.5.8-beta.1`：
+  - `apps/cli/package.json` 与根 `package.json` / desktop package 版本统一为 `0.5.8-beta.1`
+  - `packages/core/src/cli/run.ts` 的 `--version` 输出同步为 `0.5.8-beta.1`
+  - CLI 设置页测试 fixture 中的 release tag、tarball URL 和安装命令同步为 `v0.5.8-beta.1`
+  - `apps/cli/tests/run.test.ts` 改为精确断言 `prompthub --version` 输出当前 release 版本
+- 继续补齐桌面 AI 模型工作台对应的 standalone CLI 管理面：
+  - 新增 `packages/core/src/ai-config.ts`，以 `config/ai-models.json` 管理 providers / models / modelRouteDefaults。
+  - 新增 `packages/core/src/cli/ai-config-command.ts`，提供 `ai providers|provider-add|provider-delete|models|model-add|model-delete|routes|route-set|route-clear`。
+  - `route-set` 会校验模型能力：`visionText` 必须绑定 vision-capable chat 模型，`imageGeneration` 必须绑定生图模型。
+  - CLI JSON 输出会遮蔽 `apiKey`，磁盘配置保留真实 key；删除模型只清理该模型的 route 引用，不删除 provider。
+  - desktop `settings:get` 会读取 shared AI config 并合并到 settings payload；renderer `loadSettingsFromMainProcess()` 会把 providers / models / modelRouteDefaults 应用到 settings store。
+  - README / 多语言 README 的 CLI 命令表同步加入 `ai` 资源。
 
 ## Verification
 
@@ -136,7 +148,16 @@
 - 仓库级搜索：确认 `pnpm --filter @prompthub/desktop cli:dev` 已无匹配，剩余 `desktop-cli` / `--cli` 命中仅存在于 active change 的历史记录文本中
 - 仓库级搜索：确认 README、多语言 README、desktop About 设置页与 active spec 已不再宣称“桌面版自动安装 CLI”；剩余旧说法仅存在于历史 `CHANGELOG.md` / `website` changelog 发布记录中
 - `pnpm --filter @prompthub/cli typecheck`（含新增 skill CLI service / run.ts / PromptDB 变更）
-- `pnpm --filter @prompthub/cli test`（37 条用例全部通过）
+- `pnpm --filter @prompthub/cli test`（历史记录：37 条用例全部通过；当前定点 `run.test.ts` 为 40 条）
+- CLI 版本同步后重新运行：
+- `pnpm --filter @prompthub/cli test -- run.test.ts --run -t "shows the cli version"`
+- `node website/scripts/sync-release.mjs`
+- AI CLI 同步后重新运行：
+- `pnpm --filter @prompthub/cli test -- ai-config.test.ts --run`
+- `pnpm --filter @prompthub/cli test -- run.test.ts --run`
+- `pnpm --filter @prompthub/cli typecheck`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/stores/settings-ai-models.test.ts`
+- `pnpm --filter @prompthub/desktop typecheck`
 
 说明：`pnpm --filter @prompthub/desktop test -- --run` 当前仍有与本次 CLI 拆分无关的历史失败项，本次改动已对 desktop 受影响范围做 lint/typecheck/定点 UI 测试与 build 验证。
 

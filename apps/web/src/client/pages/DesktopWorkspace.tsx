@@ -39,9 +39,7 @@ function detectClientPlatform(userAgent: string): string {
 export function DesktopWorkspacePage() {
   const { user, registrationAllowed, isInitialized, logout } = useAuth();
 
-  useEffect(() => {
-    installDesktopBridge();
-  }, []);
+  installDesktopBridge();
 
   useEffect(() => {
     const heartbeat = async () => {

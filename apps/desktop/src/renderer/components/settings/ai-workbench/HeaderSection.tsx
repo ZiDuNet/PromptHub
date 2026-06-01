@@ -1,7 +1,7 @@
 import {
   Loader2Icon,
-  PlayIcon,
   PlusIcon,
+  TestTubeIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -43,7 +43,7 @@ export function HeaderSection({
             {testingDefault ? (
               <Loader2Icon className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
-              <PlayIcon className="h-4 w-4 text-muted-foreground" />
+              <TestTubeIcon className="h-4 w-4 text-muted-foreground" />
             )}
             {t("settings.aiWorkbenchTestDefault")}
           </button>

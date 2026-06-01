@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-import { ChevronDownIcon, Loader2Icon, PlayIcon } from "lucide-react";
+import { ChevronDownIcon, Loader2Icon, TestTubeIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { BaseFields } from "./model-form/BaseFields";
@@ -108,7 +108,7 @@ export function ModelFormModal({
             {testingModelId === draftTestingKey ? (
               <Loader2Icon className="h-4 w-4 animate-spin" />
             ) : (
-              <PlayIcon className="h-4 w-4" />
+              <TestTubeIcon className="h-4 w-4" />
             )}
             {t("settings.aiWorkbenchTestDraft")}
           </button>

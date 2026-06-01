@@ -6,6 +6,44 @@ interface CaptchaEnvelope {
   };
 }
 
+const API_PATH_SUFFIX_PATTERN = /^(.*)\/api(?:\/.*)?$/;
+
+export class PromptHubCaptchaAuthBoundaryError extends Error {
+  constructor() {
+    super(
+      "Failed to issue PromptHub captcha: the captcha endpoint is requiring authentication. Use the PromptHub Web site origin as the URL, not an /api endpoint.",
+    );
+    this.name = "PromptHubCaptchaAuthBoundaryError";
+  }
+}
+
+export function isPromptHubCaptchaAuthBoundaryError(
+  error: unknown,
+): error is PromptHubCaptchaAuthBoundaryError {
+  return error instanceof PromptHubCaptchaAuthBoundaryError;
+}
+
+export function normalizePromptHubWebBaseUrl(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    parsed.search = "";
+
+    const pathname = parsed.pathname.replace(/\/+$/, "");
+    const apiPathMatch = pathname.match(API_PATH_SUFFIX_PATTERN);
+    parsed.pathname = apiPathMatch ? apiPathMatch[1] || "/" : pathname || "/";
+
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return trimmed.replace(/\/api(?:\/.*)?$/, "");
+  }
+}
+
 const CAPTCHA_PATH_SIGNATURE_TO_CHAR: Record<string, string> = {
   MLLQLLQLLQLLQLLQZMLLQLLQLLQLLQLLQLLQLLQLLLQLLQLLQLLQZMLLLQLLQLLQLLQLLQLLLQLLLQLLQLLQLLQLLQLLQLLQLLQLLQLLQLLQLLQZMLLQLLLQZ: "A",
   MLLQLLQLLQLLQLLQLLQLLQLLQLLQZMLLQLLQLLQLLQLLQLLQZMLLQLLQLLQLLQLLQLLQLLQLLQLLQLLQLLQZMLLQLLQLLQLLQLLQLLLQLLQLLQLLQLLQLLQLLQLLQLLQLLLQLLQLLQZMLLQLLQLLQLLQLLLQLLQLLQLLQZMLLLQLLLLLQLLLQLLQLLQLLQLLQLLQZ: "B",
@@ -155,12 +193,20 @@ export async function issueSolvedPromptHubCaptcha(baseUrl: string): Promise<{
   captchaId: string;
   captchaAnswer: string;
 }> {
-  const response = await fetch(`${baseUrl}/api/auth/captcha`, {
+  const normalizedBaseUrl = normalizePromptHubWebBaseUrl(baseUrl);
+  const response = await fetch(`${normalizedBaseUrl}/api/auth/captcha`, {
     cache: "no-store",
   });
 
   if (!response.ok) {
     const text = await response.text();
+    if (
+      response.status === 401 &&
+      text.includes("Missing or invalid Authorization header")
+    ) {
+      throw new PromptHubCaptchaAuthBoundaryError();
+    }
+
     throw new Error(
       `Failed to issue PromptHub captcha: ${response.status} ${text}`,
     );

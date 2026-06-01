@@ -2,7 +2,10 @@ import { Buffer } from "node:buffer";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { issueSolvedPromptHubCaptcha } from "../../../src/renderer/services/self-hosted-auth";
+import {
+  issueSolvedPromptHubCaptcha,
+  normalizePromptHubWebBaseUrl,
+} from "../../../src/renderer/services/self-hosted-auth";
 
 const DIGIT_4_SIGNATURE =
   "MLLQLLQLLQLLQZMLLQLLQLLQLLQLLQLLQLLQLLQLLQLLLQLLQLLQLLQZMLLQLLLQLLQLLQLLQLLQLLQLLLQLLLQLLLQLLQLLQLLQLLQLLQLLQLLLQLLQLLQLLQZMLLQLLQLLQLLQLLQZ";
@@ -90,6 +93,51 @@ describe("self-hosted-auth", () => {
       captchaId: "550e8400-e29b-41d4-a716-446655440000",
       captchaAnswer: "47",
     });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://backup.example.com/api/auth/captcha",
+      expect.objectContaining({
+        cache: "no-store",
+      }),
+    );
+  });
+
+  it.each([
+    ["https://backup.example.com/", "https://backup.example.com"],
+    ["https://backup.example.com/api", "https://backup.example.com"],
+    ["https://backup.example.com/api/", "https://backup.example.com"],
+    [
+      "https://backup.example.com/api/auth/captcha?refresh=1#top",
+      "https://backup.example.com",
+    ],
+    [
+      "https://backup.example.com/prompthub/api/auth/login",
+      "https://backup.example.com/prompthub",
+    ],
+  ])("normalizes pasted PromptHub Web URLs from %s", (input, expected) => {
+    expect(normalizePromptHubWebBaseUrl(input)).toBe(expected);
+  });
+
+  it("reports a protected captcha endpoint as a URL/auth boundary error", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse(
+        {
+          error: {
+            code: "UNAUTHORIZED",
+            message: "Missing or invalid Authorization header",
+          },
+        },
+        { status: 401 },
+      ),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      issueSolvedPromptHubCaptcha("https://backup.example.com/api"),
+    ).rejects.toThrow(
+      "the captcha endpoint is requiring authentication",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://backup.example.com/api/auth/captcha",

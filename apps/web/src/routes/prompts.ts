@@ -36,6 +36,34 @@ const createPromptSchema = z.object({
   notes: z.string().max(20000).optional(),
 });
 
+const directPromptSchema = z.object({
+  id: z.string().trim().min(1),
+  ownerUserId: z.string().nullable().optional(),
+  visibility: z.enum(['private', 'shared']).optional(),
+  title: z.string().trim().min(1, 'title is required').max(200, 'title is too long'),
+  description: z.string().max(5000).nullable().optional(),
+  promptType: z.enum(['text', 'image', 'video']).optional(),
+  systemPrompt: z.string().max(100000).nullable().optional(),
+  systemPromptEn: z.string().max(100000).nullable().optional(),
+  userPrompt: z.string().min(1, 'userPrompt is required').max(100000, 'userPrompt is too long'),
+  userPromptEn: z.string().max(100000).nullable().optional(),
+  variables: z.array(variableSchema),
+  tags: z.array(z.string().trim().min(1)),
+  folderId: z.string().trim().min(1).nullable().optional(),
+  images: z.array(z.string().trim().min(1)).optional(),
+  videos: z.array(z.string().trim().min(1)).optional(),
+  isFavorite: z.boolean(),
+  isPinned: z.boolean(),
+  version: z.number().int().nonnegative(),
+  currentVersion: z.number().int().nonnegative(),
+  usageCount: z.number().int().nonnegative(),
+  source: z.string().max(5000).nullable().optional(),
+  notes: z.string().max(20000).nullable().optional(),
+  lastAiResponse: z.string().max(100000).nullable().optional(),
+  createdAt: z.string().min(1),
+  updatedAt: z.string().min(1),
+});
+
 const updatePromptSchema = createPromptSchema.partial().extend({
   isFavorite: z.boolean().optional(),
   isPinned: z.boolean().optional(),
@@ -45,6 +73,20 @@ const updatePromptSchema = createPromptSchema.partial().extend({
 
 const createVersionSchema = z.object({
   note: z.string().max(500).optional(),
+});
+
+const directVersionSchema = z.object({
+  id: z.string().trim().min(1),
+  promptId: z.string().trim().min(1),
+  version: z.number().int().nonnegative(),
+  systemPrompt: z.string().max(100000).nullable().optional(),
+  systemPromptEn: z.string().max(100000).nullable().optional(),
+  userPrompt: z.string().min(1).max(100000),
+  userPromptEn: z.string().max(100000).nullable().optional(),
+  variables: z.array(variableSchema),
+  note: z.string().max(500).nullable().optional(),
+  aiResponse: z.string().max(100000).nullable().optional(),
+  createdAt: z.string().min(1),
 });
 
 const renameTagSchema = z.object({
@@ -81,6 +123,51 @@ prompts.post('/', async (c) => {
 
   try {
     return success(c, promptService.create(getAuthUser(c), parsed.data), 201);
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/direct-insert', async (c) => {
+  const parsed = await parseJsonBody(c, directPromptSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.insertDirect(getAuthUser(c), parsed.data), 201);
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/versions/direct-insert', async (c) => {
+  const parsed = await parseJsonBody(c, directVersionSchema);
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  try {
+    return success(c, promptService.insertVersionDirect(getAuthUser(c), parsed.data), 201);
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.delete('/versions/:versionId', async (c) => {
+  try {
+    promptService.deleteVersionById(getAuthUser(c), c.req.param('versionId'));
+    return success(c, { ok: true });
+  } catch (routeError) {
+    return toPromptErrorResponse(c, routeError);
+  }
+});
+
+prompts.post('/workspace/sync', async (c) => {
+  try {
+    getAuthUser(c);
+    promptService.syncWorkspace();
+    return success(c, { ok: true });
   } catch (routeError) {
     return toPromptErrorResponse(c, routeError);
   }

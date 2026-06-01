@@ -86,6 +86,8 @@ describe("QuickAddModal", () => {
     expect(screen.getByText("分析已有内容")).toBeInTheDocument();
     expect(screen.getByText("AI 生成 Prompt")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "粘贴你的 Prompt" })).toBeInTheDocument();
+    expect(document.querySelector(".max-w-2xl")).toHaveClass("animate-in");
+    expect(document.querySelector(".max-w-2xl")).toHaveClass("zoom-in-95");
 
     await user.click(screen.getByRole("button", { name: /AI 生成 Prompt/i }));
 
