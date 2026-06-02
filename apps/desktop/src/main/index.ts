@@ -78,6 +78,7 @@ import {
 import { getRecoveryCandidatePaths } from "./services/recovery-paths";
 import { logStartupEvent, scrubPath } from "./startup-log";
 import { openDirectoryPath } from "./shell-open-path";
+import { shouldOpenStartupDevTools } from "./devtools-policy";
 
 // Disable GPU acceleration (optional; may be needed on some systems)
 // 禁用 GPU 加速（可选，某些系统上可能需要）
@@ -320,7 +321,7 @@ async function createWindow() {
     console.log("Loading dev server:", devServerUrl);
     try {
       await mainWindow.loadURL(devServerUrl);
-      if (!isE2E) {
+      if (shouldOpenStartupDevTools({ isDev, isE2E })) {
         mainWindow.webContents.openDevTools();
       }
     } catch (error) {

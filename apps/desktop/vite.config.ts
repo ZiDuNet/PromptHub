@@ -5,6 +5,8 @@ import renderer from "vite-plugin-electron-renderer";
 import path from "path";
 import type { Plugin } from "vite";
 
+process.env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
+
 const mainExternalModules = new Set([
   "node-sqlite3-wasm",
   "electron",

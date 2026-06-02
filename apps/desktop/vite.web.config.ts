@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+process.env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
+
 // 纯 Web 开发配置（不包含 Electron）
 export default defineConfig({
   plugins: [react()],

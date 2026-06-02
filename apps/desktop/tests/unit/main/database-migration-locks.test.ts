@@ -4,7 +4,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DatabaseAdapter from "../../../src/main/database/sqlite";
 import { closeDatabase } from "../../../src/main/database";
@@ -38,6 +38,7 @@ describe("database migration locking regression", () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
+    vi.restoreAllMocks();
     closeDatabase();
     for (const dir of tempDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -90,9 +91,46 @@ describe("database migration locking regression", () => {
       "SELECT name FROM schema_migrations WHERE name = ?",
       "drop_skill_name_unique_v2",
     );
+    const backupFiles = fs
+      .readdirSync(tempDir)
+      .filter((entry) => entry.startsWith("prompthub.db.backup-"));
 
     expect(droppedIndex).toBeNull();
     expect(sourceIndex).toEqual({ name: "idx_skills_source_id" });
     expect(migrationRow).toEqual({ name: "drop_skill_name_unique_v2" });
+    expect(backupFiles).toHaveLength(1);
+  });
+
+  it("does not create pre-migration backups when the schema is already current", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-db-current-"));
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+
+    initSharedDatabase(dbPath);
+    closeDatabase();
+    initSharedDatabase(dbPath);
+    closeDatabase();
+
+    const backupFiles = fs
+      .readdirSync(tempDir)
+      .filter((entry) => entry.startsWith("prompthub.db.backup-"));
+
+    expect(backupFiles).toEqual([]);
+  });
+
+  it("does not report clearing a stale lock when no lock exists", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-db-no-lock-"));
+    tempDirs.push(tempDir);
+    const dbPath = path.join(tempDir, "prompthub.db");
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    initSharedDatabase(dbPath);
+    closeDatabase();
+
+    expect(
+      logSpy.mock.calls.some(([message]) =>
+        String(message).includes("[DB] Cleared stale lock"),
+      ),
+    ).toBe(false);
   });
 });

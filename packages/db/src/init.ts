@@ -38,6 +38,75 @@ export interface InitDatabaseHooks {
 
 let db: Database.Database | null = null;
 
+const REQUIRED_MIGRATION_NAMES = [
+  "backfill_local_repo_path_v1",
+  "normalize_skill_version_tracking_v1",
+  "server_auth_tables_v1",
+  "drop_skill_name_unique_v2",
+  "fix_prompt_current_version_v1",
+] as const;
+
+const REQUIRED_TABLES = [
+  "schema_migrations",
+  "users",
+  "refresh_tokens",
+  "user_settings",
+  "skill_versions",
+  "rules",
+  "rule_versions",
+] as const;
+
+const REQUIRED_COLUMNS: Record<string, string[]> = {
+  prompts: [
+    "images",
+    "is_pinned",
+    "source",
+    "notes",
+    "prompt_type",
+    "system_prompt_en",
+    "user_prompt_en",
+    "videos",
+    "last_ai_response",
+    "owner_user_id",
+    "visibility",
+  ],
+  folders: ["is_private", "updated_at", "owner_user_id", "visibility"],
+  skills: [
+    "source_url",
+    "source_id",
+    "source_label",
+    "source_branch",
+    "source_directory",
+    "canonical_skill_path",
+    "directory_fingerprint",
+    "icon_url",
+    "icon_emoji",
+    "icon_background",
+    "category",
+    "is_builtin",
+    "registry_slug",
+    "content_url",
+    "installed_content_hash",
+    "installed_version",
+    "installed_at",
+    "updated_from_store_at",
+    "prerequisites",
+    "compatibility",
+    "original_tags",
+    "current_version",
+    "version_tracking_enabled",
+    "local_repo_path",
+    "safety_level",
+    "safety_score",
+    "safety_report",
+    "safety_scanned_at",
+    "owner_user_id",
+    "visibility",
+  ],
+  users: ["role"],
+  prompt_versions: ["system_prompt_en", "user_prompt_en", "ai_response"],
+};
+
 /**
  * node-sqlite3-wasm uses a directory lock `<dbfile>.lock`.
  * If the previous run crashed, the lock directory may remain and cause
@@ -46,6 +115,9 @@ let db: Database.Database | null = null;
 function clearStaleLock(dbPath: string): void {
   const lockDir = `${dbPath}.lock`;
   try {
+    if (!fs.existsSync(lockDir)) {
+      return;
+    }
     fs.rmSync(lockDir, { recursive: true, force: true });
     console.log(`[DB] Cleared stale lock: ${lockDir}`);
   } catch (err: unknown) {
@@ -56,18 +128,87 @@ function clearStaleLock(dbPath: string): void {
   }
 }
 
+function tableExists(probe: Database.Database, tableName: string): boolean {
+  return Boolean(
+    probe.get(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      tableName,
+    ),
+  );
+}
+
+function columnNames(
+  probe: Database.Database,
+  tableName: string,
+): Set<string> | null {
+  if (!tableExists(probe, tableName)) {
+    return null;
+  }
+  return new Set(
+    (probe.pragma(`table_info(${tableName})`) as PragmaColumnInfo[]).map(
+      (column) => column.name,
+    ),
+  );
+}
+
+function databaseAppearsCurrent(probe: Database.Database): boolean {
+  for (const tableName of REQUIRED_TABLES) {
+    if (!tableExists(probe, tableName)) {
+      return false;
+    }
+  }
+
+  for (const migrationName of REQUIRED_MIGRATION_NAMES) {
+    if (
+      !probe.get(
+        "SELECT 1 FROM schema_migrations WHERE name = ?",
+        migrationName,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  for (const [tableName, requiredColumns] of Object.entries(REQUIRED_COLUMNS)) {
+    const existingColumns = columnNames(probe, tableName);
+    if (!existingColumns) {
+      return false;
+    }
+    if (requiredColumns.some((column) => !existingColumns.has(column))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function shouldBackupDatabaseBeforeMigration(dbPath: string): boolean {
+  if (!fs.existsSync(dbPath)) {
+    return false;
+  }
+  const stat = fs.statSync(dbPath);
+  if (stat.size === 0) {
+    return false;
+  }
+
+  const probe = new Database(dbPath);
+  try {
+    return !databaseAppearsCurrent(probe);
+  } catch {
+    // If probing fails, keep the conservative recovery behavior.
+    return true;
+  } finally {
+    probe.close();
+  }
+}
+
 /**
  * Create a timestamped backup of the database file before running migrations.
  * Returns the backup path on success, or null if no backup was needed/possible.
  */
 function backupDatabaseBeforeMigration(dbPath: string): string | null {
   try {
-    if (!fs.existsSync(dbPath)) {
-      return null;
-    }
-    const stat = fs.statSync(dbPath);
-    // Only back up non-empty databases (empty = freshly created)
-    if (stat.size === 0) {
+    if (!shouldBackupDatabaseBeforeMigration(dbPath)) {
       return null;
     }
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
