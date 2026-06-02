@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+## [0.5.8-beta.2] - 2026-06-02
+
+### 问题修复 / Fixes
+
+- 🧩 **Skill 生命周期操作补齐**：继续加固项目 Skill、Agent Skill 和平台 Skill 的安装、卸载、删除与软链接路径，减少从不同入口进入时状态不一致的问题
+  - **Skill Lifecycle Actions Hardened**: Further tightened project Skill, Agent Skill, and platform Skill install, uninstall, delete, and symlink paths to reduce state drift across entry points
+- 🗑️ **项目 Skill 删除按钮语义修复**：项目详情页右上角删除项目按钮现在默认使用红色 destructive 样式，避免和普通编辑/刷新操作混淆
+  - **Project Skill Delete Button Semantics Fixed**: The project detail delete action now uses a red destructive style by default so it is visually distinct from normal edit and refresh actions
+- 🔢 **Skill 导航计数与安装状态稳定性**：修复 Skill 分区、Agent 管理和安装状态在切换、刷新后的显示一致性问题
+  - **Skill Navigation Counts and Install State Stabilized**: Fixed display consistency for Skill section counts, Agent management, and install state after switching or refreshing views
+
+### 优化 / Improvements
+
+- ↔️ **Skill 管理横向过渡动画**：我的 Skill、项目 Skill、Agent Skill、商店，以及项目/Agent 内部切换现在使用横向滑入过渡，避免上下跳动带来的割裂感
+  - **Horizontal Skill Management Transitions**: My Skills, Project Skills, Agent Skills, Store, and internal project/agent switches now use horizontal slide transitions instead of vertical jumps
+- 🧪 **发布 CI 运行时同步**：GitHub Actions 发布链路同步到 Node 24，匹配当前桌面端和 CLI 的运行时要求
+  - **Release CI Runtime Synced**: GitHub Actions release jobs now use Node 24 to match the current desktop and CLI runtime requirements
+
 ## [0.5.8-beta.1] - 2026-06-01
 
 ### 新功能 / Features

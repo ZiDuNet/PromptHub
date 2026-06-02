@@ -1232,7 +1232,7 @@ export function SkillProjectsView() {
                             "skill.deleteProjectTitle",
                             "Delete project",
                           )}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 text-destructive transition-colors hover:border-destructive/30 hover:bg-destructive/10"
                         >
                           <TrashIcon className="h-4 w-4" />
                         </button>

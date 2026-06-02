@@ -204,6 +204,11 @@ describe("SkillProjectsView", () => {
       "slide-in-from-right-3",
       "duration-smooth",
     );
+    expect(screen.getByRole("button", { name: "Delete project" })).toHaveClass(
+      "border-destructive/20",
+      "bg-destructive/5",
+      "text-destructive",
+    );
     expect(screen.getAllByText("Novel")).toHaveLength(2);
     expect(screen.getByText("novel-auditor")).toBeInTheDocument();
     expect(screen.getByText("novel-builder")).toBeInTheDocument();
