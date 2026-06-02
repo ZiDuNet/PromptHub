@@ -12,6 +12,7 @@ import type {
   MCPServerConfig,
   ScanLocalResult,
   SkillProject,
+  SkillPlatformScanResult,
   SkillSafetyLevel,
   SkillSafetyReport,
   SafetyScanAIConfig,
@@ -119,6 +120,13 @@ export interface ProjectSkillScanState {
   error?: string | null;
 }
 
+export interface AgentSkillScanState {
+  result: SkillPlatformScanResult | null;
+  isScanning: boolean;
+  scannedAt?: number;
+  error?: string | null;
+}
+
 function sanitizePersistedProjectScanState(
   projectScanState: Record<string, ProjectSkillScanState>,
 ): Record<string, ProjectSkillScanState> {
@@ -136,6 +144,37 @@ function sanitizePersistedProjectScanState(
             instructions: "",
           }))
         : [],
+      isScanning: false,
+      scannedAt: state.scannedAt,
+      error: state.error ?? null,
+    };
+  }
+
+  return nextState;
+}
+
+function sanitizePersistedAgentScanState(
+  agentScanState: Record<string, AgentSkillScanState>,
+): Record<string, AgentSkillScanState> {
+  const nextState: Record<string, AgentSkillScanState> = {};
+
+  for (const [platformId, state] of Object.entries(agentScanState)) {
+    if (!state) {
+      continue;
+    }
+
+    nextState[platformId] = {
+      result: state.result
+        ? {
+            ...state.result,
+            scannedSkills: Array.isArray(state.result.scannedSkills)
+              ? state.result.scannedSkills.map((skill) => ({
+                  ...skill,
+                  instructions: "",
+                }))
+              : [],
+          }
+        : null,
       isScanning: false,
       scannedAt: state.scannedAt,
       error: state.error ?? null,
@@ -302,12 +341,9 @@ function findRegistrySkillCandidateByKey(
 
   return (
     getRegistrySkillCandidates(state).find((skill) =>
-      [
-        skill.source_id,
-        skill.slug,
-        skill.source_url,
-        skill.content_url,
-      ].some((value) => value?.trim().toLowerCase() === normalizedKey),
+      [skill.source_id, skill.slug, skill.source_url, skill.content_url].some(
+        (value) => value?.trim().toLowerCase() === normalizedKey,
+      ),
     ) || null
   );
 }
@@ -641,6 +677,7 @@ interface SkillState {
   storeView: SkillStoreView;
   selectedProjectId: string | null;
   projectScanState: Record<string, ProjectSkillScanState>;
+  agentScanState: Record<string, AgentSkillScanState>;
   registrySkills: RegistrySkill[];
   isLoadingRegistry: boolean;
   storeCategory: SkillCategory | "all";
@@ -716,6 +753,10 @@ interface SkillState {
     projectId: string,
     state: ProjectSkillScanState,
   ) => void;
+  scanAgentPlatformSkills: (
+    platformId: string,
+  ) => Promise<SkillPlatformScanResult>;
+  setAgentScanState: (platformId: string, state: AgentSkillScanState) => void;
   getVisibleProjectScannedSkills: (
     projectId: string,
     options?: { searchQuery?: string },
@@ -798,6 +839,7 @@ export const useSkillStore = create<SkillState>()(
       storeView: "my-skills" as SkillStoreView,
       selectedProjectId: null,
       projectScanState: {},
+      agentScanState: {},
       registrySkills: [] as RegistrySkill[],
       isLoadingRegistry: false,
       storeCategory: "all" as SkillCategory | "all",
@@ -1362,6 +1404,59 @@ export const useSkillStore = create<SkillState>()(
         }));
       },
 
+      scanAgentPlatformSkills: async (platformId) => {
+        set((state) => ({
+          agentScanState: {
+            ...state.agentScanState,
+            [platformId]: {
+              ...(state.agentScanState[platformId] || { result: null }),
+              isScanning: true,
+              error: null,
+            },
+          },
+        }));
+
+        try {
+          const result = await window.api.skill.scanPlatformSkills(platformId);
+          const nextState: AgentSkillScanState = {
+            result,
+            isScanning: false,
+            scannedAt: Date.now(),
+            error: null,
+          };
+          set((state) => ({
+            agentScanState: {
+              ...state.agentScanState,
+              [platformId]: nextState,
+            },
+          }));
+          return result;
+        } catch (error) {
+          const errorMessage = getErrorMessage(error);
+          set((state) => ({
+            agentScanState: {
+              ...state.agentScanState,
+              [platformId]: {
+                result: state.agentScanState[platformId]?.result ?? null,
+                isScanning: false,
+                scannedAt: state.agentScanState[platformId]?.scannedAt,
+                error: errorMessage,
+              },
+            },
+          }));
+          throw error instanceof Error ? error : new Error(errorMessage);
+        }
+      },
+
+      setAgentScanState: (platformId, state) => {
+        set((current) => ({
+          agentScanState: {
+            ...current.agentScanState,
+            [platformId]: state,
+          },
+        }));
+      },
+
       getVisibleProjectScannedSkills: (projectId, options) => {
         const scannedSkills =
           get().projectScanState[projectId]?.scannedSkills || [];
@@ -1696,8 +1791,7 @@ export const useSkillStore = create<SkillState>()(
       getRecommendedSkills: () => {
         const { skills, registrySkills } = get();
         return registrySkills.filter(
-          (registrySkill) =>
-            !findInstalledRegistrySkill(skills, registrySkill),
+          (registrySkill) => !findInstalledRegistrySkill(skills, registrySkill),
         );
       },
 
@@ -1726,8 +1820,7 @@ export const useSkillStore = create<SkillState>()(
           findInstalledRegistrySkill(skills, registrySkill),
         );
         const recommended = filtered.filter(
-          (registrySkill) =>
-            !findInstalledRegistrySkill(skills, registrySkill),
+          (registrySkill) => !findInstalledRegistrySkill(skills, registrySkill),
         );
 
         return { installed, recommended };
@@ -1890,6 +1983,7 @@ Rules:
           projectScanState: sanitizePersistedProjectScanState(
             state.projectScanState,
           ),
+          agentScanState: sanitizePersistedAgentScanState(state.agentScanState),
           customStoreSources: state.customStoreSources,
           selectedStoreSourceId: state.selectedStoreSourceId,
           remoteStoreEntries: filteredEntries,

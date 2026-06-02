@@ -99,6 +99,10 @@ function getRegistrySkillSelectionId(skill: RegistrySkill): string {
   return skill.source_id || skill.slug;
 }
 
+function getRegistrySkillPendingKey(skill: RegistrySkill): string {
+  return skill.source_id || skill.source_url || skill.slug;
+}
+
 export function SkillStore() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language?.startsWith("zh");
@@ -317,7 +321,7 @@ export function SkillStore() {
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
-    setInstallingSourceId(skill.source_id);
+    setInstallingSourceId(getRegistrySkillPendingKey(skill));
     try {
       if (autoScanBeforeInstall) {
         const report = await window.api.skill.scanSafety({
@@ -649,6 +653,7 @@ export function SkillStore() {
                       hasUpdate={hasPotentialUpdate(skill)}
                       index={index}
                       storeLabel={sourceMeta.title}
+                      installingSourceId={installingSourceId}
                       onClick={() =>
                         selectRegistrySkill(getRegistrySkillSelectionId(skill))
                       }

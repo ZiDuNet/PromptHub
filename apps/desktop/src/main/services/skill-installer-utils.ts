@@ -3,6 +3,10 @@ import * as os from "os";
 import * as path from "path";
 import { initDatabase } from "../database";
 import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+import {
+  isPrivateAddress,
+  resolvePublicAddress,
+} from "./skill-installer-remote";
 import type { MCPServerConfig } from "@prompthub/shared/types/skill";
 import {
   getPlatformById,
@@ -109,6 +113,37 @@ function normalizeRemoteGitUrl(url: string): string {
   return parsedRepo?.cloneUrl ?? trimmed;
 }
 
+function isSshStyleGitUrl(url: string): boolean {
+  return /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(url);
+}
+
+async function validateRemoteGitTransportUrl(
+  normalizedUrl: string,
+  operation: "clone" | "remote",
+): Promise<void> {
+  if (isSshStyleGitUrl(normalizedUrl)) {
+    return;
+  }
+
+  const parsedUrl = new URL(normalizedUrl);
+  if (parsedUrl.protocol === "https:") {
+    return;
+  }
+  if (parsedUrl.protocol === "http:") {
+    const resolvedAddress = await resolvePublicAddress(parsedUrl.hostname, {
+      allowPrivateNetwork: true,
+    });
+    if (isPrivateAddress(resolvedAddress.address)) {
+      return;
+    }
+  }
+
+  const noun = operation === "clone" ? "clone" : "remote";
+  throw new Error(
+    `Only HTTPS, private-network HTTP, or git@<host> SSH ${noun} URLs are allowed`,
+  );
+}
+
 export function gitClone(
   url: string,
   destDir: string,
@@ -123,65 +158,56 @@ export function gitClone(
 
   const normalizedUrl = normalizeRemoteGitUrl(url);
 
-  const isSshGitUrl =
-    /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
-      normalizedUrl,
-    );
+  return validateRemoteGitTransportUrl(normalizedUrl, "clone").then(
+    () =>
+      new Promise((resolve, reject) => {
+        const cloneArgs = ["clone", "--depth", "1"];
+        if (branch?.trim()) {
+          cloneArgs.push("--branch", branch.trim());
+        }
+        cloneArgs.push("--", normalizedUrl, destDir);
+        const proc = childProcess.spawn("git", cloneArgs, {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
 
-  if (!isSshGitUrl) {
-    const parsedUrl = new URL(normalizedUrl);
-    if (parsedUrl.protocol !== "https:") {
-      throw new Error("Only HTTPS or git@<host> SSH clone URLs are allowed");
-    }
-  }
+        let stderr = "";
+        let settled = false;
 
-  return new Promise((resolve, reject) => {
-    const cloneArgs = ["clone", "--depth", "1"];
-    if (branch?.trim()) {
-      cloneArgs.push("--branch", branch.trim());
-    }
-    cloneArgs.push("--", normalizedUrl, destDir);
-    const proc = childProcess.spawn("git", cloneArgs, {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            proc.kill("SIGKILL");
+            reject(
+              new Error(
+                `Git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s for URL: ${url}`,
+              ),
+            );
+          }
+        }, GIT_CLONE_TIMEOUT_MS);
 
-    let stderr = "";
-    let settled = false;
+        proc.stderr?.on("data", (data) => {
+          stderr += data.toString();
+        });
 
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        proc.kill("SIGKILL");
-        reject(
-          new Error(
-            `Git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s for URL: ${url}`,
-          ),
-        );
-      }
-    }, GIT_CLONE_TIMEOUT_MS);
+        proc.on("close", (code) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Git clone failed with code ${code}: ${stderr}`));
+          }
+        });
 
-    proc.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Git clone failed with code ${code}: ${stderr}`));
-      }
-    });
-
-    proc.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      reject(new Error(`Git clone error: ${error.message}`));
-    });
-  });
+        proc.on("error", (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          reject(new Error(`Git clone error: ${error.message}`));
+        });
+      }),
+  );
 }
 
 export function gitListRemoteBranches(url: string): Promise<string[]> {
@@ -194,82 +220,75 @@ export function gitListRemoteBranches(url: string): Promise<string[]> {
 
   const normalizedUrl = normalizeRemoteGitUrl(url);
 
-  const isSshGitUrl =
-    /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
-      normalizedUrl,
-    );
-
-  if (!isSshGitUrl) {
-    const parsedUrl = new URL(normalizedUrl);
-    if (parsedUrl.protocol !== "https:") {
-      throw new Error("Only HTTPS or git@<host> SSH remote URLs are allowed");
-    }
-  }
-
-  return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(
-      "git",
-      ["ls-remote", "--heads", "--", normalizedUrl],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-
-    const timeout = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        proc.kill("SIGKILL");
-        reject(
-          new Error(
-            `Git remote branch listing timed out after ${GIT_REMOTE_TIMEOUT_MS / 1000}s for URL: ${url}`,
-          ),
+  return validateRemoteGitTransportUrl(normalizedUrl, "remote").then(
+    () =>
+      new Promise((resolve, reject) => {
+        const proc = childProcess.spawn(
+          "git",
+          ["ls-remote", "--heads", "--", normalizedUrl],
+          { stdio: ["ignore", "pipe", "pipe"] },
         );
-      }
-    }, GIT_REMOTE_TIMEOUT_MS);
 
-    proc.stdout?.on("data", (data) => {
-      stdout += data.toString();
-    });
+        let stdout = "";
+        let stderr = "";
+        let settled = false;
 
-    proc.stderr?.on("data", (data) => {
-      stderr += data.toString();
-    });
+        const timeout = setTimeout(() => {
+          if (!settled) {
+            settled = true;
+            proc.kill("SIGKILL");
+            reject(
+              new Error(
+                `Git remote branch listing timed out after ${GIT_REMOTE_TIMEOUT_MS / 1000}s for URL: ${url}`,
+              ),
+            );
+          }
+        }, GIT_REMOTE_TIMEOUT_MS);
 
-    proc.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (code !== 0) {
-        reject(
-          new Error(
-            `Git remote branch listing failed with code ${code}: ${stderr}`,
-          ),
-        );
-        return;
-      }
+        proc.stdout?.on("data", (data) => {
+          stdout += data.toString();
+        });
 
-      const branches = stdout
-        .split(/\r?\n/u)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => line.split(/\s+/u)[1] ?? "")
-        .filter((ref) => ref.startsWith("refs/heads/"))
-        .map((ref) => ref.replace(/^refs\/heads\//u, ""))
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b));
+        proc.stderr?.on("data", (data) => {
+          stderr += data.toString();
+        });
 
-      resolve(branches);
-    });
+        proc.on("close", (code) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (code !== 0) {
+            reject(
+              new Error(
+                `Git remote branch listing failed with code ${code}: ${stderr}`,
+              ),
+            );
+            return;
+          }
 
-    proc.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      reject(new Error(`Git remote branch listing error: ${error.message}`));
-    });
-  });
+          const branches = stdout
+            .split(/\r?\n/u)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .map((line) => line.split(/\s+/u)[1] ?? "")
+            .filter((ref) => ref.startsWith("refs/heads/"))
+            .map((ref) => ref.replace(/^refs\/heads\//u, ""))
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+
+          resolve(branches);
+        });
+
+        proc.on("error", (error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          reject(
+            new Error(`Git remote branch listing error: ${error.message}`),
+          );
+        });
+      }),
+  );
 }
 
 export function resolvePlatformPath(template: string): string {

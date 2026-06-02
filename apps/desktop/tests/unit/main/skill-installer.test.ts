@@ -207,6 +207,224 @@ describe("SkillInstaller.fetchRemoteContent", () => {
   });
 });
 
+describe("SkillInstaller.scanRemoteGithub", () => {
+  it("allows private network access for user-selected Gitea repository scans", async () => {
+    const fetchSpy = vi
+      .spyOn(SkillInstaller, "fetchRemoteContent")
+      .mockImplementation(async (url) => {
+        if (url === "https://gitea.company.test/api/v1/repos/team/skills") {
+          return JSON.stringify({ default_branch: "main" });
+        }
+        if (
+          url ===
+          "https://gitea.company.test/api/v1/repos/team/skills/git/trees/main?recursive=1"
+        ) {
+          return JSON.stringify({
+            tree: [
+              {
+                path: "tools/writer/SKILL.md",
+                type: "blob",
+                sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              },
+              {
+                path: "tools/writer/docs/guide.md",
+                type: "blob",
+                sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              },
+            ],
+          });
+        }
+        if (
+          url ===
+          "https://gitea.company.test/api/v1/repos/team/skills/raw/tools/writer/SKILL.md?ref=main"
+        ) {
+          return "---\nname: writer\ndescription: Private Gitea writer\n---\n\n# Writer\n";
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+
+    const skills = await SkillInstaller.scanRemoteGithub(
+      "https://gitea.company.test/team/skills",
+      [],
+    );
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toEqual(
+      expect.objectContaining({
+        slug: "writer",
+        name: "writer",
+        source_branch: "main",
+        source_directory: "tools/writer",
+        canonical_skill_path: "tools/writer/SKILL.md",
+      }),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://gitea.company.test/api/v1/repos/team/skills",
+      { allowPrivateNetwork: true },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://gitea.company.test/api/v1/repos/team/skills/git/trees/main?recursive=1",
+      { allowPrivateNetwork: true },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://gitea.company.test/api/v1/repos/team/skills/raw/tools/writer/SKILL.md?ref=main",
+      { allowPrivateNetwork: true },
+    );
+  });
+
+  it("allows direct RFC1918 IP addresses for user-selected Gitea repository scans", async () => {
+    const fetchSpy = vi
+      .spyOn(SkillInstaller, "fetchRemoteContent")
+      .mockImplementation(async (url) => {
+        if (url === "https://192.168.31.12:3000/api/v1/repos/team/skills") {
+          return JSON.stringify({ default_branch: "main" });
+        }
+        if (
+          url ===
+          "https://192.168.31.12:3000/api/v1/repos/team/skills/git/trees/main?recursive=1"
+        ) {
+          return JSON.stringify({
+            tree: [{ path: "SKILL.md", type: "blob" }],
+          });
+        }
+        if (
+          url ===
+          "https://192.168.31.12:3000/api/v1/repos/team/skills/raw/SKILL.md?ref=main"
+        ) {
+          return "---\nname: lan-gitea-skill\n---\n\n# LAN Gitea Skill\n";
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+
+    const skills = await SkillInstaller.scanRemoteGithub(
+      "https://192.168.31.12:3000/team/skills",
+      [],
+    );
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toEqual(
+      expect.objectContaining({
+        slug: "lan-gitea-skill",
+        source_url: "https://192.168.31.12:3000/team/skills/tree/main",
+      }),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://192.168.31.12:3000/api/v1/repos/team/skills",
+      { allowPrivateNetwork: true },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://192.168.31.12:3000/api/v1/repos/team/skills/git/trees/main?recursive=1",
+      { allowPrivateNetwork: true },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://192.168.31.12:3000/api/v1/repos/team/skills/raw/SKILL.md?ref=main",
+      { allowPrivateNetwork: true },
+    );
+  });
+
+  it("preserves HTTP for direct RFC1918 Gitea repository scans", async () => {
+    const fetchSpy = vi
+      .spyOn(SkillInstaller, "fetchRemoteContent")
+      .mockImplementation(async (url) => {
+        if (url === "http://192.168.31.12:3000/api/v1/repos/team/skills") {
+          return JSON.stringify({ default_branch: "main" });
+        }
+        if (
+          url ===
+          "http://192.168.31.12:3000/api/v1/repos/team/skills/git/trees/main?recursive=1"
+        ) {
+          return JSON.stringify({
+            tree: [{ path: "SKILL.md", type: "blob" }],
+          });
+        }
+        if (
+          url ===
+          "http://192.168.31.12:3000/api/v1/repos/team/skills/raw/SKILL.md?ref=main"
+        ) {
+          return "---\nname: lan-http-gitea-skill\n---\n\n# LAN HTTP Gitea Skill\n";
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+
+    const skills = await SkillInstaller.scanRemoteGithub(
+      "http://192.168.31.12:3000/team/skills",
+      [],
+    );
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0]).toEqual(
+      expect.objectContaining({
+        slug: "lan-http-gitea-skill",
+        source_url: "http://192.168.31.12:3000/team/skills/tree/main",
+      }),
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.31.12:3000/api/v1/repos/team/skills",
+      {
+        allowInsecurePrivateNetworkHttp: true,
+        allowPrivateNetwork: true,
+      },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.31.12:3000/api/v1/repos/team/skills/git/trees/main?recursive=1",
+      {
+        allowInsecurePrivateNetworkHttp: true,
+        allowPrivateNetwork: true,
+      },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.31.12:3000/api/v1/repos/team/skills/raw/SKILL.md?ref=main",
+      {
+        allowInsecurePrivateNetworkHttp: true,
+        allowPrivateNetwork: true,
+      },
+    );
+  });
+
+  it("keeps GitHub repository scans on the default public-network policy", async () => {
+    const fetchSpy = vi
+      .spyOn(SkillInstaller, "fetchRemoteContent")
+      .mockImplementation(async (url) => {
+        if (url === "https://api.github.com/repos/team/skills") {
+          return JSON.stringify({ default_branch: "main" });
+        }
+        if (
+          url ===
+          "https://api.github.com/repos/team/skills/git/trees/main?recursive=1"
+        ) {
+          return JSON.stringify({
+            tree: [{ path: "SKILL.md", type: "blob" }],
+          });
+        }
+        if (
+          url === "https://raw.githubusercontent.com/team/skills/main/SKILL.md"
+        ) {
+          return "---\nname: github-skill\n---\n\n# GitHub Skill\n";
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+
+    const skills = await SkillInstaller.scanRemoteGithub(
+      "https://github.com/team/skills",
+      [],
+    );
+
+    expect(skills).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.github.com/repos/team/skills",
+      { allowPrivateNetwork: false },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.github.com/repos/team/skills/git/trees/main?recursive=1",
+      { allowPrivateNetwork: false },
+    );
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/team/skills/main/SKILL.md",
+      { allowPrivateNetwork: false },
+    );
+  });
+});
+
 describe("SkillInstaller.scanPlatformSkills", () => {
   it("scans real platform skill folders and distinguishes copy from symlink installs", async () => {
     const platformSkillsDir = path.join(tmpDir, "claude", "skills");
@@ -249,7 +467,9 @@ describe("SkillInstaller.scanPlatformSkills", () => {
     );
 
     const result = await SkillInstaller.scanPlatformSkills("claude");
-    const byName = new Map(result.scannedSkills.map((skill) => [skill.name, skill]));
+    const byName = new Map(
+      result.scannedSkills.map((skill) => [skill.name, skill]),
+    );
 
     expect(result.skillsDir).toBe(platformSkillsDir);
     expect(byName.get("copy-skill")).toEqual(
@@ -268,9 +488,9 @@ describe("SkillInstaller.scanPlatformSkills", () => {
         platforms: ["Claude Code"],
       }),
     );
-    expect(await fs.readFile(path.join(copiedSkillDir, "asset.txt"), "utf-8")).toBe(
-      "full package",
-    );
+    expect(
+      await fs.readFile(path.join(copiedSkillDir, "asset.txt"), "utf-8"),
+    ).toBe("full package");
   });
 
   it("uninstalls only the selected platform folder and rejects paths outside the platform skills dir", async () => {
@@ -472,7 +692,9 @@ describe("SkillInstaller.scanRemoteGithub", () => {
           "https://gitea.example.com/api/v1/repos/icelemon/skills/git/trees/main?recursive=1"
         ) {
           return JSON.stringify({
-            tree: [{ path: "gitea-skill/SKILL.md", type: "blob", sha: "skill-sha" }],
+            tree: [
+              { path: "gitea-skill/SKILL.md", type: "blob", sha: "skill-sha" },
+            ],
           });
         }
         if (
@@ -521,7 +743,9 @@ describe("SkillInstaller.scanRemoteGithub", () => {
           "https://gitea.example.com/api/v1/repos/icelemon/skills/git/trees/main?recursive=1"
         ) {
           return JSON.stringify({
-            tree: [{ path: "ssh-skill/SKILL.md", type: "blob", sha: "ssh-sha" }],
+            tree: [
+              { path: "ssh-skill/SKILL.md", type: "blob", sha: "ssh-sha" },
+            ],
           });
         }
         if (
@@ -569,7 +793,13 @@ describe("SkillInstaller.scanRemoteGithub", () => {
           "https://api.github.com/repos/icelemon/skills/git/trees/main?recursive=1"
         ) {
           return JSON.stringify({
-            tree: [{ path: "github-skill/SKILL.md", type: "blob", sha: "github-sha" }],
+            tree: [
+              {
+                path: "github-skill/SKILL.md",
+                type: "blob",
+                sha: "github-sha",
+              },
+            ],
           });
         }
         if (
@@ -2442,7 +2672,11 @@ describe("SkillInstaller.scanRemoteGithub", () => {
           return JSON.stringify({
             tree: [
               { path: "gitea-skill/SKILL.md", type: "blob", sha: "skill-sha" },
-              { path: "gitea-skill/docs/guide.md", type: "blob", sha: "guide-sha" },
+              {
+                path: "gitea-skill/docs/guide.md",
+                type: "blob",
+                sha: "guide-sha",
+              },
             ],
           });
         }
@@ -2500,7 +2734,9 @@ describe("SkillInstaller.scanRemoteGithub", () => {
           "https://gitea.example.com/api/v1/repos/icelemon/skills/git/trees/stable?recursive=1"
         ) {
           return JSON.stringify({
-            tree: [{ path: "ssh-skill/SKILL.md", type: "blob", sha: "ssh-sha" }],
+            tree: [
+              { path: "ssh-skill/SKILL.md", type: "blob", sha: "ssh-sha" },
+            ],
           });
         }
         if (
@@ -2552,8 +2788,16 @@ describe("SkillInstaller.scanRemoteGithub", () => {
         ) {
           return JSON.stringify({
             tree: [
-              { path: "skills/writer/SKILL.md", type: "blob", sha: "writer-sha" },
-              { path: "skills/writer/references/style.md", type: "blob", sha: "style-sha" },
+              {
+                path: "skills/writer/SKILL.md",
+                type: "blob",
+                sha: "writer-sha",
+              },
+              {
+                path: "skills/writer/references/style.md",
+                type: "blob",
+                sha: "style-sha",
+              },
             ],
           });
         }

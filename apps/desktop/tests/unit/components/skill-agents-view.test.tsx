@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SkillAgentsView } from "../../../src/renderer/components/skill/SkillAgentsView";
 import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import { useSkillStore } from "../../../src/renderer/stores/skill.store";
+import { useUIStore } from "../../../src/renderer/stores/ui.store";
 import { installWindowMocks } from "../../helpers/window";
 
 const showToastMock = vi.fn();
@@ -134,6 +135,7 @@ function scanResult() {
 describe("SkillAgentsView", () => {
   beforeEach(() => {
     showToastMock.mockReset();
+    useUIStore.setState({ pendingSettingsSection: null });
     installWindowMocks({
       api: {
         skill: {
@@ -186,6 +188,14 @@ describe("SkillAgentsView", () => {
       selectedSkillId: null,
       searchQuery: "",
       storeView: "agents",
+      agentScanState: {
+        claude: {
+          result: scanResult(),
+          isScanning: false,
+          scannedAt: 1,
+          error: null,
+        },
+      },
       selectSkill: vi.fn((id: string | null) => {
         useSkillStore.setState({ selectedSkillId: id } as never);
       }),
@@ -217,28 +227,63 @@ describe("SkillAgentsView", () => {
     expect(
       within(agentPlatformCard!).getByTestId("agent-platform-icon-shell"),
     ).toHaveClass("h-10", "w-10", "rounded-xl", "bg-muted");
+    expect(
+      within(agentPlatformCard!).getByText("2 skills"),
+    ).toBeInTheDocument();
     expect(await screen.findByAltText("claude icon")).toBeInTheDocument();
     expect((await screen.findAllByText("copy-skill")).length).toBeGreaterThan(
       0,
     );
     expect(screen.getAllByText("linked-skill").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Copy").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Symlink").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Copy install").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Symlink install").length).toBeGreaterThan(0);
     expect(screen.getAllByText("In My Skills").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
         "Browse each agent's Skill directory and manage copy or symlink installs.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 skills")).toBeInTheDocument();
+    expect(screen.queryByText("Manage Agents")).not.toBeInTheDocument();
+    expect(screen.getByTestId("agent-manage-settings-button")).toHaveClass(
+      "h-10",
+      "w-10",
+    );
+    fireEvent.click(screen.getByTestId("agent-manage-settings-button"));
+    expect(useUIStore.getState().pendingSettingsSection).toBe("skill");
+    expect(screen.getAllByText("2 skills")).toHaveLength(2);
     expect(screen.getByText("1 managed")).toBeInTheDocument();
     expect(screen.getByText("1 copy")).toBeInTheDocument();
     expect(screen.getByText("1 symlink")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-sidebar-header")).toHaveClass("h-[132px]");
+    expect(screen.getByTestId("agent-detail-header")).toHaveClass("h-[132px]");
+    expect(screen.getByTestId("agent-detail-shell")).toHaveClass(
+      "app-wallpaper-section",
+    );
+    expect(screen.getByTestId("agent-detail-shell")).not.toHaveClass(
+      "app-wallpaper-panel",
+    );
+    expect(screen.getByTestId("agent-skills-list")).toHaveClass("space-y-2");
+    expect(screen.getByTestId("agent-skills-list")).not.toHaveClass("grid");
+    expect(screen.getByTestId("agent-skills-list").className).not.toContain(
+      "xl:grid-cols-2",
+    );
     expect(screen.getAllByTestId("agent-skill-card")).toHaveLength(2);
     for (const card of screen.getAllByTestId("agent-skill-card")) {
-      expect(card.firstElementChild).toHaveClass("min-h-[156px]");
+      expect(card.firstElementChild).toHaveClass(
+        "grid",
+        "min-h-[124px]",
+        "items-stretch",
+      );
       expect(card.firstElementChild?.className).toContain(
+        "grid-cols-[minmax(0,1fr)_12rem]",
+      );
+      expect(card.firstElementChild?.className).not.toContain(
         "grid-cols-[minmax(0,1fr)_9.5rem]",
+      );
+      expect(within(card).getByTestId("agent-skill-actions")).toHaveClass(
+        "items-end",
+        "justify-end",
+        "self-end",
       );
       expect(
         within(card).getByRole("button", { name: "Open Folder" }),
@@ -248,6 +293,47 @@ describe("SkillAgentsView", () => {
       screen.getAllByRole("button", { name: /Uninstall from agent/i }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("# Copy Skill")).not.toBeInTheDocument();
+  });
+
+  it("keeps entry passive but auto-scans an uncached agent when the user selects it", async () => {
+    const { api } = installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([claudePlatform]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+          scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
+        },
+      },
+    });
+    useSkillStore.setState({
+      agentScanState: {},
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    render(<SkillAgentsView />);
+
+    expect((await screen.findAllByText("Claude Code")).length).toBeGreaterThan(
+      0,
+    );
+    expect(api.skill.scanPlatformSkills).not.toHaveBeenCalled();
+    expect(screen.getByText("No skills in this agent")).toBeInTheDocument();
+
+    const agentPlatformCard = (
+      await screen.findAllByRole("button", { name: /Claude Code/i })
+    ).find((button) => button.textContent?.includes("0 skills"));
+    expect(agentPlatformCard).toBeTruthy();
+    fireEvent.click(agentPlatformCard!);
+
+    await waitFor(() => {
+      expect(api.skill.scanPlatformSkills).toHaveBeenCalledWith("claude");
+    });
+    expect(await screen.findByText("copy-skill")).toBeInTheDocument();
+
+    api.skill.scanPlatformSkills.mockClear();
+    fireEvent.click(screen.getAllByTitle("Refresh")[1]);
+
+    await waitFor(() => {
+      expect(api.skill.scanPlatformSkills).toHaveBeenCalledWith("claude");
+    });
   });
 
   it("filters agent skills with the global skill search query instead of a second local search box", async () => {
@@ -311,7 +397,7 @@ describe("SkillAgentsView", () => {
         "/agents/claude/skills/copy-skill",
       );
     });
-    expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(2);
+    expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(1);
   });
 
   it("uninstalls an agent skill directly from the card action", async () => {
@@ -350,7 +436,7 @@ describe("SkillAgentsView", () => {
         "/agents/claude/skills/copy-skill",
       );
     });
-    expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(2);
+    expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(1);
   });
 
   it("imports an unmanaged agent skill into My Skills from the card action", async () => {
@@ -473,6 +559,8 @@ describe("SkillAgentsView", () => {
 
     await screen.findByText("copy-skill");
     showToastMock.mockClear();
+    const scanPlatformSkills = vi.mocked(window.api.skill.scanPlatformSkills);
+    scanPlatformSkills.mockClear();
 
     const refreshButtons = screen.getAllByTitle("Refresh");
     fireEvent.click(refreshButtons[0]);
@@ -483,10 +571,15 @@ describe("SkillAgentsView", () => {
         "success",
       );
     });
+    await waitFor(() => {
+      expect(scanPlatformSkills).toHaveBeenCalledWith("claude");
+    });
 
+    scanPlatformSkills.mockClear();
     fireEvent.click(refreshButtons[1]);
 
     await waitFor(() => {
+      expect(scanPlatformSkills).toHaveBeenCalledWith("claude");
       expect(showToastMock).toHaveBeenCalledWith("Scanned 2 skills", "success");
     });
   });

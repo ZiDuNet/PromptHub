@@ -25,6 +25,12 @@ Implemented.
 - Removed the Agent Skills inner search box. The Agent browser now reads the shared Skill search query from the top bar, so there is one search entry point and filtered results update in the Agent Skill grid.
 - Suppressed the top-bar result count in Agent Skill view because Agent scan results live in the Agent browser state, not the global library result set. This prevents false `No results` labels while the Agent list is correctly filtered.
 - Added missing Agent Skill navigation/search and common action labels (`open`, `uninstall`) to every desktop locale so Chinese Agent detail buttons no longer fall back to `Open` / `Uninstall`.
+- Added a direct icon-only `Manage Agents` action in the Agent Skill browser. The action opens Settings directly on the Agent Management section through a small UI navigation request state instead of relying on the user to manually find the settings tab.
+- Agent Skill scans are now cached in the shared Skill store by platform id. Entering the Agent Skill page loads the agent list but no longer rescans every selected agent automatically. Selecting an uncached agent triggers its first scan, while cached zero-result agents remain stable until explicit refresh, install, or uninstall flows update them.
+- The Agent list refresh button now refreshes the visible Agent inventory and then scans the visible Agent Skill folders, so the user-triggered refresh updates both Agent availability and Skill counts.
+- Agent platform rows now show cached Skill counts as right-side badges, matching the sidebar count pattern instead of placing the count as a separate lower line.
+- Agent Skill cards now use the same single-row list layout as Project Skill cards instead of multi-column small cards.
+- Agent Skill install-mode badges now say `Copy install` / `Symlink install` (localized) so the label reads as state, not as an action button.
 - Added platform scan and arbitrary platform-skill uninstall IPC:
   - `skill:scanPlatformSkills`
   - `skill:uninstallPlatformSkill`
@@ -61,6 +67,15 @@ Implemented.
 - Passed: JSON parse validation for `en.json`, `zh.json`, and `zh-TW.json`.
 - Passed: JSON parse validation for all desktop locales (`en`, `zh`, `zh-TW`, `ja`, `fr`, `de`, `es`).
 - Passed: locale key scan for the Project Skill deployment keys across all desktop locales.
+- Passed: `pnpm --filter @prompthub/desktop typecheck`
+- Passed: `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/settings-page.test.tsx`
+  - 2 files passed
+  - 16 tests passed
+  - Existing React `act(...)` warnings still appear in the Agent detail test path, but all assertions pass.
+- Passed: `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx tests/unit/components/settings-page.test.tsx`
+  - 3 files passed
+  - 34 tests passed
+  - Existing React `act(...)` warnings still appear in the Agent detail test path, but all assertions pass.
 - Passed: `pnpm --filter @prompthub/desktop typecheck`
 - Passed: `pnpm --filter @prompthub/desktop lint`
 - Latest typecheck attempt after the Agent search/i18n follow-up failed in pre-existing AI settings work outside this change path:

@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -202,7 +203,10 @@ describe("SkillProjectsView", () => {
     );
     expect(
       screen.getByRole("button", { name: "Import from My Skills" }),
-    ).toHaveClass("h-9", "w-44");
+    ).toHaveClass("h-10", "w-full");
+    expect(
+      screen.getByRole("button", { name: "Import from My Skills" }).className,
+    ).not.toContain("w-44");
     expect(screen.getByRole("button", { name: "Refresh" })).toHaveClass(
       "h-9",
       "w-9",
@@ -330,8 +334,9 @@ describe("SkillProjectsView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
 
-    expect(screen.getByRole("dialog", { name: "Delete project" }))
-      .toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Delete project" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
         'Remove project "{{name}}" from PromptHub? This only removes the project workspace record and does not delete any files.',
@@ -513,6 +518,37 @@ describe("SkillProjectsView", () => {
       rootPathLabel.compareDocumentPosition(projectNameLabel) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).not.toBe(0);
+    expect(screen.getByTestId("project-root-path-row")).toHaveClass(
+      "w-full",
+      "items-start",
+    );
+    expect(screen.getByTestId("project-root-path-input-shell")).toHaveClass(
+      "min-w-0",
+      "flex-1",
+    );
+    expect(
+      within(screen.getByTestId("project-root-path-row")).getByRole("button", {
+        name: "Browse",
+      }),
+    ).toHaveClass("h-10", "shrink-0");
+    expect(screen.getByTestId("project-scan-path-row")).toHaveClass(
+      "w-full",
+      "items-start",
+    );
+    expect(screen.getByTestId("project-scan-path-input-shell")).toHaveClass(
+      "min-w-0",
+      "flex-1",
+    );
+    expect(
+      within(screen.getByTestId("project-scan-path-row")).getByRole("button", {
+        name: "Add",
+      }),
+    ).toHaveClass("h-10", "shrink-0");
+    expect(
+      within(screen.getByTestId("project-scan-path-row")).getByRole("button", {
+        name: "Browse",
+      }),
+    ).toHaveClass("h-10", "shrink-0");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Browse" })[0]);
 

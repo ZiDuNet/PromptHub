@@ -101,7 +101,9 @@ function isSkillMarkdownPath(filePath: string): boolean {
 }
 
 function getTreeBackedDirectoryFingerprint(
-  treeEntries: Array<GitHubTreeEntry & { path: string; type: string; sha?: string }>,
+  treeEntries: Array<
+    GitHubTreeEntry & { path: string; type: string; sha?: string }
+  >,
   skillFilePath: string,
 ): string | undefined {
   const normalizedSkillPath = skillFilePath.replace(/^\/+|\/+$/g, "");
@@ -146,7 +148,8 @@ function buildRemoteGitStoreUrls(
     };
   }
 
-  const repoApiBase = `https://${parsedRepo.host}/api/v1/repos/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}`;
+  const repoProtocol = parsedRepo.protocol === "http" ? "http" : "https";
+  const repoApiBase = `${repoProtocol}://${parsedRepo.host}/api/v1/repos/${encodeURIComponent(parsedRepo.owner)}/${encodeURIComponent(parsedRepo.repo)}`;
   return {
     repoApiBase,
     treeUrl: `${repoApiBase}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
@@ -176,6 +179,7 @@ import {
   isPrivateIPv4,
   isPrivateIPv6,
   resolvePublicAddress,
+  type FetchRemoteTextOptions,
 } from "./skill-installer-remote";
 import {
   createLocalRepoDir,
@@ -953,14 +957,29 @@ export class SkillInstaller {
       );
     }
 
-    const initialUrls = buildRemoteGitStoreUrls(parsedRepo, branch?.trim() || "main");
-    const repoMetaRaw = await this.fetchRemoteContent(initialUrls.repoApiBase);
+    const initialUrls = buildRemoteGitStoreUrls(
+      parsedRepo,
+      branch?.trim() || "main",
+    );
+    const repoFetchOptions: FetchRemoteTextOptions = {
+      allowPrivateNetwork: !isGitHubHost(parsedRepo.host),
+    };
+    if (parsedRepo.protocol === "http" && !isGitHubHost(parsedRepo.host)) {
+      repoFetchOptions.allowInsecurePrivateNetworkHttp = true;
+    }
+    const repoMetaRaw = await this.fetchRemoteContent(
+      initialUrls.repoApiBase,
+      repoFetchOptions,
+    );
     const repoMeta = parseJson<GitHubRepoMetadata>(repoMetaRaw || "{}", {});
     const normalizedBranch =
       branch?.trim() || repoMeta.default_branch || "main";
     const normalizedDirectory = directory?.trim().replace(/^\/+|\/+$/g, "");
     const remoteUrls = buildRemoteGitStoreUrls(parsedRepo, normalizedBranch);
-    const treeRaw = await this.fetchRemoteContent(remoteUrls.treeUrl);
+    const treeRaw = await this.fetchRemoteContent(
+      remoteUrls.treeUrl,
+      repoFetchOptions,
+    );
     const treeData = parseJson<GitHubTreeResponse>(treeRaw || "{}", {});
     const treeEntries = Array.isArray(treeData.tree)
       ? treeData.tree.filter(isRemoteTreeEntry)
@@ -990,7 +1009,10 @@ export class SkillInstaller {
         if (!rawUrl) {
           return null;
         }
-        const content = await this.fetchRemoteContent(rawUrl).catch(() => "");
+        const content = await this.fetchRemoteContent(
+          rawUrl,
+          repoFetchOptions,
+        ).catch(() => "");
         if (!content.trim()) {
           return null;
         }
@@ -1338,7 +1360,10 @@ export class SkillInstaller {
    * is attached to raise the API rate limit from 60 req/h (unauthenticated)
    * to 5000 req/h (authenticated). See #108.
    */
-  static async fetchRemoteContent(url: string): Promise<string> {
+  static async fetchRemoteContent(
+    url: string,
+    options: FetchRemoteTextOptions = {},
+  ): Promise<string> {
     try {
       let githubToken: string | null = null;
       try {
@@ -1355,7 +1380,7 @@ export class SkillInstaller {
           tokenError,
         );
       }
-      return await fetchRemoteText(url, 0, { githubToken });
+      return await fetchRemoteText(url, 0, { ...options, githubToken });
     } catch (error) {
       console.error("Failed to fetch remote content from remote URL:", error);
       throw error;

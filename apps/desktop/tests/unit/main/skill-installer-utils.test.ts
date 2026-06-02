@@ -648,21 +648,53 @@ describe("skill-installer-utils", () => {
       );
     });
 
-    it("rejects non-HTTPS URL (HTTP)", () => {
-      expect(() =>
-        gitClone("http://github.com/user/repo", "/tmp/dest"),
-      ).toThrow(/Only HTTPS/);
+    it("rejects public HTTP URLs", async () => {
+      await expect(
+        gitClone("http://93.184.216.34/user/repo", "/tmp/dest"),
+      ).rejects.toThrow(/private-network HTTP/);
     });
 
-    it("rejects file:// protocol", () => {
-      expect(() => gitClone("file:///etc/passwd", "/tmp/dest")).toThrow(
-        /Only HTTPS/,
+    it("rejects file:// protocol", async () => {
+      await expect(gitClone("file:///etc/passwd", "/tmp/dest")).rejects.toThrow(
+        /private-network HTTP/,
       );
     });
 
-    it("rejects ftp:// protocol", () => {
-      expect(() => gitClone("ftp://example.com/repo", "/tmp/dest")).toThrow(
-        /Only HTTPS/,
+    it("rejects ftp:// protocol", async () => {
+      await expect(
+        gitClone("ftp://example.com/repo", "/tmp/dest"),
+      ).rejects.toThrow(/private-network HTTP/);
+    });
+
+    it("allows private-network HTTP clone URLs", async () => {
+      const closeHandlers: Array<(code: number) => void> = [];
+
+      vi.mocked(childProcess.spawn).mockReturnValue({
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => event === "close" && closeHandlers.push(cb)),
+        kill: vi.fn(),
+      } as unknown as childProcess.ChildProcess);
+
+      const promise = gitClone(
+        "http://192.168.31.12:3000/team/skills",
+        "/tmp/dest",
+      );
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
+      closeHandlers[0]?.(0);
+
+      await expect(promise).resolves.toBeUndefined();
+      expect(childProcess.spawn).toHaveBeenCalledWith(
+        "git",
+        [
+          "clone",
+          "--depth",
+          "1",
+          "--",
+          "http://192.168.31.12:3000/team/skills",
+          "/tmp/dest",
+        ],
+        { stdio: ["ignore", "pipe", "pipe"] },
       );
     });
 
@@ -677,6 +709,7 @@ describe("skill-installer-utils", () => {
       } as unknown as childProcess.ChildProcess);
 
       const promise = gitClone("git@github.com:user/repo.git", "/tmp/dest");
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
       closeHandlers[0]?.(0);
 
       await expect(promise).resolves.toBeUndefined();
@@ -696,6 +729,7 @@ describe("skill-installer-utils", () => {
         "git@gitea.example.com:icelemon/skills.git",
         "/tmp/dest",
       );
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
       closeHandlers[0]?.(0);
 
       await expect(promise).resolves.toBeUndefined();
@@ -726,6 +760,7 @@ describe("skill-installer-utils", () => {
       } as unknown as childProcess.ChildProcess);
 
       const promise = gitListRemoteBranches("git@github.com:demo/skills.git");
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
       stdoutHandlers[0]?.(
         Buffer.from("abc123\trefs/heads/main\ndef456\trefs/heads/release\n"),
       );
@@ -751,6 +786,7 @@ describe("skill-installer-utils", () => {
         "https://github.com/anthropics/skills/tree/main/skills/.curated",
       );
 
+      await vi.waitFor(() => expect(childProcess.spawn).toHaveBeenCalled());
       expect(childProcess.spawn).toHaveBeenCalledWith(
         "git",
         ["ls-remote", "--heads", "--", "https://github.com/anthropics/skills"],

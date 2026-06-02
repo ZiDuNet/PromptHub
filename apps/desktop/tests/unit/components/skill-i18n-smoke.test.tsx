@@ -341,6 +341,16 @@ describe("skill i18n smoke", () => {
 
     render(<SkillManager />);
 
+    expect(screen.getByTestId("skill-view-transition")).toHaveAttribute(
+      "data-skill-view",
+      "my-skills",
+    );
+    expect(screen.getByTestId("skill-view-transition")).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "slide-in-from-bottom-2",
+      "duration-smooth",
+    );
     expect(
       screen.getByRole("button", { name: "Batch Manage" }),
     ).toBeInTheDocument();
@@ -516,9 +526,11 @@ describe("skill i18n smoke", () => {
 
     render(<SkillManager />);
 
-    expect(
-      screen.getByRole("button", { name: /All Skills\s*2/i }),
-    ).toBeInTheDocument();
+    const allSkillsFilter = screen.getByRole("button", {
+      name: /All Skills\s*2/i,
+    });
+    expect(allSkillsFilter).toBeInTheDocument();
+    expect(allSkillsFilter).toHaveClass("h-9", "min-w-[8rem]");
     expect(
       screen.getByRole("button", { name: /Distributed\s*1/i }),
     ).toBeInTheDocument();
@@ -1183,6 +1195,16 @@ describe("skill i18n smoke", () => {
 
     expect(setStoreView).not.toHaveBeenCalledWith("my-skills");
     expect(setFilterType).not.toHaveBeenCalledWith("all");
+    expect(screen.getByTestId("skill-view-transition")).toHaveAttribute(
+      "data-skill-view",
+      "store",
+    );
+    expect(screen.getByTestId("skill-view-transition")).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "slide-in-from-bottom-2",
+      "duration-smooth",
+    );
     expect(await screen.findByText("Official Store")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Batch Deploy" }),

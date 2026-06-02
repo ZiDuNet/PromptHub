@@ -1,15 +1,26 @@
-import { useCallback, useEffect, useRef, useState, lazy, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  lazy,
+  Suspense,
+} from "react";
 import type { RecoveryCandidate } from "@prompthub/shared/types";
 import { Sidebar, TopBar, MainContent, TitleBar } from "./components/layout";
 import { usePromptStore } from "./stores/prompt.store";
 import { useFolderStore } from "./stores/folder.store";
 import { useSettingsStore } from "./stores/settings.store";
+import { useUIStore } from "./stores/ui.store";
 import {
   getRenderedBackgroundImageBlur,
   getRenderedBackgroundImageOpacity,
   loadSettingsFromMainProcess,
 } from "./stores/settings.store";
-import { initDatabase, migrateLegacyIndexedDbToMainProcess } from "./services/database";
+import {
+  initDatabase,
+  migrateLegacyIndexedDbToMainProcess,
+} from "./services/database";
 import { ImportedPromptData } from "./components/prompt/ImportPromptModal";
 import {
   runS3AutoSync,
@@ -63,7 +74,9 @@ function App() {
   const movePrompts = usePromptStore((state) => state.movePrompts);
   const selectedIds = usePromptStore((state) => state.selectedIds);
   const applyTheme = useSettingsStore((state) => state.applyTheme);
-  const inferUpdateChannel = useSettingsStore((state) => state.inferUpdateChannel);
+  const inferUpdateChannel = useSettingsStore(
+    (state) => state.inferUpdateChannel,
+  );
   const backgroundImageFileName = useSettingsStore(
     (state) => state.backgroundImageFileName,
   );
@@ -78,6 +91,9 @@ function App() {
   );
   const debugMode = useSettingsStore((state) => state.debugMode);
   const shortcutModes = useSettingsStore((state) => state.shortcutModes);
+  const pendingSettingsSection = useUIStore(
+    (state) => state.pendingSettingsSection,
+  );
   const [currentPage, setCurrentPage] = useState<PageType>("home");
   const [isLoading, setIsLoading] = useState(true);
   const { showToast } = useToast();
@@ -101,6 +117,12 @@ function App() {
   // OS-level fullscreen state (synced from main process events)
   // OS 级全屏状态（通过主进程事件同步）
   const [isOsFullscreen, setIsOsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (pendingSettingsSection) {
+      setCurrentPage("settings");
+    }
+  }, [pendingSettingsSection]);
 
   // Update state
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
@@ -144,7 +166,8 @@ function App() {
     !isWebRuntime() &&
     backgroundImageEnabled &&
     typeof normalizedBackgroundImageFileName === "string";
-  const renderedBackgroundBlur = getRenderedBackgroundImageBlur(backgroundImageBlur);
+  const renderedBackgroundBlur =
+    getRenderedBackgroundImageBlur(backgroundImageBlur);
   const renderedBackgroundImageOpacity = getRenderedBackgroundImageOpacity(
     backgroundImageOpacity,
   );
@@ -648,24 +671,22 @@ function App() {
       isWebDAVSyncInFlightRef.current = true;
 
       try {
-        const result = await runWebDAVAutoSync(
-          {
-            config: {
-              url: settings.webdavUrl,
-              username: settings.webdavUsername,
-              password: settings.webdavPassword,
-            },
-            options: {
-              includeImages: settings.webdavIncludeImages,
-              incrementalSync: settings.webdavIncrementalSync,
-              encryptionPassword:
-                settings.webdavEncryptionEnabled &&
-                settings.webdavEncryptionPassword
-                  ? settings.webdavEncryptionPassword
-                  : undefined,
-            },
+        const result = await runWebDAVAutoSync({
+          config: {
+            url: settings.webdavUrl,
+            username: settings.webdavUsername,
+            password: settings.webdavPassword,
           },
-        );
+          options: {
+            includeImages: settings.webdavIncludeImages,
+            incrementalSync: settings.webdavIncrementalSync,
+            encryptionPassword:
+              settings.webdavEncryptionEnabled &&
+              settings.webdavEncryptionPassword
+                ? settings.webdavEncryptionPassword
+                : undefined,
+          },
+        });
 
         if (!result.success) {
           console.log(`⚠️ ${reason} sync failed:`, result.message);
@@ -990,7 +1011,9 @@ function App() {
         hasValidS3Config(settings)
       ) {
         const intervalMs = settings.s3AutoSyncInterval * 60 * 1000;
-        console.log(`🔄 S3 auto sync interval: ${settings.s3AutoSyncInterval} minutes`);
+        console.log(
+          `🔄 S3 auto sync interval: ${settings.s3AutoSyncInterval} minutes`,
+        );
         s3IntervalId = setInterval(() => {
           void runS3AutoSyncTask("interval");
         }, intervalMs);
@@ -1089,11 +1112,11 @@ function App() {
 
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 {currentPage === "home" ? (
-                    <Sidebar
-                      currentPage={currentPage}
-                      onNavigate={setCurrentPage}
-                      layout="panel"
-                    />
+                  <Sidebar
+                    currentPage={currentPage}
+                    onNavigate={setCurrentPage}
+                    layout="panel"
+                  />
                 ) : null}
 
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

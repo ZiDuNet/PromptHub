@@ -15,5 +15,6 @@
 - [x] Add Project Skill preview sidebar regression coverage for Simplified Chinese fallback leaks.
 - [x] Remove duplicate Agent Skill local search and route Agent Skill filtering through the global Skill search query.
 - [x] Add missing Agent Skill / common action i18n keys across all supported desktop locales.
+- [x] Align Agent Skill and Project Skill management UI patterns, including single-row Agent Skill lists, right-side agent counts, cached scans, and a direct Agent settings management entry.
 - [x] Verify related unit tests, typecheck, and lint.
 - [x] Record implementation and verification results.

@@ -4,6 +4,19 @@ import { persist } from "zustand/middleware";
 type ViewMode = "prompt" | "skill";
 
 export type AppModule = ViewMode | "rules";
+export type SettingsSectionId =
+  | "web"
+  | "devices"
+  | "general"
+  | "appearance"
+  | "security"
+  | "data"
+  | "skill"
+  | "ai"
+  | "language"
+  | "shortcuts"
+  | "about"
+  | "cli";
 
 /**
  * Default and safe bounds for the resizable folder sidebar panel.
@@ -43,11 +56,14 @@ interface UIState {
   setSidebarPanelWidth: (width: number) => void;
   setPromptListPaneWidth: (width: number) => void;
   resetColumnWidths: () => void;
+  pendingSettingsSection: SettingsSectionId | null;
+  requestSettingsSection: (section: SettingsSectionId) => void;
+  consumeSettingsSectionRequest: () => SettingsSectionId | null;
 }
 
 export const useUIStore = create<UIState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       viewMode: "prompt",
       appModule: "prompt",
       setViewMode: (mode) => set({ viewMode: mode, appModule: mode }),
@@ -84,6 +100,14 @@ export const useUIStore = create<UIState>()(
           sidebarPanelWidth: SIDEBAR_PANEL_WIDTH_DEFAULT,
           promptListPaneWidth: PROMPT_LIST_PANE_WIDTH_DEFAULT,
         }),
+      pendingSettingsSection: null,
+      requestSettingsSection: (section) =>
+        set({ pendingSettingsSection: section }),
+      consumeSettingsSectionRequest: () => {
+        const section = get().pendingSettingsSection;
+        set({ pendingSettingsSection: null });
+        return section;
+      },
     }),
     {
       name: "ui-storage",

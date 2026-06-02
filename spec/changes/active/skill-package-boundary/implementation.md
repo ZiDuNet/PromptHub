@@ -41,6 +41,15 @@ Read:
   - Sidebar and TopBar now treat the unopened official store as an empty catalog instead of exposing built-in registry counts or search results.
   - Skill list rows now render cached platform install status immediately but still refresh the current visible Skill ids, so post-install status cannot stay grey from a stale module cache.
   - Skill file tree directory buttons now expose `aria-expanded` and keep the existing recursive toggle behavior for synthetic folders created from nested package file paths.
+- Fixed custom Git/Gitea store refresh for private/self-hosted repositories:
+  - Remote HTTP fetches still block private network addresses by default.
+  - User-selected Git/Gitea repository scans now pass an explicit `allowPrivateNetwork` option for non-GitHub hosts so a private Gitea domain resolving to RFC1918 addresses can refresh the Skill store.
+  - User-selected private Git/Gitea repository scans now preserve and allow `http://192.168.x.x[:port]/owner/repo` style URLs while public HTTP URLs remain blocked.
+  - Git clone and remote branch listing share the same private-network HTTP boundary, so refresh, branch selection, and install do not disagree.
+  - `localhost` hostnames remain blocked even when private-network access or private HTTP is explicitly requested.
+- Fixed Skill store install pending feedback:
+  - Store cards now match pending install state by `source_id`, then `source_url`, then `slug`, so Claude Code / OpenAI Codex entries without a stable source id still show the spinner.
+  - Pending install state now takes precedence over the installed check badge, and the installed section also receives the pending key, so cards do not jump straight to a green check while install is still in progress.
 
 ## Verification
 
@@ -74,6 +83,15 @@ Read:
   - `pnpm --filter @prompthub/desktop test:run tests/unit/components/sidebar.test.tsx tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-file-editor.test.tsx tests/unit/components/top-bar.test.tsx tests/unit/components/skill-store-installed-state.test.tsx`
   - Passed: 5 files, 44 tests.
   - Note: Vitest still prints a React `act` warning from the Skill list platform-status async effect in one test, but the asserted stale-status transition passes.
+- Private Gitea refresh regression:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/main/skill-installer-remote.test.ts tests/unit/main/skill-installer.test.ts tests/unit/main/skill-installer-utils.test.ts`
+  - Passed: 3 files, 240 tests.
+- Store install pending UI regression:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-store-card.test.tsx tests/unit/components/skill-store-remote.test.tsx`
+  - Passed: 2 files, 38 tests.
+- Type check:
+  - `pnpm --filter @prompthub/desktop typecheck`
+  - Passed.
 
 Regression coverage added:
 
@@ -90,6 +108,8 @@ Regression coverage added:
   - Installed Skills with `local_repo_path` are scanned from the managed package directory even when their custom Gitea source URL is internal; the source issue is passed to AI as provenance context.
   - Store detail safety scan now uses the installed Skill content and `local_repo_path` when the store entry is already imported, so nested package files participate in the AI scan.
 - Added safety scan regressions for installed internal-Gitea packages and for store detail passing the managed package path.
+- Added private Gitea refresh regressions proving default remote fetches still block private network addresses while non-GitHub repository scans explicitly allow them, including direct `http://192.168.x.x:port/...` repositories.
+- Added Skill store card regressions proving quick-install pending state shows a spinner for source-id and source-url identities and remains visible even if the card is already classified as installed.
 - Added prompt-sensitive safety scan coverage for ordinary package docs/reference files, repository preflight evidence, prompt budget/truncation behavior, and real filesystem symlink escape filtering.
 - Added store batch scan coverage for preserving `local_repo_path` when scanning installed managed packages.
 - Added Sidebar regression coverage that the unopened official store shows a zero-count source.

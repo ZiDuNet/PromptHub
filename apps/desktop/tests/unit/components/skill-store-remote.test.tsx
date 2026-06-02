@@ -100,19 +100,20 @@ describe("SkillStore remote loading", () => {
 
     await waitFor(() => {
       const claudeCodeRepoRequests = fetchRemoteContent.mock.calls.filter(
-        ([url]) =>
-          url === "https://api.github.com/repos/anthropics/skills",
+        ([url]) => url === "https://api.github.com/repos/anthropics/skills",
       );
       expect(claudeCodeRepoRequests).toHaveLength(1);
     });
   });
 
   it("shows retry and network guidance for GitHub rate-limit failures", async () => {
-    const fetchRemoteContent = vi.fn().mockRejectedValue(
-      new Error(
-        "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
-      ),
-    );
+    const fetchRemoteContent = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
+        ),
+      );
 
     installWindowMocks({
       api: {
@@ -137,9 +138,7 @@ describe("SkillStore remote loading", () => {
     });
 
     await waitFor(() => {
-      expect(
-        getByText("Failed to load remote store"),
-      ).toBeInTheDocument();
+      expect(getByText("Failed to load remote store")).toBeInTheDocument();
       expect(
         getByText(
           "GitHub API rate limit reached. Try again in a few minutes, or switch to another network and retry.",
@@ -255,11 +254,17 @@ describe("SkillStore remote loading", () => {
   it("does not auto-sync unrelated remote stores on initial open", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/anthropics/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "anthropics" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "anthropics" },
+        });
       }
 
       if (url === "https://api.github.com/repos/openai/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "openai" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "openai" },
+        });
       }
 
       if (
@@ -267,8 +272,8 @@ describe("SkillStore remote loading", () => {
         "https://api.github.com/repos/anthropics/skills/git/trees/main?recursive=1"
       ) {
         return JSON.stringify({
-            tree: [{ path: "demo-skill/SKILL.md", type: "blob" }],
-          });
+          tree: [{ path: "demo-skill/SKILL.md", type: "blob" }],
+        });
       }
 
       if (
@@ -276,7 +281,9 @@ describe("SkillStore remote loading", () => {
         "https://api.github.com/repos/openai/skills/git/trees/main?recursive=1"
       ) {
         return JSON.stringify({
-          tree: [{ path: "skills/.curated/openai-skill/SKILL.md", type: "blob" }],
+          tree: [
+            { path: "skills/.curated/openai-skill/SKILL.md", type: "blob" },
+          ],
         });
       }
 
@@ -368,7 +375,10 @@ describe("SkillStore remote loading", () => {
   it("does not preload all remote stores when auto sync is disabled", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/anthropics/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "anthropics" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "anthropics" },
+        });
       }
 
       if (
@@ -448,7 +458,10 @@ describe("SkillStore remote loading", () => {
   it("loads the built-in OpenAI Codex store from the curated subdirectory", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/openai/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "openai" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "openai" },
+        });
       }
 
       if (
@@ -456,7 +469,9 @@ describe("SkillStore remote loading", () => {
         "https://api.github.com/repos/openai/skills/git/trees/main?recursive=1"
       ) {
         return JSON.stringify({
-          tree: [{ path: "skills/.curated/openai-skill/SKILL.md", type: "blob" }],
+          tree: [
+            { path: "skills/.curated/openai-skill/SKILL.md", type: "blob" },
+          ],
         });
       }
 
@@ -522,7 +537,8 @@ describe("SkillStore remote loading", () => {
       useSkillStore.getState().remoteStoreEntries["openai-codex"]?.skills[0],
     ).toEqual(
       expect.objectContaining({
-        source_url: "https://github.com/openai/skills/tree/main/skills/.curated/openai-skill",
+        source_url:
+          "https://github.com/openai/skills/tree/main/skills/.curated/openai-skill",
         content_url:
           "https://raw.githubusercontent.com/openai/skills/main/skills/.curated/openai-skill/SKILL.md",
       }),
@@ -532,7 +548,10 @@ describe("SkillStore remote loading", () => {
   it("falls back to repository root README when no SKILL.md exists", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/demo/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "demo" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "demo" },
+        });
       }
 
       if (
@@ -545,8 +564,7 @@ describe("SkillStore remote loading", () => {
       }
 
       if (
-        url ===
-        "https://raw.githubusercontent.com/demo/skills/main/README.md"
+        url === "https://raw.githubusercontent.com/demo/skills/main/README.md"
       ) {
         return "# Demo skills\n\n![cover](./images/demo.png)";
       }
@@ -601,7 +619,8 @@ describe("SkillStore remote loading", () => {
     ).toEqual(
       expect.objectContaining({
         source_url: "https://github.com/demo/skills/tree/main",
-        content_url: "https://raw.githubusercontent.com/demo/skills/main/README.md",
+        content_url:
+          "https://raw.githubusercontent.com/demo/skills/main/README.md",
       }),
     );
   });
@@ -609,7 +628,10 @@ describe("SkillStore remote loading", () => {
   it("loads git-repo sources from an explicit branch and directory", async () => {
     const fetchRemoteContent = vi.fn(async (url: string) => {
       if (url === "https://api.github.com/repos/demo/skills") {
-        return JSON.stringify({ default_branch: "main", owner: { login: "demo" } });
+        return JSON.stringify({
+          default_branch: "main",
+          owner: { login: "demo" },
+        });
       }
 
       if (
@@ -617,7 +639,9 @@ describe("SkillStore remote loading", () => {
         "https://api.github.com/repos/demo/skills/git/trees/release?recursive=1"
       ) {
         return JSON.stringify({
-          tree: [{ path: "skills/.curated/release-skill/SKILL.md", type: "blob" }],
+          tree: [
+            { path: "skills/.curated/release-skill/SKILL.md", type: "blob" },
+          ],
         });
       }
 
@@ -765,7 +789,9 @@ describe("SkillStore remote loading", () => {
       expect(screen.getAllByText("Writer")).toHaveLength(2);
     });
 
-    expect(screen.getAllByText("Same Name Source").length).toBeGreaterThanOrEqual(3);
+    expect(
+      screen.getAllByText("Same Name Source").length,
+    ).toBeGreaterThanOrEqual(3);
     expect(screen.queryByText("Stable")).not.toBeInTheDocument();
     expect(screen.queryByText("Dev")).not.toBeInTheDocument();
     expect(screen.queryByText("main")).not.toBeInTheDocument();
@@ -834,9 +860,15 @@ describe("SkillStore remote loading", () => {
     await waitFor(() => {
       expect(screen.getByText("Detail body")).toBeInTheDocument();
     });
-    expect(screen.getAllByText("Slug Only Source").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText("skills/slug-only-writer")).not.toBeInTheDocument();
-    expect(useSkillStore.getState().selectedRegistrySlug).toBe("slug-only-writer");
+    expect(
+      screen.getAllByText("Slug Only Source").length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.queryByText("skills/slug-only-writer"),
+    ).not.toBeInTheDocument();
+    expect(useSkillStore.getState().selectedRegistrySlug).toBe(
+      "slug-only-writer",
+    );
   });
 
   it("shows local source badges in store detail", async () => {
@@ -1076,6 +1108,90 @@ describe("SkillStore remote loading", () => {
     expect(fetchRemoteContent).not.toHaveBeenCalled();
   });
 
+  it("shows a spinner on the store card while quick install is pending", async () => {
+    let resolveInstall: (value: unknown) => void = () => {};
+    const installRegistrySkill = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveInstall = resolve;
+        }),
+    );
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "icelemon-skill",
+        name: "icelemon-skill",
+        install_name: "icelemon-skill",
+        source_label: "icelemon/skills",
+        source_branch: "main",
+        source_id: "source-icelemon-gitea",
+        description: "Gitea scanned store skill",
+        category: "dev",
+        author: "icelemon",
+        source_url: "https://gitea.example.com/icelemon/skills/tree/main",
+        tags: ["dev"],
+        version: "1.0.0",
+        content: "# icelemon",
+        compatibility: ["claude", "cursor"],
+      },
+    ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanRemoteGithub,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      installRegistrySkill,
+      customStoreSources: [
+        {
+          id: "gitea-pending-repo",
+          name: "Gitea Pending Repo",
+          type: "git-repo",
+          url: "https://gitea.example.com/icelemon/skills",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "gitea-pending-repo",
+    } as never);
+
+    const { container } = await renderWithI18n(<SkillStore />, {
+      language: "en",
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("icelemon-skill")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("Import"));
+    });
+
+    expect(installRegistrySkill).toHaveBeenCalledWith(
+      expect.objectContaining({ source_id: "source-icelemon-gitea" }),
+    );
+    expect(container.querySelector(".animate-spin")).not.toBeNull();
+    expect(screen.getByTitle("Installing...")).toBeDisabled();
+
+    await act(async () => {
+      resolveInstall({ id: "installed", name: "icelemon-skill" });
+    });
+  });
+
   it("keeps imported state after refreshing a self-hosted git source", async () => {
     const scanRemoteGithub = vi
       .fn()
@@ -1092,7 +1208,8 @@ describe("SkillStore remote loading", () => {
           description: "Writer skill",
           category: "dev",
           author: "icelemon",
-          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          source_url:
+            "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
           tags: ["dev"],
           version: "1.0.0",
           content: "# writer",
@@ -1112,7 +1229,8 @@ describe("SkillStore remote loading", () => {
           description: "Writer skill",
           category: "dev",
           author: "icelemon",
-          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          source_url:
+            "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
           tags: ["dev"],
           version: "1.0.0",
           content: "# writer",
@@ -1145,7 +1263,8 @@ describe("SkillStore remote loading", () => {
           id: "installed-writer",
           name: "writer",
           source_id: "stable-writer-source-id",
-          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          source_url:
+            "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
           protocol_type: "skill",
           author: "icelemon",
           tags: ["dev"],
@@ -1174,7 +1293,8 @@ describe("SkillStore remote loading", () => {
 
     await waitFor(() => {
       expect(
-        useSkillStore.getState().remoteStoreEntries["gitea-refresh-repo"]?.skills,
+        useSkillStore.getState().remoteStoreEntries["gitea-refresh-repo"]
+          ?.skills,
       ).toHaveLength(1);
     });
 
@@ -1250,7 +1370,9 @@ describe("SkillStore remote loading", () => {
       await renderWithI18n(<SkillStore />, { language: "en" });
     });
 
-    expect(screen.queryByPlaceholderText("Search skills...")).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Search skills..."),
+    ).not.toBeInTheDocument();
     expect(useSkillStore.getState().storeSearchQuery).toBe("pdf");
   });
 
@@ -1337,7 +1459,8 @@ describe("SkillStore remote loading", () => {
   it("defaults to saved translation in store detail and toggles back to original", async () => {
     useSkillStore.setState({
       getTranslationState: vi.fn().mockReturnValue({
-        value: "---\ndescription: Translated store content\n---\n\nTranslated store content",
+        value:
+          "---\ndescription: Translated store content\n---\n\nTranslated store content",
         hasTranslation: true,
         isStale: false,
       }),

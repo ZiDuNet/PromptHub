@@ -7,6 +7,10 @@ import { buildSkillVariantBadges } from "../../services/skill-variant-badges";
 
 const MAX_STAGGERED_STORE_CARDS = 12;
 
+function getRegistrySkillPendingKey(skill: RegistrySkill): string {
+  return skill.source_id || skill.source_url || skill.slug;
+}
+
 interface SkillStoreCardProps {
   skill: RegistrySkill;
   isInstalled: boolean;
@@ -30,7 +34,8 @@ export function SkillStoreCard({
 }: SkillStoreCardProps) {
   const { t } = useTranslation();
   const isInstallingThis = Boolean(
-    installingSourceId && skill.source_id && installingSourceId === skill.source_id,
+    installingSourceId &&
+    installingSourceId === getRegistrySkillPendingKey(skill),
   );
   const variantBadges = buildSkillVariantBadges(skill, t, {
     hasUpdate,
@@ -41,7 +46,9 @@ export function SkillStoreCard({
   );
   const branchBadges = variantBadges.filter(
     (badge) =>
-      badge.tone === "branch" || badge.tone === "dev" || badge.tone === "stable",
+      badge.tone === "branch" ||
+      badge.tone === "dev" ||
+      badge.tone === "stable",
   );
   const badges = storeLabel
     ? [
@@ -81,7 +88,10 @@ export function SkillStoreCard({
         <p className="text-[11px] text-muted-foreground truncate mt-0.5">
           {skill.description}
         </p>
-        <SkillVariantBadgeList badges={badges} className="mt-2 flex flex-wrap gap-1" />
+        <SkillVariantBadgeList
+          badges={badges}
+          className="mt-2 flex flex-wrap gap-1"
+        />
         {skill.weekly_installs && (
           <div className="mt-1.5 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
             {skill.weekly_installs}/wk
@@ -90,12 +100,26 @@ export function SkillStoreCard({
       </div>
 
       <div className="shrink-0">
-        {hasUpdate ? (
-          <div className="p-1.5 text-amber-500" title={t("skill.updateAvailable", "Update available")}>
+        {isInstallingThis ? (
+          <button
+            disabled
+            className="p-1.5 text-primary bg-primary/10 rounded-lg transition-all disabled:opacity-80"
+            title={t("skill.installing", "Installing...")}
+          >
+            <Loader2Icon className="w-4 h-4 animate-spin text-primary" />
+          </button>
+        ) : hasUpdate ? (
+          <div
+            className="p-1.5 text-amber-500"
+            title={t("skill.updateAvailable", "Update available")}
+          >
             <DownloadIcon className="w-4 h-4" />
           </div>
         ) : isInstalled ? (
-          <div className="p-1.5 text-green-500" title={t("skill.imported", "Imported")}>
+          <div
+            className="p-1.5 text-green-500"
+            title={t("skill.imported", "Imported")}
+          >
             <CheckIcon className="w-4 h-4" />
           </div>
         ) : (
@@ -105,11 +129,7 @@ export function SkillStoreCard({
             className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all active:scale-press-in disabled:opacity-50"
             title={t("skill.install", "Install")}
           >
-            {isInstallingThis ? (
-              <Loader2Icon className="w-4 h-4 animate-spin text-primary" />
-            ) : (
-              <PlusIcon className="w-4 h-4" />
-            )}
+            <PlusIcon className="w-4 h-4" />
           </button>
         )}
       </div>

@@ -1,7 +1,8 @@
 import { act, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPage } from "../../../src/renderer/components/settings/SettingsPage";
+import { useUIStore } from "../../../src/renderer/stores/ui.store";
 import { renderWithI18n } from "../../helpers/i18n";
 
 const useSettingsStoreMock = vi.fn();
@@ -26,9 +27,12 @@ vi.mock("../../../src/renderer/components/settings/AppearanceSettings", () => ({
 vi.mock("../../../src/renderer/components/settings/LanguageSettings", () => ({
   LanguageSettings: () => <div>language-content</div>,
 }));
-vi.mock("../../../src/renderer/components/settings/NotificationsSettings", () => ({
-  NotificationsSettings: () => <div>notifications-content</div>,
-}));
+vi.mock(
+  "../../../src/renderer/components/settings/NotificationsSettings",
+  () => ({
+    NotificationsSettings: () => <div>notifications-content</div>,
+  }),
+);
 vi.mock("../../../src/renderer/components/settings/SecuritySettings", () => ({
   SecuritySettings: () => <div>security-content</div>,
 }));
@@ -47,17 +51,27 @@ vi.mock("../../../src/renderer/components/settings/DataSettings", () => ({
 vi.mock("../../../src/renderer/components/settings/SkillSettings", () => ({
   SkillSettings: () => <div>skill-content</div>,
 }));
-vi.mock("../../../src/renderer/components/settings/AISettingsPrototype", () => ({
-  AISettingsPrototype: () => <div>ai-content</div>,
-}));
+vi.mock(
+  "../../../src/renderer/components/settings/AISettingsPrototype",
+  () => ({
+    AISettingsPrototype: () => <div>ai-content</div>,
+  }),
+);
 vi.mock("../../../src/renderer/components/settings/WebDeviceSettings", () => ({
   WebDeviceSettings: () => <div>web-device-content</div>,
 }));
-vi.mock("../../../src/renderer/components/settings/WebWorkspaceSettings", () => ({
-  WebWorkspaceSettings: () => <div>web-workspace-content</div>,
-}));
+vi.mock(
+  "../../../src/renderer/components/settings/WebWorkspaceSettings",
+  () => ({
+    WebWorkspaceSettings: () => <div>web-workspace-content</div>,
+  }),
+);
 
 describe("SettingsPage", () => {
+  beforeEach(() => {
+    useUIStore.setState({ pendingSettingsSection: null });
+  });
+
   it("shows enabled badge on active cloud backup targets in the data submenu", async () => {
     useSettingsStoreMock.mockReturnValue({
       syncProvider: "webdav",
@@ -77,7 +91,9 @@ describe("SettingsPage", () => {
       screen.getByRole("button", { name: "Data & Sync" }).click();
     });
 
-    expect(screen.getByRole("button", { name: /WebDAV Enabled/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /WebDAV Enabled/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /S3 Compatible Storage Enabled/ }),
     ).toBeInTheDocument();
@@ -116,6 +132,26 @@ describe("SettingsPage", () => {
     });
 
     expect(screen.getByText("skill-content")).toBeInTheDocument();
+  });
+
+  it("opens the agent management section from a pending settings navigation request", async () => {
+    useSettingsStoreMock.mockReturnValue({
+      syncProvider: "manual",
+      webdavEnabled: false,
+      selfHostedSyncEnabled: false,
+      s3StorageEnabled: false,
+      desktopHomeModules: ["prompt", "skill", "rules"],
+    });
+    useUIStore.getState().requestSettingsSection("skill");
+
+    await act(async () => {
+      await renderWithI18n(<SettingsPage onBack={vi.fn()} />, {
+        language: "en",
+      });
+    });
+
+    expect(screen.getByText("skill-content")).toBeInTheDocument();
+    expect(useUIStore.getState().pendingSettingsSection).toBeNull();
   });
 
   it("keeps appearance as the place where desktop workspace controls live", async () => {
@@ -182,6 +218,8 @@ describe("SettingsPage", () => {
     });
 
     expect(screen.getByText("ai-content")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Model Routing" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Model Routing" }),
+    ).not.toBeInTheDocument();
   });
 });

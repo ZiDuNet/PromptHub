@@ -68,6 +68,32 @@ const SKILL_GALLERY_COLUMNS: SkillGalleryColumnMode[] = [
   "8",
 ];
 const LOCAL_SKILL_SCAN_TIMEOUT_MS = 30_000;
+const SKILL_VIEW_TRANSITION_CLASS =
+  "h-full min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-smooth";
+
+interface SkillViewTransitionProps
+  extends React.HTMLAttributes<HTMLDivElement> {
+  viewKey: string;
+}
+
+function SkillViewTransition({
+  viewKey,
+  className = "",
+  children,
+  ...props
+}: SkillViewTransitionProps) {
+  return (
+    <div
+      key={viewKey}
+      data-testid="skill-view-transition"
+      data-skill-view={viewKey}
+      className={`${SKILL_VIEW_TRANSITION_CLASS} ${className}`}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -635,43 +661,49 @@ export function SkillManager() {
   // 商店视图：显示技能商店页面
   if (runtimeCapabilities.skillStore && effectiveStoreView === "store") {
     return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        }
-      >
-        <SkillStore />
-      </Suspense>
+      <SkillViewTransition viewKey="store">
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          }
+        >
+          <SkillStore />
+        </Suspense>
+      </SkillViewTransition>
     );
   }
 
   if (runtimeCapabilities.skillLocalScan && effectiveStoreView === "projects") {
     return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        }
-      >
-        <SkillProjectsView />
-      </Suspense>
+      <SkillViewTransition viewKey="projects">
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          }
+        >
+          <SkillProjectsView />
+        </Suspense>
+      </SkillViewTransition>
     );
   }
 
   if (runtimeCapabilities.skillLocalScan && effectiveStoreView === "agents") {
     return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        }
-      >
-        <SkillAgentsView />
-      </Suspense>
+      <SkillViewTransition viewKey="agents">
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          }
+        >
+          <SkillAgentsView />
+        </Suspense>
+      </SkillViewTransition>
     );
   }
 
@@ -679,33 +711,35 @@ export function SkillManager() {
   // 如果选中了技能，显示全宽详情页（画廊和列表视图使用相同交互）
   if (selectedSkillId && !isSelectionMode) {
     return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        }
-      >
-        <SkillRenderBoundary
-          resetKey={selectedSkillId}
-          title={t(
-            "skill.detailRenderError",
-            "This skill cannot be opened right now",
-          )}
-          description={t(
-            "skill.detailRenderErrorHint",
-            "This render error was contained so the page stays usable. You can go back to the list or retry loading the detail view now.",
-          )}
-          primaryActionLabel={t("common.back", "Back")}
-          onPrimaryAction={() => selectSkill(null)}
-          secondaryActionLabel={t("common.retry", "Retry")}
-          onSecondaryAction={() => {
-            void loadSkills().then(() => loadDeployedStatus());
-          }}
+      <SkillViewTransition viewKey={`detail-${selectedSkillId}`}>
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          }
         >
-          <SkillFullDetailPage />
-        </SkillRenderBoundary>
-      </Suspense>
+          <SkillRenderBoundary
+            resetKey={selectedSkillId}
+            title={t(
+              "skill.detailRenderError",
+              "This skill cannot be opened right now",
+            )}
+            description={t(
+              "skill.detailRenderErrorHint",
+              "This render error was contained so the page stays usable. You can go back to the list or retry loading the detail view now.",
+            )}
+            primaryActionLabel={t("common.back", "Back")}
+            onPrimaryAction={() => selectSkill(null)}
+            secondaryActionLabel={t("common.retry", "Retry")}
+            onSecondaryAction={() => {
+              void loadSkills().then(() => loadDeployedStatus());
+            }}
+          >
+            <SkillFullDetailPage />
+          </SkillRenderBoundary>
+        </Suspense>
+      </SkillViewTransition>
     );
   }
 
@@ -1060,8 +1094,9 @@ export function SkillManager() {
   })();
 
   return (
-    <div
-      className="relative flex flex-1 flex-row h-full overflow-hidden app-wallpaper-section"
+    <SkillViewTransition
+      viewKey="my-skills"
+      className="relative flex flex-1 flex-row overflow-hidden app-wallpaper-section"
       onDragEnter={(event) => {
         if (!hasFileItems(event.dataTransfer)) {
           return;
@@ -1249,7 +1284,7 @@ export function SkillManager() {
                       type="button"
                       onClick={() => handleMySkillFilterChange(option.value)}
                       aria-pressed={isActive}
-                      className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                      className={`inline-flex h-9 min-w-[8rem] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors ${
                         isActive
                           ? "border-primary/30 bg-primary/10 text-primary"
                           : "border-border app-wallpaper-surface text-muted-foreground hover:border-primary/25 hover:bg-accent hover:text-foreground"
@@ -1258,7 +1293,7 @@ export function SkillManager() {
                       {option.icon}
                       <span>{option.label}</span>
                       <span
-                        className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                        className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] ${
                           isActive
                             ? "bg-primary/15 text-primary"
                             : "bg-muted text-muted-foreground"
@@ -1676,6 +1711,6 @@ export function SkillManager() {
           </div>
         </div>
       ) : null}
-    </div>
+    </SkillViewTransition>
   );
 }

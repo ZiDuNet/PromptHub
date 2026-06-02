@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 import {
   SettingsIcon,
@@ -33,6 +33,7 @@ import { SkillSettings } from "./SkillSettings";
 import { WebDeviceSettings } from "./WebDeviceSettings";
 import { WebWorkspaceSettings } from "./WebWorkspaceSettings";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useUIStore, type SettingsSectionId } from "../../stores/ui.store";
 import { isWebRuntime } from "../../runtime";
 
 interface BackupImportControllerLike {
@@ -137,9 +138,18 @@ const DATA_SETTINGS_SUBMENU_GROUPS: Array<{
   },
 ];
 
-export function SettingsPage({ onBack, backupImportController }: SettingsPageProps) {
+export function SettingsPage({
+  onBack,
+  backupImportController,
+}: SettingsPageProps) {
   const webRuntime = isWebRuntime();
   const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : DESKTOP_SETTINGS_MENU;
+  const pendingSettingsSection = useUIStore(
+    (state) => state.pendingSettingsSection,
+  );
+  const consumeSettingsSectionRequest = useUIStore(
+    (state) => state.consumeSettingsSectionRequest,
+  );
   const syncProvider = useSettingsStore((state) => state.syncProvider);
   const webdavEnabled = useSettingsStore((state) => state.webdavEnabled);
   const selfHostedSyncEnabled = useSettingsStore(
@@ -152,6 +162,20 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
   const [activeDataSubsection, setActiveDataSubsection] =
     useState<DataSettingsSubsectionId>("local");
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (!pendingSettingsSection) {
+      return;
+    }
+
+    const requestedSection = consumeSettingsSectionRequest();
+    if (
+      requestedSection &&
+      settingsMenu.some((item) => item.id === requestedSection)
+    ) {
+      setActiveSection(requestedSection as SettingsSectionId);
+    }
+  }, [consumeSettingsSectionRequest, pendingSettingsSection, settingsMenu]);
 
   const renderContent = () => {
     switch (activeSection) {
@@ -191,7 +215,8 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
       ? {
           groups: DATA_SETTINGS_SUBMENU_GROUPS,
           activeId: activeDataSubsection,
-          onSelect: (id: string) => setActiveDataSubsection(id as DataSettingsSubsectionId),
+          onSelect: (id: string) =>
+            setActiveDataSubsection(id as DataSettingsSubsectionId),
         }
       : null;
   const enabledSubsections = useMemo(
@@ -254,7 +279,9 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
                     onClick={() => activeSubmenu.onSelect(item.id)}
                     aria-label={`${String(t(item.labelKey, item.fallback))}${
                       item.id in enabledSubsections &&
-                      enabledSubsections[item.id as keyof typeof enabledSubsections]
+                      enabledSubsections[
+                        item.id as keyof typeof enabledSubsections
+                      ]
                         ? ` ${t("common.enabled")}`
                         : ""
                     }`}
@@ -275,9 +302,7 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                           syncProvider ===
-                          (item.id === "selfHosted"
-                            ? "self-hosted"
-                            : item.id)
+                          (item.id === "selfHosted" ? "self-hosted" : item.id)
                             ? activeSubmenu.activeId === item.id
                               ? "bg-white/20 text-white"
                               : "bg-primary/10 text-primary"
@@ -305,11 +330,16 @@ export function SettingsPage({ onBack, backupImportController }: SettingsPagePro
             : "flex-1 overflow-y-auto px-6 py-5 app-wallpaper-section"
         }
       >
-        <div className={activeSection === "ai" ? "h-full max-w-none" : "max-w-4xl mx-auto"}>
+        <div
+          className={
+            activeSection === "ai" ? "h-full max-w-none" : "max-w-4xl mx-auto"
+          }
+        >
           {activeSection === "ai" ? null : (
             <h1 className="text-lg font-semibold mb-4">
               {t(
-                settingsMenu.find((m) => m.id === activeSection)?.labelKey || "",
+                settingsMenu.find((m) => m.id === activeSection)?.labelKey ||
+                  "",
               )}
             </h1>
           )}

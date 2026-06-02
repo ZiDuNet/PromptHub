@@ -79,6 +79,15 @@ And no managed local repo path is available
 When its source URL resolves to an internal or otherwise blocked address
 Then PromptHub blocks the pre-install scan before calling AI.
 
+#### Scenario: User-selected custom Git store resolves to private network
+
+Given the user configured or entered a custom Git/Gitea repository as a Skill store
+And that repository host is an RFC1918/private network address or resolves to one
+When PromptHub refreshes or scans that Git repository for importable Skills
+Then PromptHub may access the private network address for that Git repository scan
+And HTTP may be used only for that explicit private-network Git repository scan
+And ordinary remote URL fetches, public HTTP URLs, and localhost hostnames remain blocked by default.
+
 ## MODIFIED Requirements
 
 ### Existing Skill File Contract
@@ -95,3 +104,4 @@ The existing `SKILL.md` contract is narrowed to mean entrypoint file contract. I
 - Safety scan tests must distinguish remote pre-install source checks from installed managed-package scans.
 - Safety scan tests must use prompt-sensitive AI mocks so a test fails when package file content or preflight evidence is omitted from the AI request.
 - Safety scan tests must cover ordinary docs/reference files, repository preflight findings, large package budget/truncation behavior, and symlink/path escape filtering.
+- Git/Gitea store refresh tests must verify that private-network access and private HTTP are explicit repository-scan options, not a global remote fetch bypass.

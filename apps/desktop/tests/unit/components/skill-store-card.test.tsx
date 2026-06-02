@@ -52,7 +52,10 @@ describe("SkillStoreCard", () => {
   it("renders skill name and description", () => {
     render(
       <SkillStoreCard
-        skill={makeSkill({ name: "Code Reviewer", description: "Reviews diffs" })}
+        skill={makeSkill({
+          name: "Code Reviewer",
+          description: "Reviews diffs",
+        })}
         isInstalled={false}
         index={0}
         onClick={vi.fn()}
@@ -141,6 +144,42 @@ describe("SkillStoreCard", () => {
     // The spinner adds animate-spin to the icon.
     const spinner = container.querySelector(".animate-spin");
     expect(spinner).not.toBeNull();
+  });
+
+  it("matches installing state by source URL when source id is missing", () => {
+    const { container } = render(
+      <SkillStoreCard
+        skill={makeSkill({
+          source_id: undefined,
+          source_url: "https://example.com/store/skill",
+        })}
+        isInstalled={false}
+        installingSourceId="https://example.com/store/skill"
+        index={0}
+        onQuickInstall={vi.fn()}
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button")).toBeDisabled();
+    expect(container.querySelector(".animate-spin")).not.toBeNull();
+  });
+
+  it("keeps the spinner visible while a pending skill has already moved to installed", () => {
+    const { container } = render(
+      <SkillStoreCard
+        skill={makeSkill({ source_id: "busy" })}
+        isInstalled
+        installingSourceId="busy"
+        index={0}
+        onQuickInstall={vi.fn()}
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("button")).toBeDisabled();
+    expect(container.querySelector(".animate-spin")).not.toBeNull();
+    expect(container.querySelector(".text-green-500")).toBeNull();
   });
 
   it("does NOT disable the install button while another skill is installing", () => {

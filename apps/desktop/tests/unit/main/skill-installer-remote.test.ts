@@ -2,13 +2,27 @@
  * @vitest-environment node
  */
 import { describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "events";
+
+const httpRequestMock = vi.hoisted(() => vi.fn());
+
+vi.mock("http", async () => {
+  const actual = await vi.importActual<typeof import("http")>("http");
+  return {
+    ...actual,
+    request: httpRequestMock,
+  };
+});
 
 vi.mock("dns/promises", () => ({
   lookup: vi.fn(),
 }));
 
 import * as dns from "dns/promises";
-import { resolvePublicAddress } from "../../../src/main/services/skill-installer-remote";
+import {
+  fetchRemoteText,
+  resolvePublicAddress,
+} from "../../../src/main/services/skill-installer-remote";
 
 describe("skill-installer-remote", () => {
   it("allows trusted remote hosts when DNS is mapped to 198.18.x.x compatibility addresses", async () => {
@@ -16,9 +30,9 @@ describe("skill-installer-remote", () => {
       { address: "198.18.0.195", family: 4 },
     ]);
 
-    await expect(resolvePublicAddress("raw.githubusercontent.com")).resolves.toEqual(
-      { address: "198.18.0.195", family: 4 },
-    );
+    await expect(
+      resolvePublicAddress("raw.githubusercontent.com"),
+    ).resolves.toEqual({ address: "198.18.0.195", family: 4 });
   });
 
   it("allows trusted remote hosts when DNS is mapped to translated IPv6 compatibility addresses", async () => {
@@ -26,9 +40,9 @@ describe("skill-installer-remote", () => {
       { address: "::ffff:0:c612:c3", family: 6 },
     ]);
 
-    await expect(resolvePublicAddress("raw.githubusercontent.com")).resolves.toEqual(
-      { address: "::ffff:0:c612:c3", family: 6 },
-    );
+    await expect(
+      resolvePublicAddress("raw.githubusercontent.com"),
+    ).resolves.toEqual({ address: "::ffff:0:c612:c3", family: 6 });
   });
 
   it("still blocks untrusted hosts that resolve to 198.18.x.x", async () => {
@@ -38,6 +52,90 @@ describe("skill-installer-remote", () => {
 
     await expect(resolvePublicAddress("example.com")).rejects.toThrow(
       /Access to internal network addresses is not allowed/,
+    );
+  });
+
+  it("blocks private network addresses by default", async () => {
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "192.168.31.12", family: 4 },
+    ]);
+
+    await expect(resolvePublicAddress("gitea.company.test")).rejects.toThrow(
+      /Access to internal network addresses is not allowed/,
+    );
+  });
+
+  it("allows explicit private network access for user-selected Git hosts", async () => {
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "192.168.31.12", family: 4 },
+    ]);
+
+    await expect(
+      resolvePublicAddress("gitea.company.test", {
+        allowPrivateNetwork: true,
+      }),
+    ).resolves.toEqual({ address: "192.168.31.12", family: 4 });
+  });
+
+  it("does not let the private network option bypass localhost hostnames", async () => {
+    await expect(
+      resolvePublicAddress("localhost", { allowPrivateNetwork: true }),
+    ).rejects.toThrow(/Access to local network addresses is not allowed/);
+  });
+
+  it("rejects public HTTP even when private network access is enabled", async () => {
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "93.184.216.34", family: 4 },
+    ]);
+
+    await expect(
+      fetchRemoteText("http://example.com/team/skills", 0, {
+        allowPrivateNetwork: true,
+        allowInsecurePrivateNetworkHttp: true,
+      }),
+    ).rejects.toThrow(/Only HTTPS URLs are allowed/);
+    expect(httpRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("allows HTTP only for explicitly trusted private Git hosts", async () => {
+    vi.mocked(dns.lookup).mockResolvedValueOnce([
+      { address: "192.168.31.12", family: 4 },
+    ]);
+    httpRequestMock.mockImplementationOnce((options, callback) => {
+      const response = new EventEmitter() as EventEmitter & {
+        headers: Record<string, string>;
+        resume: () => void;
+        statusCode: number;
+      };
+      response.statusCode = 200;
+      response.headers = {};
+      response.resume = vi.fn();
+      const request = {
+        destroy: vi.fn(),
+        end: vi.fn(() => {
+          callback(response);
+          response.emit("data", Buffer.from("ok"));
+          response.emit("end");
+        }),
+        on: vi.fn(),
+      };
+      return request;
+    });
+
+    await expect(
+      fetchRemoteText("http://gitea.company.test/api/v1/repos/team/skills", 0, {
+        allowPrivateNetwork: true,
+        allowInsecurePrivateNetworkHttp: true,
+      }),
+    ).resolves.toBe("ok");
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: "192.168.31.12",
+        method: "GET",
+        path: "/api/v1/repos/team/skills",
+        protocol: "http:",
+      }),
+      expect.any(Function),
     );
   });
 });
@@ -50,9 +148,8 @@ describe("skill-installer-remote", () => {
 describe("shouldAttachGithubAuth (issue #108)", () => {
   // Imported lazily so the dns mock above does not leak into this block.
   async function load() {
-    const mod = await import(
-      "../../../src/main/services/skill-installer-remote"
-    );
+    const mod =
+      await import("../../../src/main/services/skill-installer-remote");
     return mod.shouldAttachGithubAuth;
   }
 

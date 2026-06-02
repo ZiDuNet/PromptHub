@@ -236,22 +236,29 @@ function ProjectFormModal({
               "Choose the project root first. PromptHub can infer the project name and start scanning right away.",
             )}
           </p>
-          <div className="flex gap-2">
-            <Input
-              className="flex-1"
-              value={rootPath}
-              onChange={(event) => {
-                setRootPath(event.target.value);
-              }}
-              placeholder={t(
-                "skill.projectRootPathPlaceholder",
-                "/path/to/project",
-              )}
-            />
+          <div
+            data-testid="project-root-path-row"
+            className="flex w-full items-start gap-2"
+          >
+            <div
+              data-testid="project-root-path-input-shell"
+              className="min-w-0 flex-1"
+            >
+              <Input
+                value={rootPath}
+                onChange={(event) => {
+                  setRootPath(event.target.value);
+                }}
+                placeholder={t(
+                  "skill.projectRootPathPlaceholder",
+                  "/path/to/project",
+                )}
+              />
+            </div>
             <button
               type="button"
               onClick={() => void handlePickFolder("root")}
-              className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
             >
               <FolderOpenIcon className="h-4 w-4" />
               {t("skill.browseFolder", "Browse")}
@@ -274,26 +281,33 @@ function ProjectFormModal({
           <label className="block text-sm font-medium text-foreground">
             {t("skill.projectScanPaths", "Scan Paths")}
           </label>
-          <div className="flex gap-2">
-            <Input
-              className="flex-1"
-              value={scanPathInput}
-              onChange={(event) => setScanPathInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addScanPath();
-                }
-              }}
-              placeholder={t(
-                "skill.projectScanPathPlaceholder",
-                "Optional extra directories to scan",
-              )}
-            />
+          <div
+            data-testid="project-scan-path-row"
+            className="flex w-full items-start gap-2"
+          >
+            <div
+              data-testid="project-scan-path-input-shell"
+              className="min-w-0 flex-1"
+            >
+              <Input
+                value={scanPathInput}
+                onChange={(event) => setScanPathInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addScanPath();
+                  }
+                }}
+                placeholder={t(
+                  "skill.projectScanPathPlaceholder",
+                  "Optional extra directories to scan",
+                )}
+              />
+            </div>
             <button
               type="button"
               onClick={() => addScanPath()}
-              className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
             >
               <PlusIcon className="h-4 w-4" />
               {t("common.add", "Add")}
@@ -301,7 +315,7 @@ function ProjectFormModal({
             <button
               type="button"
               onClick={() => void handlePickFolder("scan")}
-              className="inline-flex items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-border app-wallpaper-surface px-4 text-sm text-foreground transition-colors hover:bg-accent"
             >
               <FolderOpenIcon className="h-4 w-4" />
               {t("skill.browseFolder", "Browse")}
@@ -1174,17 +1188,6 @@ export function SkillProjectsView() {
                       <div className="flex shrink-0 items-center gap-2 self-end">
                         <button
                           type="button"
-                          onClick={() => setIsLibraryImportModalOpen(true)}
-                          className="inline-flex h-9 w-44 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-                        >
-                          <BookOpenIcon className="h-4 w-4" />
-                          {t(
-                            "skill.importFromMySkills",
-                            "Import from My Skills",
-                          )}
-                        </button>
-                        <button
-                          type="button"
                           onClick={() =>
                             void handleScanProject(selectedProject)
                           }
@@ -1213,12 +1216,17 @@ export function SkillProjectsView() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setProjectPendingDelete(selectedProject)}
+                          onClick={() =>
+                            setProjectPendingDelete(selectedProject)
+                          }
                           aria-label={t(
                             "skill.deleteProjectTitle",
                             "Delete project",
                           )}
-                          title={t("skill.deleteProjectTitle", "Delete project")}
+                          title={t(
+                            "skill.deleteProjectTitle",
+                            "Delete project",
+                          )}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
                         >
                           <TrashIcon className="h-4 w-4" />
@@ -1440,6 +1448,17 @@ export function SkillProjectsView() {
                         })}
                       </div>
                     )}
+                  </div>
+
+                  <div className="border-t border-border p-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsLibraryImportModalOpen(true)}
+                      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                    >
+                      <BookOpenIcon className="h-4 w-4" />
+                      {t("skill.importFromMySkills", "Import from My Skills")}
+                    </button>
                   </div>
                 </div>
               </div>

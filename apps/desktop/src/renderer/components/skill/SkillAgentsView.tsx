@@ -8,17 +8,18 @@ import {
   FolderOpenIcon,
   Loader2Icon,
   RefreshCwIcon,
+  SettingsIcon,
   TrashIcon,
 } from "lucide-react";
 import type {
   AgentScannedSkill,
   Skill,
   SkillInstallMode,
-  SkillPlatformScanResult,
 } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
+import { useUIStore } from "../../stores/ui.store";
 import { filterDetectedPlatforms } from "../../services/platform-visibility";
 import { normalizeProjectPathForComparison } from "../../services/project-skill-targets";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -30,7 +31,7 @@ import { buildProjectDetailSkill } from "./project-detail-adapter";
 import { sortSkillPlatformsByPreference } from "./use-skill-platform";
 
 const AGENT_SECTION_HEADER_CLASS =
-  "h-[152px] border-b border-border app-wallpaper-panel-strong";
+  "h-[132px] border-b border-border app-wallpaper-panel-strong";
 
 function getManagedSkillMatch(
   scannedSkill: AgentScannedSkill,
@@ -65,8 +66,15 @@ export function SkillAgentsView() {
   const selectSkill = useSkillStore((state) => state.selectSkill);
   const setStoreView = useSkillStore((state) => state.setStoreView);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
+  const agentScanState = useSkillStore((state) => state.agentScanState);
+  const scanAgentPlatformSkills = useSkillStore(
+    (state) => state.scanAgentPlatformSkills,
+  );
   const importScannedSkills = useSkillStore(
     (state) => state.importScannedSkills,
+  );
+  const requestSettingsSection = useUIStore(
+    (state) => state.requestSettingsSection,
   );
   const skillPlatformOrder =
     useSettingsStore((state) => state.skillPlatformOrder) ?? [];
@@ -78,11 +86,7 @@ export function SkillAgentsView() {
   const [selectedPlatformId, setSelectedPlatformId] = useState<string | null>(
     null,
   );
-  const [scanResult, setScanResult] = useState<SkillPlatformScanResult | null>(
-    null,
-  );
   const [isLoadingPlatforms, setIsLoadingPlatforms] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
   const [selectedSkillPath, setSelectedSkillPath] = useState<string | null>(
     null,
   );
@@ -119,6 +123,11 @@ export function SkillAgentsView() {
       null,
     [selectedPlatformId, visiblePlatforms],
   );
+  const selectedAgentScanState = selectedPlatformId
+    ? agentScanState[selectedPlatformId]
+    : undefined;
+  const scanResult = selectedAgentScanState?.result ?? null;
+  const isScanning = Boolean(selectedAgentScanState?.isScanning);
 
   const visibleAgentSkills = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -199,7 +208,7 @@ export function SkillAgentsView() {
   }, [scanResult?.scannedSkills, skills]);
 
   const loadPlatforms = useCallback(
-    async (options?: { toast?: boolean }) => {
+    async (options?: { toast?: boolean; scanSkills?: boolean }) => {
       setIsLoadingPlatforms(true);
       try {
         const [supported, detected] = await Promise.all([
@@ -227,31 +236,60 @@ export function SkillAgentsView() {
             "success",
           );
         }
+        if (options?.scanSkills) {
+          const scanResults = await Promise.all(
+            nextVisiblePlatforms.map(async (platform) => {
+              try {
+                await scanAgentPlatformSkills(platform.id);
+                return { ok: true };
+              } catch (error) {
+                console.error(
+                  `Failed to scan agent skills for ${platform.id}:`,
+                  error,
+                );
+                return { ok: false };
+              }
+            }),
+          );
+          if (scanResults.some((result) => !result.ok)) {
+            showToast(
+              t("skill.agentScanFailed", "Failed to scan agent skills"),
+              "error",
+            );
+          }
+        }
+        return nextVisiblePlatforms;
       } catch (error) {
         console.error("Failed to load skill agents:", error);
         showToast(
           t("skill.agentsLoadFailed", "Failed to load agents"),
           "error",
         );
+        return [];
       } finally {
         setIsLoadingPlatforms(false);
       }
     },
-    [disabledPlatformIds, showToast, skillPlatformOrder, t],
+    [
+      disabledPlatformIds,
+      scanAgentPlatformSkills,
+      showToast,
+      skillPlatformOrder,
+      t,
+    ],
   );
 
-  const scanSelectedPlatform = useCallback(
-    async (options?: { toast?: boolean }) => {
-      if (!selectedPlatformId) {
-        setScanResult(null);
+  const scanPlatform = useCallback(
+    async (platformId: string | null, options?: { toast?: boolean }) => {
+      if (!platformId) {
         return;
       }
-      setIsScanning(true);
       try {
-        const result =
-          await window.api.skill.scanPlatformSkills(selectedPlatformId);
-        setScanResult(result);
+        const result = await scanAgentPlatformSkills(platformId);
         setSelectedSkillPath((current) => {
+          if (selectedPlatformId !== platformId) {
+            return current;
+          }
           if (
             current &&
             result.scannedSkills.some((skill) => skill.localPath === current)
@@ -271,16 +309,31 @@ export function SkillAgentsView() {
         }
       } catch (error) {
         console.error("Failed to scan agent skills:", error);
-        setScanResult(null);
         showToast(
           t("skill.agentScanFailed", "Failed to scan agent skills"),
           "error",
         );
-      } finally {
-        setIsScanning(false);
       }
     },
-    [selectedPlatformId, showToast, t],
+    [scanAgentPlatformSkills, selectedPlatformId, showToast, t],
+  );
+
+  const scanSelectedPlatform = useCallback(
+    (options?: { toast?: boolean }) =>
+      scanPlatform(selectedPlatformId, options),
+    [scanPlatform, selectedPlatformId],
+  );
+
+  const handleSelectPlatform = useCallback(
+    (platformId: string) => {
+      setSelectedPlatformId(platformId);
+      setSelectedSkillPath(null);
+      const platformScanState = agentScanState[platformId];
+      if (!platformScanState?.result && !platformScanState?.isScanning) {
+        void scanPlatform(platformId);
+      }
+    },
+    [agentScanState, scanPlatform],
   );
 
   useEffect(() => {
@@ -288,8 +341,18 @@ export function SkillAgentsView() {
   }, [loadPlatforms]);
 
   useEffect(() => {
-    void scanSelectedPlatform();
-  }, [scanSelectedPlatform]);
+    setSelectedSkillPath((current) => {
+      if (
+        current &&
+        (scanResult?.scannedSkills ?? []).some(
+          (skill) => skill.localPath === current,
+        )
+      ) {
+        return current;
+      }
+      return null;
+    });
+  }, [scanResult?.scannedSkills]);
 
   const installLibrarySkill = async (skill: Skill, mode: SkillInstallMode) => {
     if (!selectedPlatformId) {
@@ -483,30 +546,49 @@ export function SkillAgentsView() {
       ) : (
         <div className="flex h-full min-h-0 overflow-hidden">
           <div className="flex min-h-0 w-80 shrink-0 flex-col border-r border-border app-wallpaper-panel-strong">
-            <div className={`${AGENT_SECTION_HEADER_CLASS} shrink-0`}>
-              <div className="flex h-full items-start justify-between gap-4 px-4 py-5">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-semibold text-foreground">
-                    {t("nav.agentSkills", "Agent Skills")}
-                  </h2>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                    {t(
-                      "skill.agentsSidebarHint",
-                      "Browse each agent's Skill directory and manage copy or symlink installs.",
-                    )}
-                  </p>
+            <div
+              data-testid="agent-sidebar-header"
+              className={`${AGENT_SECTION_HEADER_CLASS} shrink-0`}
+            >
+              <div className="flex h-full items-start justify-between gap-4 px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {t("nav.agentSkills", "Agent Skills")}
+                    </h2>
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {t(
+                        "skill.agentsSidebarHint",
+                        "Browse each agent's Skill directory and manage copy or symlink installs.",
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void loadPlatforms({ toast: true })}
-                  disabled={isLoadingPlatforms}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:text-primary disabled:opacity-60"
-                  title={t("common.refresh", "Refresh")}
-                >
-                  <RefreshCwIcon
-                    className={`h-4 w-4 ${isLoadingPlatforms ? "animate-spin" : ""}`}
-                  />
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid="agent-manage-settings-button"
+                    onClick={() => requestSettingsSection("skill")}
+                    aria-label={t("skill.manageAgents", "Manage Agents")}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:text-primary disabled:opacity-60"
+                    title={t("skill.manageAgents", "Manage Agents")}
+                  >
+                    <SettingsIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void loadPlatforms({ toast: true, scanSkills: true })
+                    }
+                    disabled={isLoadingPlatforms}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:text-primary disabled:opacity-60"
+                    title={t("common.refresh", "Refresh")}
+                  >
+                    <RefreshCwIcon
+                      className={`h-4 w-4 ${isLoadingPlatforms ? "animate-spin" : ""}`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -521,11 +603,14 @@ export function SkillAgentsView() {
               ) : (
                 visiblePlatforms.map((platform) => {
                   const isActive = platform.id === selectedPlatformId;
+                  const platformScanState = agentScanState[platform.id];
+                  const skillCount =
+                    platformScanState?.result?.scannedSkills.length ?? 0;
                   return (
                     <button
                       key={platform.id}
                       type="button"
-                      onClick={() => setSelectedPlatformId(platform.id)}
+                      onClick={() => handleSelectPlatform(platform.id)}
                       className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
                         isActive
                           ? "border-primary/40 bg-primary/10"
@@ -547,6 +632,16 @@ export function SkillAgentsView() {
                             {platform.skillsRelativePath}
                           </div>
                         </div>
+                        {platformScanState?.isScanning ? (
+                          <Loader2Icon className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                        ) : (
+                          <span className="ml-2 shrink-0 rounded-full border border-border bg-background/70 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {t("skill.agentStatsTotal", {
+                              count: skillCount,
+                              defaultValue: `${skillCount} skills`,
+                            })}
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -555,8 +650,14 @@ export function SkillAgentsView() {
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-1 flex-col app-wallpaper-panel">
-            <div className={`${AGENT_SECTION_HEADER_CLASS} shrink-0`}>
+          <div
+            data-testid="agent-detail-shell"
+            className="flex min-w-0 flex-1 flex-col app-wallpaper-section"
+          >
+            <div
+              data-testid="agent-detail-header"
+              className={`${AGENT_SECTION_HEADER_CLASS} shrink-0`}
+            >
               <div className="flex h-full flex-col gap-4 px-4 py-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -613,14 +714,17 @@ export function SkillAgentsView() {
               </div>
             </div>
 
-            <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-4 overflow-y-auto p-5 xl:grid-cols-2 2xl:grid-cols-3">
+            <div
+              data-testid="agent-skills-list"
+              className="min-h-0 flex-1 space-y-2 overflow-y-auto p-5"
+            >
               {isScanning ? (
-                <div className="col-span-full flex h-40 items-center justify-center text-sm text-muted-foreground">
+                <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
                   <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                   {t("skill.scanning", "Scanning...")}
                 </div>
               ) : visibleAgentSkills.length === 0 ? (
-                <div className="col-span-full rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                   <FolderOpenIcon className="mx-auto mb-3 h-10 w-10 opacity-30" />
                   <div className="font-medium text-foreground">
                     {t("skill.noAgentSkills", "No skills in this agent")}
@@ -635,7 +739,7 @@ export function SkillAgentsView() {
                       data-testid="agent-skill-card"
                       className="group rounded-2xl border border-border app-wallpaper-surface transition-colors hover:border-primary/30 hover:bg-accent/30"
                     >
-                      <div className="grid min-h-[156px] grid-cols-[minmax(0,1fr)_9.5rem] items-stretch gap-4 px-4 py-4 max-[760px]:grid-cols-1">
+                      <div className="grid min-h-[124px] grid-cols-[minmax(0,1fr)_12rem] items-stretch gap-4 px-4 py-4 max-[760px]:grid-cols-1 max-[760px]:items-start">
                         <button
                           type="button"
                           onClick={() => {
@@ -670,8 +774,14 @@ export function SkillAgentsView() {
                               <div className="mt-3 flex flex-wrap gap-1.5">
                                 <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
                                   {skill.installMode === "symlink"
-                                    ? t("skill.installSymlink", "Symlink")
-                                    : t("skill.installCopy", "Copy")}
+                                    ? t(
+                                        "skill.installModeSymlink",
+                                        "Symlink install",
+                                      )
+                                    : t(
+                                        "skill.installModeCopy",
+                                        "Copy install",
+                                      )}
                                 </span>
                                 {(skill.tags ?? []).slice(0, 3).map((tag) => (
                                   <span

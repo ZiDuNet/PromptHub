@@ -4,7 +4,7 @@ export interface ParsedGitRepo {
   repo: string;
   repositoryUrl: string;
   cloneUrl: string;
-  protocol: "https" | "ssh";
+  protocol: "http" | "https" | "ssh";
 }
 
 export interface ParsedGitHubTreeLocation {
@@ -43,21 +43,25 @@ export function parseGitRepo(url: string): ParsedGitRepo | null {
     };
   }
 
-  const httpsMatch = trimmed.match(
-    /^https?:\/\/([^/]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:\/tree\/[^/]+(?:\/.*)?)?\/?$/,
+  const httpMatch = trimmed.match(
+    /^(https?):\/\/([^/]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?(?:\/tree\/[^/]+(?:\/.*)?)?\/?$/,
   );
-  if (httpsMatch) {
-    const repositoryUrl = `https://${httpsMatch[1]}/${httpsMatch[2]}/${httpsMatch[3]}`;
-    if (!isLikelyRepoOwner(httpsMatch[2]) || !isLikelyRepoName(httpsMatch[3])) {
+  if (httpMatch) {
+    const protocol = httpMatch[1] as "http" | "https";
+    const host = httpMatch[2];
+    const owner = httpMatch[3];
+    const repo = httpMatch[4];
+    const repositoryUrl = `${protocol}://${host}/${owner}/${repo}`;
+    if (!isLikelyRepoOwner(owner) || !isLikelyRepoName(repo)) {
       return null;
     }
     return {
-      host: httpsMatch[1].toLowerCase(),
-      owner: httpsMatch[2],
-      repo: httpsMatch[3],
+      host: host.toLowerCase(),
+      owner,
+      repo,
       repositoryUrl,
       cloneUrl: repositoryUrl,
-      protocol: "https",
+      protocol,
     };
   }
 
