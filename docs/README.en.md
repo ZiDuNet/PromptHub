@@ -76,7 +76,7 @@ Latest stable: **v0.5.7**. Two download lanes for every platform:
 | Windows  | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-Setup-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-Setup-arm64.exe) | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.7-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.7-arm64.exe) |
 | macOS    | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-x64.dmg) | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.7-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.7-x64.dmg) |
 | Linux    | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://pub-fff1cbc0121241d480624bd3de5a2735.r2.dev/latest/PromptHub-amd64.deb) | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.7-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.7-amd64.deb) |
-| Preview  | [![Preview v0.5.8-beta.2](https://img.shields.io/badge/Preview-v0.5.8--beta.2-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.8-beta.2) | Current preview: `v0.5.8-beta.2`. You can also enable the preview channel under *Settings → About* for automatic checks and upgrades. |
+| Preview  | [![Preview v0.5.8-beta.3](https://img.shields.io/badge/Preview-v0.5.8--beta.3-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.8-beta.3) | Current preview: `v0.5.8-beta.3`. You can also enable the preview channel under *Settings → About* for automatic checks and upgrades. |
 
 > **Apple Silicon vs Intel?** M1/M2/M3/M4 → `arm64`. Older Intel Macs → `x64`.
 > **Windows arch?** Most boxes → `x64`. Only Surface Pro X-class ARM hardware → `arm64`.
@@ -302,6 +302,13 @@ Common global flags:
 
 Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
+### v0.5.8-beta.3 (2026-06-02, preview)
+
+- Skill file views now use a lightweight code editor with syntax highlighting, line numbers, soft wrapping, and richer file icons
+- GitHub-imported My Skills can now check source updates directly from the detail page and create a version snapshot before applying updates
+- Cherry Studio, Agent Skill, Project Skill, copy / symlink, built-in Skill, and external symlink states were hardened further
+- Prompt / Skill version history dialogs now use a more scannable table-style presentation
+
 ### v0.5.8-beta.2 (2026-06-02, preview)
 
 - Skill lifecycle actions were further hardened across Project Skills, Agent Skills, and platform install/uninstall paths
@@ -371,10 +378,11 @@ Full changelog: **[CHANGELOG.md](../CHANGELOG.md)**
 
 - Prompt AI quick rewrite, same-name Skill variants, and recovery / Git compatibility hardening are all included in the final stable release
 
-### v0.5.8-beta.2 ← latest preview
+### v0.5.8-beta.3 ← latest preview
 
-- Skill lifecycle, project/agent management, and platform install/uninstall flows were hardened further
-- Skill management switches now use horizontal transitions, and the project delete action uses destructive styling
+- Skill source editing, file icons, and syntax highlighting were filled in
+- GitHub source Skills can check and apply source updates from My Skills detail
+- Skill lifecycle matrix coverage, Prompt / Skill version history, and startup log noise were tightened
 
 ### v0.5.6
 

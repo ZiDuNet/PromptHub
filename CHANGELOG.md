@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+## [0.5.8-beta.3] - 2026-06-02
+
+### 新功能 / Features
+
+- 🧑‍💻 **Skill 文件代码编辑器**：Skill 源码文件视图接入轻量代码编辑器，支持常见语法高亮、行号、自动换行和更准确的文件图标
+  - **Skill File Code Editor**: Skill source files now use a lightweight code editor with common syntax highlighting, line numbers, soft wrapping, and richer file icons
+- 🔄 **GitHub 来源 Skill 更新**：从 GitHub 导入到“我的 Skill”的条目现在可以直接在详情页检查来源更新，并在更新前创建版本快照
+  - **GitHub Source Skill Updates**: Skills imported from GitHub can now check source updates directly from My Skills detail and create a version snapshot before applying updates
+
+### 问题修复 / Fixes
+
+- 🧩 **Skill 生命周期矩阵补强**：继续补齐 Cherry Studio、Agent Skill、项目 Skill、copy / symlink、内置 Skill 和外部软链接的识别、卸载与展示状态
+  - **Skill Lifecycle Matrix Hardened**: Tightened Cherry Studio, Agent Skill, Project Skill, copy / symlink, built-in Skill, and external symlink recognition, uninstall, and display states
+- 📜 **Prompt / Skill 版本历史表优化**：版本历史弹窗改为更适合检索和对比的表格化呈现，并补充数据库与 UI 回归测试
+  - **Prompt / Skill Version History Table Polish**: Version history dialogs now use a more scannable table-style presentation with additional database and UI regression coverage
+- 🧹 **启动日志噪声收敛**：减少开发启动时 DevTools / stale DB lock 相关的误导性日志噪声，并补充启动日志策略测试
+  - **Startup Log Noise Reduced**: Reduced misleading DevTools and stale DB lock noise during development startup and added startup log policy coverage
+
 ## [0.5.8-beta.2] - 2026-06-02
 
 ### 问题修复 / Fixes

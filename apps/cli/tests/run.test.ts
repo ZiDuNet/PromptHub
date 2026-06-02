@@ -83,7 +83,7 @@ describe("standalone cli wiring", () => {
     const result = await execCli(["--version"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.joinedStdout.trim()).toBe("0.5.8-beta.2");
+    expect(result.joinedStdout.trim()).toBe("0.5.8-beta.3");
     expect(result.stderr).toEqual([]);
   });
 
@@ -1106,6 +1106,7 @@ describe("standalone cli wiring", () => {
     expect(repoReadRes.json).toEqual({
       path: "notes/final.md",
       content: "Draft note",
+      encoding: "text",
       isDirectory: false,
     });
 
