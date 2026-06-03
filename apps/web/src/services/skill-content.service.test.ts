@@ -13,6 +13,7 @@ vi.mock('node:dns/promises', () => ({
   default: {
     lookup: lookupMock,
   },
+  lookup: lookupMock,
 }));
 
 describe('skill-content.service', () => {
